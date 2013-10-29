@@ -1,0 +1,7 @@
+config SP_TX_ANX7808
+	depends on FB_MSM_HDMI_MSM_PANEL
+	bool "Analogix Slimport transmitter ANX7808 support"
+	default y
+	help
+        	Slimport Transmitter (SP_TX) is a HD video transmitter chip 
+		over micro-USB connector for smartphone device.

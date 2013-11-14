@@ -53,6 +53,7 @@ struct res_trk_context {
 	struct ion_client *res_ion_client;
 	u32 disable_dmx;
 	u32 disable_fullhd;
+	u32 enable_sec_metadata;
 	enum ddl_mem_area res_mem_type;
 	u32 mmu_clks_on;
 	u32 secure_session;

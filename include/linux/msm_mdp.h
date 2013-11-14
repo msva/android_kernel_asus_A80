@@ -607,6 +607,13 @@ enum {
 	ROTATOR_SUBSYSTEM_ID,
 };
 
+enum {
+	MDP_WRITEBACK_MIRROR_OFF,
+	MDP_WRITEBACK_MIRROR_ON,
+	MDP_WRITEBACK_MIRROR_PAUSE,
+	MDP_WRITEBACK_MIRROR_RESUME,
+};
+
 #ifdef __KERNEL__
 int msm_fb_get_iommu_domain(void);
 /* get the framebuffer physical address information */

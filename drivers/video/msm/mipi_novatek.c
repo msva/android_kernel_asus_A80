@@ -26,7 +26,7 @@ static char bl_value[] = {0x51, 0x64};      //write brightness
 static struct mutex cmd_mutex;//Mickey+++
 struct dcs_cmd_req bl_cmdreq;
 struct platform_device *g_pdev;
-extern int g_fb0_dsi_block;
+int g_fb0_dsi_block;
 extern int asus_set_bl_brightness(int);
 extern void asus_mdp_write_lut(int mode);
 

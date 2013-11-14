@@ -838,211 +838,32 @@ int hdmi_msm_hpd_status(void)
 		return 1;
 }
 
-static ssize_t read_HPD_status(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-	return sprintf(buf, "[HPD] status lock : %d en(%d) | dis(%d)\n", hdmi_msm_hpd_status(), g_hpd_enable, g_hpd_disable);
-}
 
-static DEVICE_ATTR(hpd_status, 0444, read_HPD_status, NULL);
-// ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
 
-static struct attribute *hdmi_attr[] = {
-	&dev_attr_hdmi_status.attr,
-// ASUS_BSP Jiunhau_Wang +++ support enable / disable HPD
-	&dev_attr_hpd_status.attr,
+
 // ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
-	NULL
-};
 
 struct attribute_group g_hdmi_attrs;
 //Mickey---
 
 //Mickey+++
 #ifdef  CONFIG_PROC_FS
-static struct proc_dir_entry *padswitch_proc_file;
+
 // ASUS_BSP Jiunhau_Wang +++ support enable / disable HPD
-static struct proc_dir_entry *hpdswitch_proc_file;
+
 // ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
 #include <linux/syscalls.h>
 #include <linux/fs.h>
 #include <linux/file.h>
-static mm_segment_t oldfs;
-static void initKernelEnv(void)
-{
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-}
 
-static void deinitKernelEnv(void)
-{
-    set_fs(oldfs);
-}
 
-static void padstation_switch(bool connect)
-{
-    if (connect)
-    {
-        char *envp[2];
-#ifdef CONFIG_EEPROM_NUVOTON
-        notify_microp_hdmi_insert();
-#endif
-        envp[0]="";
-        switch (g_p03State)
-        {
-            case ASUS_P03_LOW:
-                envp[0] = "PAD_STATE=P03_LR_ONLINE";
-                break;
-            case ASUS_P03_HIGH:
-                envp[0] = "PAD_STATE=P03_HR_ONLINE";
-                break;
-            default:
-                envp[0] = "PAD_STATE=OFFLINE";
-                break;
-        }
-        envp[1] = NULL;
-        DEV_INFO("%s: : sense CONNECTED: send ONLINE\n",__func__);
-        kobject_uevent_env(external_common_state->uevent_kobj,
-            KOBJ_ONLINE,envp);
-    }
-    else
-    {
-#ifdef CONFIG_EEPROM_NUVOTON
-        notify_microp_hdmi_remove(0);
-#endif
-        DEV_INFO("%s: sense DISCONNECTED: send OFFLINE\n",__func__);
-        kobject_uevent(external_common_state->uevent_kobj, KOBJ_OFFLINE);
-    }
-}
-static ssize_t padswitch_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
-{
-    char messages[256];
 
-    memset(messages, 0, sizeof(messages));
 
-    if (len > 256)
-        len = 256;
-    if (copy_from_user(messages, buff, len))
-        return -EFAULT;
 
-    initKernelEnv();
 
-    if(strncmp(messages, "1", 1) == 0)
-        padstation_switch(true);
-    else if(strncmp(messages, "0", 1) == 0)
-        padstation_switch(false);
-    deinitKernelEnv();
-    return len;
-}
-static struct file_operations padswitch_proc_ops = {
-    .write = padswitch_proc_write,
-};
-static void create_padswitch_proc_file(void)
-{
-    padswitch_proc_file = create_proc_entry("driver/padswitch", 0666, NULL);
-    if (padswitch_proc_file) {
-        padswitch_proc_file->proc_fops = &padswitch_proc_ops;
-    }
-}
 // ASUS_BSP Jiunhau_Wang +++ support enable / disable HPD
-static ssize_t hpdswitch_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
-{
-    char messages[256];
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-	int cfg[2];
-	bool bHdmiForce = false;
-//ASUS_BSP: joe1_--: force turning on/off hdmi
 
-    memset(messages, 0, sizeof(messages));
 
-    if (len > 256)
-        len = 256;
-    if (copy_from_user(messages, buff, len))
-        return -EFAULT;
-
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-	sscanf(buff, "%d%d\n",&cfg[0], &cfg[1]);
-	printk("[HDMI_FORCE] hpdswitch_proc_write: cfg[0]=%d, cfg[1]=%d\n", cfg[0], cfg[1]);
-
-	if ( cfg[1] == HDMI_FORCE )
-	{
-		bHdmiForce = true;
-	}
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-
-    initKernelEnv();
-
-    if(strncmp(messages, "1", 1) == 0)
-    {
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-		if ( bHdmiForce )
-		{
-//			printk("[HDMI_FORCE] hpdswitch_proc_write: bHdmiForce=%d\n", bHdmiForce);
-
-//			if (!g_hdmi_force_on)
-//			{
-				g_hdmi_force_on = 1;
-				hdmi_msm_HPD_control(1, true);
-
-				printk("[HDMI_FORCE] hpdswitch_proc_write: bHdmiForce=%d; turn on.\n", bHdmiForce);
-//			}
-		}
-		else
-		{
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-			if(hdmi_msm_hpd_status() == 1)
-			{
-				g_hpd_enable ++;
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-//				hdmi_msm_HPD_control(1);
-				hdmi_msm_HPD_control(1, false);
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-			    printk(KERN_INFO "[HPD] enable HPD\n");
-			}
-		}//ASUS_BSP: joe1_++: force turning on/off hdmi
-    }
-    else if(strncmp(messages, "0", 1) == 0)
-	{
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-		if ( bHdmiForce )
-		{
-//			printk("[HDMI_FORCE] hpdswitch_proc_write: bHdmiForce=%d\n", bHdmiForce);
-
-//			if (g_hdmi_force_on)
-//			{
-				hdmi_msm_HPD_control(0, true);
-				g_hdmi_force_on = 0;
-
-				printk("[HDMI_FORCE] hpdswitch_proc_write: bHdmiForce=%d; turn off.\n", bHdmiForce);
-//			}
-		}
-		else
-		{
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-			if(hdmi_msm_hpd_status() == 0)
-			{
-				g_hpd_disable ++;
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-//				hdmi_msm_HPD_control(0);
-				hdmi_msm_HPD_control(0, false);
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-				printk(KERN_INFO "[HPD] disable HPD\n");
-			}
-		}//ASUS_BSP: joe1_++: force turning on/off hdmi
-    }
-
-    deinitKernelEnv();
-    return len;
-}
-static struct file_operations hpdswitch_proc_ops = {
-    .write = hpdswitch_proc_write,
-};
-static void create_hpdswitch_proc_file(void)
-{
-    hpdswitch_proc_file = create_proc_entry("driver/hpdswitch", 0666, NULL);
-    if (hpdswitch_proc_file) {
-        hpdswitch_proc_file->proc_fops = &hpdswitch_proc_ops;
-    }
-}
 // ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
 #endif//#ifdef CONFIG_PROC_FS
 //Mickey---
@@ -1067,19 +888,11 @@ bool myDP_VGA_Cable = false;
 extern int myDP_cable_type(void);
 #endif
 //Mickey---
+
 static void hdmi_msm_send_event(boolean on)
 {
 	char *envp[2];
-	int state = 0; //Rice
-    //Mickey+++, filter the hpd state
-    static bool previous_state = false;
 
-    if (on == previous_state) {
-        printk("Mickey::previous_state=%d,on=%d\n",previous_state,on);
-        return;
-    }
-    previous_state = on;
-    //Mickey---
 	/* QDSP OFF preceding the HPD event notification */
 	envp[0] = "HDCP_STATE=FAIL";
 	envp[1] = NULL;
@@ -1088,74 +901,14 @@ static void hdmi_msm_send_event(boolean on)
 			   KOBJ_CHANGE, envp);
 
 	if (on) {
-		//Mickey+++, add for DDS
-		int p03Version = 0;
-#if ASUS_FORCE_HDMI_P03_LOW
-		g_p03State = ASUS_P03_LOW;
-#elif ASUS_FORCE_HDMI_P03_HIGH
-		g_p03State = ASUS_P03_HIGH;
-#else
-		if (asus_padstation_exist_realtime())
-		{
-			if (g_A68_hwID >= A80_EVB)
-				p03Version = 1;
-			else
-				p03Version = 0;//AX_IsPadUsing_MHL_H();
-
-			if (p03Version == 1)
-				g_p03State = ASUS_P03_HIGH;
-            else if (p03Version == 0)
-                g_p03State = ASUS_P03_LOW;
-            else
-                g_p03State = ASUS_P03_NONE;
-        }
-        else
-            g_p03State = ASUS_P03_NONE;
-#endif
-		printk("Mickey::p03_gpio=%d, p03Version=%d,  g_p03State=%d\n",asus_padstation_exist(),p03Version,g_p03State);
-
-        if (g_p03State == ASUS_P03_LOW || g_p03State == ASUS_P03_HIGH)
-        {
-#ifdef CONFIG_EEPROM_NUVOTON
-			notify_microp_hdmi_insert();
-#endif
-            //Mickey+++, move to dtv start
-            //if (!g_fb0_off)
-            //{
-                //asus_fb0_screen_suspend(true);
-                //g_fb0_off = true;
-            //}
-            //Mickey---
-            //ASUSEvtlog("[HDMI] Pad insert\n");
-		}
-//Mickey---
 		/* Build EDID table */
 		hdmi_msm_read_edid();
-//Mickey+++, change for DDS
-		switch (g_p03State)
-        {
-			case ASUS_P03_LOW:
-				envp[0] = "PAD_STATE=P03_LR_ONLINE";
-                state = 2;//DEVICE_OUT_DGTL_DOCK_HEADSET
-                break;
-            case ASUS_P03_HIGH:
-                envp[0] = "PAD_STATE=P03_HR_ONLINE";
-                state = 2;//DEVICE_OUT_DGTL_DOCK_HEADSET
-                break;
-            default:
-                envp[0] = "PAD_STATE=OFFLINE";
-                state = 1; //DEVICE_OUT_AUX_DIGITAL
-                break;
-        }
-        envp[1] = NULL;
-		DEV_INFO("HDMI HPD: CONNECTED: send ONLINE\n");
-		kobject_uevent_env(external_common_state->uevent_kobj,
-			KOBJ_ONLINE,envp);
-//Mickey---
-		switch_set_state(&external_common_state->sdev, state);//Rice+++
+		switch_set_state(&external_common_state->sdev, 1);
 		DEV_INFO("%s: hdmi state switched to %d\n", __func__,
 				external_common_state->sdev.state);
 
+		DEV_INFO("HDMI HPD: CONNECTED: send ONLINE\n");
+		kobject_uevent(external_common_state->uevent_kobj, KOBJ_ONLINE);
 		if (!hdmi_msm_state->hdcp_enable) {
 			/* Send Audio for HDMI Compliance Cases*/
 			envp[0] = "HDCP_STATE=PASS";
@@ -1164,169 +917,15 @@ static void hdmi_msm_send_event(boolean on)
 			kobject_uevent_env(external_common_state->uevent_kobj,
 				KOBJ_CHANGE, envp);
 		}
-		g_hdmi_status = 1;//Mickey+++
 	} else {
-		g_hdmi_status = 0;//Mickey++
-//Mickey+++
-        switch_set_state(&external_common_state->sdev, 0);
-        DEV_INFO("%s: hdmi state switch to %d\n", __func__,
-                external_common_state->sdev.state);
-        DEV_INFO("hdmi: HDMI HPD: sense DISCONNECTED: send OFFLINE\n");
-        kobject_uevent(external_common_state->uevent_kobj,
-            KOBJ_OFFLINE);
-        if (g_p03State == ASUS_P03_LOW || g_p03State == ASUS_P03_HIGH)
-        {
-#ifdef CONFIG_EEPROM_NUVOTON
-            notify_microp_hdmi_remove(0);
-#endif
-            if (g_fb0_off)
-            {
-                asus_fb0_screen_suspend(false);
-                g_fb0_off = false;
-            }
-            //ASUSEvtlog("[HDMI] Pad remove\n");
-        }
-        g_p03State = ASUS_P03_NONE;
-//Mickey---
-	}
-}
-
-// ASUS_BSP Jiunhau_Wang +++ support enable / disable HPD
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-//void hdmi_msm_HPD_control(int hpd_state)
-void hdmi_msm_HPD_control(int on, bool bHdmiForce)
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-{
-	char *envp[3]; //ASUS_BSP: joe1_++: force turning on/off hdmi
-	int state = 0; //Rice
-
-	if (on) {
-		//Mickey+++, add for DDS
-		int p03Version = 0;
-#if ASUS_FORCE_HDMI_P03_LOW
-		g_p03State = ASUS_P03_LOW;
-#elif ASUS_FORCE_HDMI_P03_HIGH
-		g_p03State = ASUS_P03_HIGH;
-#else
-		if (asus_padstation_exist_realtime())
-		{
-			if (g_A68_hwID >= A80_EVB)
-				p03Version = 1;
-			else
-				p03Version = 0;//AX_IsPadUsing_MHL_H();
-
-			if (p03Version == 1)
-				g_p03State = ASUS_P03_HIGH;
-            else if (p03Version == 0)
-                g_p03State = ASUS_P03_LOW;
-            else
-                g_p03State = ASUS_P03_NONE;
-        }
-        else
-            g_p03State = ASUS_P03_NONE;
-#endif
-		printk("Mickey::p03_gpio=%d, p03Version=%d,  g_p03State=%d\n",asus_padstation_exist(),p03Version,g_p03State);
-
-        if (g_p03State == ASUS_P03_LOW || g_p03State == ASUS_P03_HIGH)
-        {
-#ifdef CONFIG_EEPROM_NUVOTON
-			notify_microp_hdmi_insert();
-#endif
-			if (!g_fb0_off)
-            {
-				asus_fb0_screen_suspend(true);
-                g_fb0_off = true;
-            }
-            //ASUSEvtlog("[HDMI] Pad insert\n");
-		}
-//Mickey---
-		/* Build EDID table */
-		hdmi_msm_read_edid();
-//Mickey+++, change for DDS
-		switch (g_p03State)
-        {
-			case ASUS_P03_LOW:
-				envp[0] = "PAD_STATE=P03_LR_ONLINE";
-                state = 2;//DEVICE_OUT_DGTL_DOCK_HEADSET
-                break;
-            case ASUS_P03_HIGH:
-                envp[0] = "PAD_STATE=P03_HR_ONLINE";
-                state = 2;//DEVICE_OUT_DGTL_DOCK_HEADSET
-                break;
-            default:
-                envp[0] = "PAD_STATE=OFFLINE";
-                state = 1; //DEVICE_OUT_AUX_DIGITAL
-                break;
-        }
-        envp[1] = NULL;
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-		if (bHdmiForce)
-		{
-			envp[1] = "HDMI_FORCE=ON";
-			envp[2] = NULL;
-
-			DEV_INFO("[HDMI_FORCE] CONNECTED: send ONLINE\n");
-		}
-		else
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-		DEV_INFO("HDMI HPD: CONNECTED: send ONLINE\n");
-		kobject_uevent_env(external_common_state->uevent_kobj,
-			KOBJ_ONLINE,envp);
-//Mickey---
-		switch_set_state(&external_common_state->sdev, state);//Rice+++
-		DEV_INFO("%s: hdmi state switched to %d\n", __func__,
-				external_common_state->sdev.state);
-
-		if (!hdmi_msm_state->hdcp_enable) {
-			/* Send Audio for HDMI Compliance Cases*/
-			envp[0] = "HDCP_STATE=PASS";
-			envp[1] = NULL;
-			DEV_INFO("HDMI HPD: sense : send HDCP_PASS\n");
-			kobject_uevent_env(external_common_state->uevent_kobj,
-				KOBJ_CHANGE, envp);
-		}
-		g_hdmi_status = 1;//Mickey+++
-	} else {
-		g_hdmi_status = 0;//Mickey++
-//Mickey+++
-        if (g_p03State == ASUS_P03_LOW || g_p03State == ASUS_P03_HIGH)
-        {
-#ifdef CONFIG_EEPROM_NUVOTON
-            notify_microp_hdmi_remove(0);
-#endif
-            if (g_fb0_off)
-            {
-                asus_fb0_screen_suspend(false);
-                g_fb0_off = false;
-            }
-            //ASUSEvtlog("[HDMI] Pad remove\n");
-        }
-        g_p03State = ASUS_P03_NONE;
-//Mickey---
 		switch_set_state(&external_common_state->sdev, 0);
 		DEV_INFO("%s: hdmi state switch to %d\n", __func__,
 				external_common_state->sdev.state);
-
-//ASUS_BSP: joe1_++: force turning on/off hdmi
-		if (bHdmiForce)
-		{
-			envp[0] = "HDMI_FORCE=OFF";
-			envp[1] = NULL;
-
-			DEV_INFO("[HDMI_FORCE] DISCONNECTED: send OFFLINE\n");
-			kobject_uevent_env(external_common_state->uevent_kobj, KOBJ_OFFLINE, envp);
-		}
-		else
-		{
-//ASUS_BSP: joe1_--: force turning on/off hdmi
-			DEV_INFO("hdmi: HDMI HPD: sense DISCONNECTED: send OFFLINE\n");
-			kobject_uevent(external_common_state->uevent_kobj,
-				KOBJ_OFFLINE);
-		}//ASUS_BSP: joe1_++: force turning on/off hdmi
+		DEV_INFO("hdmi: HDMI HPD: sense DISCONNECTED: send OFFLINE\n");
+		kobject_uevent(external_common_state->uevent_kobj,
+			KOBJ_OFFLINE);
 	}
 }
-EXPORT_SYMBOL(hdmi_msm_HPD_control);
-// ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
 
 static void hdmi_msm_hpd_state_work(struct work_struct *work)
 {
@@ -5166,18 +4765,30 @@ void hdmi_msm_config_hdcp_feature(void)
 			hdmi_msm_state->hdcp_enable ? "Enabled" : "Disabled");
 }
 
-//Mickey+++
-static void hdmi_msm_hpd_state_timer(unsigned long data)
+static void hdmi_msm_update_panel_info(struct msm_fb_data_type *mfd)
 {
-    queue_work(hdmi_work_queue, &hpd_state_recheck_work);
+	if (!mfd)
+		return;
+
+	if (hdmi_common_get_video_format_from_drv_data(mfd))
+		hdmi_common_init_panel_info(&mfd->panel_info);
 }
+
+static bool hdmi_msm_cable_connected(void)
+{
+	return hdmi_msm_state->hpd_initialized &&
+			external_common_state->hpd_state;
+}
+
+//Mickey+++
+
 //Mickey---
 
 static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 {
 	int rc;
 	struct platform_device *fb_dev;
-	int sysfs_res;//Mickey+++
+	struct msm_fb_data_type *mfd = NULL;
 
 	if (!hdmi_msm_state) {
 		pr_err("%s: hdmi_msm_state is NULL\n", __func__);
@@ -5228,21 +4839,21 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 	hdmi_msm_state->hdmi_app_clk = clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(hdmi_msm_state->hdmi_app_clk)) {
 		DEV_ERR("'core_clk' clk not found\n");
-		rc = IS_ERR(hdmi_msm_state->hdmi_app_clk);
+		rc = PTR_ERR(hdmi_msm_state->hdmi_app_clk);
 		goto error;
 	}
 
 	hdmi_msm_state->hdmi_m_pclk = clk_get(&pdev->dev, "master_iface_clk");
 	if (IS_ERR(hdmi_msm_state->hdmi_m_pclk)) {
 		DEV_ERR("'master_iface_clk' clk not found\n");
-		rc = IS_ERR(hdmi_msm_state->hdmi_m_pclk);
+		rc = PTR_ERR(hdmi_msm_state->hdmi_m_pclk);
 		goto error;
 	}
 
 	hdmi_msm_state->hdmi_s_pclk = clk_get(&pdev->dev, "slave_iface_clk");
 	if (IS_ERR(hdmi_msm_state->hdmi_s_pclk)) {
 		DEV_ERR("'slave_iface_clk' clk not found\n");
-		rc = IS_ERR(hdmi_msm_state->hdmi_s_pclk);
+		rc = PTR_ERR(hdmi_msm_state->hdmi_s_pclk);
 		goto error;
 	}
 
@@ -5264,13 +4875,13 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto error;
 	}
-#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
+
 	if (!hdmi_msm_state->pd->cec_power) {
 		DEV_ERR("Init FAILED: cec_power function missing\n");
 		rc = -ENODEV;
 		goto error;
 	}
-#endif
+
 	rc = request_threaded_irq(hdmi_msm_state->irq, NULL, &hdmi_msm_isr,
 		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "hdmi_msm_isr", NULL);
 	if (rc) {
@@ -5299,6 +4910,10 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 	} else
 		DEV_ERR("Init FAILED: failed to add fb device\n");
 
+	mfd = platform_get_drvdata(fb_dev);
+	mfd->update_panel_info = hdmi_msm_update_panel_info;
+	mfd->is_panel_ready = hdmi_msm_cable_connected;
+
 	if (hdmi_prim_display) {
 		rc = hdmi_msm_hpd_on();
 		if (rc)
@@ -5326,37 +4941,6 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	/* Set the default video resolution for MHL-enabled display */
-	if (hdmi_msm_state->is_mhl_enabled) {
-		DEV_DBG("MHL Enabled. Restricting default video resolution\n");
-		external_common_state->video_resolution =
-			HDMI_VFRMT_1920x1080p30_16_9;
-	}
-//Mickey+++
-	g_hdmi_attrs.attrs = hdmi_attr;
-
-	sysfs_res = sysfs_create_group(&pdev->dev.kobj, &g_hdmi_attrs);
-	if (sysfs_res) {
-		dev_err(&pdev->dev, "HDMI: Not able to create the sysfs\n");
-		printk("%s:Not able to create the sysfs\n", __FUNCTION__);
-	}
-//Mickey---
-//Mickey+++
-    init_timer(&hdmi_msm_state->hpd_state_timer);
-    hdmi_msm_state->hpd_state_timer.function =
-        hdmi_msm_hpd_state_timer;
-    hdmi_msm_state->hpd_state_timer.data = (uint32)NULL;
-    hdmi_msm_state->hpd_state_timer.expires = 0xffffffffL;
-//Mickey---
-//Mickey+++
-#ifdef  CONFIG_PROC_FS
-        create_padswitch_proc_file();
-// ASUS_BSP Jiunhau_Wang +++ support enable / disable HPD
-	create_hpdswitch_proc_file();
-// ASUS_BSP Jiunhau_Wang --- support enable / disable HPD
-#endif
-//Mickey---
-    wake_lock_init(&hdmi_msm_state->hpd_wake_lock, WAKE_LOCK_SUSPEND, "hdp_wake");//Mickey+++
 	return 0;
 
 error:

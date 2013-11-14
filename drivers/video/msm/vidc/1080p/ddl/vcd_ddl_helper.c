@@ -1143,3 +1143,44 @@ void ddl_set_vidc_timeout(struct ddl_client_context *ddl)
 	vidc_sm_set_video_core_timeout_value(
 		&ddl->shared_mem[ddl->command_channel], vidc_time_out);
 }
+
+s32 ddl_allocate_ltr_list(struct ddl_ltr_encoding_type *ltr_control)
+{
+	s32 vcd_status = VCD_S_SUCCESS;
+
+	DDL_MSG_LOW("%s: ltr_cout = %u", __func__, ltr_control->ltr_count);
+	if (!ltr_control->ltr_list) {
+		if (ltr_control->ltr_count) {
+			ltr_control->ltr_list = (struct ddl_ltrlist *)
+				kmalloc(sizeof(struct ddl_ltrlist)*
+				ltr_control->ltr_count, GFP_KERNEL);
+			if (!ltr_control->ltr_list) {
+				DDL_MSG_LOW("ddl_allocate_ltr_list failed");
+				vcd_status = VCD_ERR_ALLOC_FAIL;
+			}
+		} else {
+			DDL_MSG_LOW("%s: failed, zero LTR count", __func__);
+			vcd_status = VCD_ERR_FAIL;
+		}
+	} else {
+		DDL_MSG_LOW("WARN: ltr_list already allocated");
+	}
+
+	return vcd_status;
+}
+
+s32 ddl_clear_ltr_list(struct ddl_ltr_encoding_type *ltr_control,
+	bool only_use_flag)
+{
+	s32 vcd_status = VCD_S_SUCCESS;
+	u32 i;
+
+	DDL_MSG_LOW("%s:", __func__);
+	for (i = 0; i < ltr_control->ltr_count; i++) {
+		ltr_control->ltr_list[i].ltr_in_use = false;
+		if (!only_use_flag)
+			ltr_control->ltr_list[i].ltr_id = 0;
+	}
+
+	return vcd_status;
+}

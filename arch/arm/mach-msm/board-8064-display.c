@@ -1411,58 +1411,7 @@ bool update_screen_flag = false;
 extern void asus_mdp_dsi_clk_ctrl(struct fb_info *info, int enable);
 extern struct msm_fb_data_type *g_mfd;
 
-void asus_draw_last_screen(u32 img_color)
-{
-    unsigned char *src_addr, *dest_addr;
-    char img_col[4];
-    unsigned int pixels_num = 0;
-    struct fb_info * fbi = asus_get_fb_info(0);
-    u32 tmp_yoffset;
 
-    update_screen_flag = true;
-
-    img_col[0] = (img_color & 0xFF000000) >> 24;
-    img_col[1] = (img_color & 0x00FF0000) >> 16;
-    img_col[2] = (img_color & 0x0000FF00) >> 8;
-    img_col[3] = (img_color & 0x000000FF) ;
-
-    tmp_yoffset = fbi->var.yoffset;
-
-    fbi->var.yoffset = 0;
-
-    src_addr = (unsigned char *) __va((fbi->fix.smem_start)) +  fbi->var.yoffset * fbi->fix.line_length;
-
-    dest_addr = src_addr;
-
-    memcpy(dest_addr, img_col, sizeof(img_col)); //copy first 4 byte
-    pixels_num += 1;    //handle first pixel
-
-    while (pixels_num < fbi->var.yres * fbi->var.yres * 3 / 2)
-    {
-        memcpy(dest_addr + 4 * pixels_num, src_addr, 4 * pixels_num);
-        pixels_num = pixels_num * 2;
-    }
-
-    if (pixels_num < fbi->var.yres * fbi->var.yres * 3) {
-        memcpy(dest_addr + 4 * pixels_num, src_addr, 4 * (fbi->var.yres * fbi->var.yres - pixels_num));
-    }
-
-    if (g_mfd->panel_info.type == MIPI_CMD_PANEL) {
-        asus_mdp_dsi_clk_ctrl(fbi, 1);
-    }
-
-    asus_update_screen(&(fbi->var),fbi);
-
-    if (g_mfd->panel_info.type == MIPI_CMD_PANEL) {
-        asus_mdp_dsi_clk_ctrl(fbi, 0);
-    }
-
-    fbi->var.yoffset = tmp_yoffset;
-
-    update_screen_flag = false;
-    return;
-}
-EXPORT_SYMBOL(asus_draw_last_screen);
 // --- Louis
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT

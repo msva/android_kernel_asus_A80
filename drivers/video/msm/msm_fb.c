@@ -382,10 +382,12 @@ static void msm_fb_remove_sysfs(struct platform_device *pdev)
 
 static void bl_workqueue_handler(struct work_struct *work);
 
+#include "sync.c"
+#include "sw_sync.c"
+
 static int msm_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
-	struct msw_sync_timeline_create;
 	int rc;
 	int err = 0;
 
@@ -2029,6 +2031,7 @@ static int msm_fb_pan_display_sub(struct fb_var_screeninfo *var,
 	struct mdp_dirty_region dirty;
 	struct mdp_dirty_region *dirtyPtr = NULL;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+	struct msm_fb_panel_data *pdata;
 
 	/*
 	 * If framebuffer is 2, io pen display is not allowed.
@@ -2124,10 +2127,16 @@ static int msm_fb_pan_display_sub(struct fb_var_screeninfo *var,
 
 	if (unset_bl_level && !bl_updated)
 		schedule_delayed_work(&mfd->backlight_worker,
-					backlight_duration);
+				backlight_duration);
 
-	if (info->node == 0 && (mfd->cont_splash_done)) /* primary */
-		mdp_free_splash_buffer(mfd);
+	/* set backlight in recovery mode */
+	pdata = (struct msm_fb_panel_data *)mfd->pdev->
+		dev.platform_data;
+	if ((pdata) && (pdata->set_recovery_backlight)) {
+		down(&mfd->sem);
+		pdata->set_recovery_backlight(mfd);
+		up(&mfd->sem);
+	}
 
 	++mfd->panel_info.frame_count;
 	return 0;

@@ -115,6 +115,27 @@ static void vsync_irq_disable(int intr, int term)
 	pr_debug("%s: IRQ-dis done, term=%x\n", __func__, term);
 }
 
+void mdp4_dtv_free_base_pipe(struct msm_fb_data_type *mfd)
+{
+	struct vsycn_ctrl *vctrl;
+	struct mdp4_overlay_pipe *pipe;
+
+	vctrl = &vsync_ctrl_db[0];
+	pipe = vctrl->base_pipe;
+
+	if (pipe == NULL)
+		return ;
+
+	if (hdmi_prim_display) {
+		/* adb stop */
+		if (pipe->pipe_type == OVERLAY_TYPE_BF)
+			mdp4_overlay_borderfill_stage_down(pipe);
+
+		/* pipe == rgb2 */
+		vctrl->base_pipe = NULL;
+	}
+}
+
 void mdp4_overlay_dtv_start(void)
 {
 	if (!dtv_enabled) {
@@ -433,6 +454,7 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 	int data_en_polarity;
 	int hsync_start_x;
 	int hsync_end_x;
+	uint32_t userformat;
 	struct fb_info *fbi;
 	struct fb_var_screeninfo *var;
 	struct vsycn_ctrl *vctrl;
@@ -457,12 +479,6 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 			outpdw(MDP_BASE + 0x0038, mdp4_display_intf);
 		}
 	}
-    //Mickey+++, do mdp4 hw init in pad mode
-    else
-    {
-        mdp4_hw_init();
-    }
-    //Mickey---
 	mdp4_overlay_dmae_cfg(mfd, 0);
 
 	/*
@@ -477,9 +493,10 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 	dtv_border_clr = mfd->panel_info.lcdc.border_clr;
 	dtv_underflow_clr = mfd->panel_info.lcdc.underflow_clr;
 	dtv_hsync_skew = mfd->panel_info.lcdc.hsync_skew;
+	userformat = var->reserved[3] >> 16;
 
 	pr_info("%s: <ID=%d %dx%d (%d,%d,%d), (%d,%d,%d) %dMHz>\n", __func__,
-		var->reserved[3], var->xres, var->yres,
+		userformat, var->xres, var->yres,
 		var->right_margin, var->hsync_len, var->left_margin,
 		var->lower_margin, var->vsync_len, var->upper_margin,
 		var->pixclock/1000/1000);
@@ -550,34 +567,6 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 
 	/* enable DTV block */
 	MDP_OUTP(MDP_BASE + DTV_BASE, 1);
-	msleep(20);//Mickey+++, wait a frame time
-    //Mickey+++, only set TMDS ready when reaching target resolution
-    if (asus_padstation_exist_realtime()) {//Mickey+++, use real time query to check if we are in pad mode or not
-        //Mickey+++, turn off internal panel when HDMI signal starts
-        if (!g_fb0_off) {
-            asus_fb0_screen_suspend(true);
-            g_fb0_off = true;
-        }
-        //Mickey---
-        //Mickey+++, adjust TMDS ready flag for different HW
-        if (g_A68_hwID < A80_EVB && var->xres==1280 && var->yres==800)
-            g_QCOM_TMDS_ready = 1;
-        else if ((g_A68_hwID >=A80_EVB && g_A68_hwID < A80_SR4) && var->xres==1920 && var->yres==1080)
-            g_QCOM_TMDS_ready = 1;
-        else if (g_A68_hwID >= A80_SR4 && var->xres==1920 && var->yres==1200)
-            g_QCOM_TMDS_ready = 1;
-        //Mickey---
-
-        //ASUS_BSP:Louis +++
-        g_restore_argc = 1;
-        mdp4_argc_cfg(&g_pad_argc_lut_data);
-        g_restore_argc = 0;
-        //ASUS_BSP:Louis ---
-
-    } else {
-        g_QCOM_TMDS_ready = 1;
-    }
-    //Mickey---
 
 	return 0;
 }

@@ -894,6 +894,11 @@ u32 res_trk_get_disable_fullhd(void)
 	return resource_context.disable_fullhd;
 }
 
+u32 res_trk_get_enable_sec_metadata(void)
+{
+	return resource_context.enable_sec_metadata;
+}
+
 int res_trk_enable_iommu_clocks(void)
 {
 	int ret = 0, i;

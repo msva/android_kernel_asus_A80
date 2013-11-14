@@ -259,6 +259,12 @@ struct ddl_mp2_datadumpenabletype {
 	u32 seqdisp_extdump_enable;
 	u32 seq_extdump_enable;
 };
+
+struct ddl_ltrlist {
+	bool ltr_in_use;
+	u32 ltr_id;
+};
+
 struct ddl_ltr_encoding_type {
 	struct vcd_property_ltrmode_type ltrmode;
 	struct vcd_property_ltruse_type failed_use_cmd;

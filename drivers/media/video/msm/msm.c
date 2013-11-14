@@ -922,7 +922,6 @@ static int msm_open(struct file *f)
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	struct msm_cam_media_controller *pmctl = NULL;
-	mdp_boost();//Mickey+++, boost up mdp to prevent underrun
 	D("%s\n", __func__);
 
 	if (!pcam) {
@@ -1133,7 +1132,6 @@ static int msm_close(struct file *f)
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
 	pcam = pcam_inst->pcam;
-	mdp_boost();//Mickey+++, boost up mdp to prevent underrun
 	if (!pcam) {
 		pr_err("%s NULL pointer of camera device!\n", __func__);
 		return -EINVAL;

@@ -201,6 +201,33 @@ void dumpPipeInfo(struct mdp4_overlay_pipe *pipe)
 }
 //Mickey---
 
+int mdp4_unmap_sec_resource(struct msm_fb_data_type *mfd)
+{
+	int ret = 0;
+
+	if (!mfd) {
+		pr_err("%s: mfd is invalid\n", __func__);
+		return -ENODEV;
+	}
+
+	if ((mfd->sec_mapped == 0) || (mfd->sec_active))
+		return 0;
+
+	pr_debug("%s %d mfd->index=%d,mapped=%d,active=%d\n",
+		__func__, __LINE__,
+		 mfd->index, mfd->sec_mapped, mfd->sec_active);
+
+	ret = mdp_enable_iommu_clocks();
+	if (ret) {
+		pr_err("IOMMU clock enabled failed while close\n");
+		return ret;
+	}
+	msm_ion_unsecure_heap(ION_HEAP(ION_CP_MM_HEAP_ID));
+	mfd->sec_mapped = 0;
+	mdp_disable_iommu_clocks();
+	return ret;
+}
+
 /*
  * mdp4_overlay_iommu_unmap_freelist()
  * mdp4_overlay_iommu_2freelist()
@@ -3051,16 +3078,7 @@ int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd,
 }
 
 //Mickey+++, boost up mdp when camera is on
-struct fb_info * asus_get_fb_info(int fb_num);
-void mdp_boost(void)
-{
-    struct fb_info *fbi = asus_get_fb_info(0);
-    struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-    boostUpCount = 10;
-    printk("Mickey:mdp boost up\n");
-    mdp4_overlay_mdp_perf_req(mfd,ctrl->plist);
-    mdp4_overlay_mdp_perf_upd(mfd,1);
-}
+
 //Mickey---
 
 int mdp4_overlay_mdp_pipe_req(struct mdp4_overlay_pipe *pipe,

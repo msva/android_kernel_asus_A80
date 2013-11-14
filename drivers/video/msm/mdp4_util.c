@@ -38,12 +38,10 @@ extern bool asus_padstation_exist_realtime(void);
 extern int g_restore_argc;
 struct mdp_pgc_lut_data g_phone_argc_lut_data, g_pad_argc_lut_data;
 
-static struct mdp_ar_gc_lut_data g_phone_argc_rdata[16];
-static struct mdp_ar_gc_lut_data g_phone_argc_bdata[16];
-static struct mdp_ar_gc_lut_data g_phone_argc_gdata[16];
-static struct mdp_ar_gc_lut_data g_pad_argc_rdata[16];
-static struct mdp_ar_gc_lut_data g_pad_argc_bdata[16];
-static struct mdp_ar_gc_lut_data g_pad_argc_gdata[16];
+
+
+
+
 //ASUS_BSP: Louis "restore argc lut" ---
 
 //ASUS_BSP: Louis "restore csc intensity" +++
@@ -2286,15 +2284,9 @@ int mdp4_csc_config(struct mdp_csc_cfg_data *config)
 		return -EINVAL;
 	}
 
-     //ASUS_BSP : Louis ++
-    if ((config->csc_data.flags == ASUS_CSC_FLAG_HSIC) && !g_restore_csc) {
-        memcpy(&g_csc_cfg_data, config, sizeof(struct mdp_csc_cfg_data));
-    }
-     //ASUS_BSP : Louis --
+	mdp4_csc_write(&config->csc_data, (uint32_t) (MDP_BASE + base));
 
-    mdp4_csc_write(&config->csc_data, (uint32_t) (MDP_BASE + base));
-
-    ret = mdp4_csc_enable(config);
+	ret = mdp4_csc_enable(config);
 
 	return ret;
 }
@@ -2799,57 +2791,29 @@ static int mdp4_argc_process_write_req(uint32_t *offset,
 	struct mdp_ar_gc_lut_data g[MDP_AR_GC_MAX_STAGES];
 	struct mdp_ar_gc_lut_data b[MDP_AR_GC_MAX_STAGES];
 
-    if (!g_restore_argc)    //ASUS_BSP : Louis  "do not check in restore case"
-    {
-	    ret = copy_from_user(&r[0], pgc_ptr->r_data,
-		    pgc_ptr->num_r_stages * sizeof(struct mdp_ar_gc_lut_data));
+	ret = copy_from_user(&r[0], pgc_ptr->r_data,
+		pgc_ptr->num_r_stages * sizeof(struct mdp_ar_gc_lut_data));
 
-	    if (!ret) {
-		    ret = copy_from_user(&g[0],
-				    pgc_ptr->g_data,
-				    pgc_ptr->num_g_stages
-				    * sizeof(struct mdp_ar_gc_lut_data));
-		    if (!ret)
-			    ret = copy_from_user(&b[0],
-					    pgc_ptr->b_data,
-					    pgc_ptr->num_b_stages
-					    * sizeof(struct mdp_ar_gc_lut_data));
-	    }
+	if (!ret) {
+		ret = copy_from_user(&g[0],
+				pgc_ptr->g_data,
+				pgc_ptr->num_g_stages
+				* sizeof(struct mdp_ar_gc_lut_data));
+		if (!ret)
+			ret = copy_from_user(&b[0],
+					pgc_ptr->b_data,
+					pgc_ptr->num_b_stages
+					* sizeof(struct mdp_ar_gc_lut_data));
+	}
 
-	    if (ret)
-		    return ret;
+	if (ret)
+		return ret;
 
-	    pgc_ptr->r_data = &r[0];
-	    pgc_ptr->g_data = &g[0];
-	    pgc_ptr->b_data = &b[0];
+	pgc_ptr->r_data = &r[0];
+	pgc_ptr->g_data = &g[0];
+	pgc_ptr->b_data = &b[0];
 
-        //ASUS_BSP : Louis "store r,g,b lut data" +++
-        if (pgc_ptr->block == MDP_BLOCK_DMA_P) {
-            memcpy(g_phone_argc_rdata, r, sizeof(r));
-            memcpy(g_phone_argc_gdata, g, sizeof(g));
-            memcpy(g_phone_argc_bdata, b, sizeof(b));
-            g_phone_argc_lut_data.r_data = g_phone_argc_rdata;
-            g_phone_argc_lut_data.g_data = g_phone_argc_gdata;
-            g_phone_argc_lut_data.b_data = g_phone_argc_bdata;
-        }
-        else if (pgc_ptr->block == MDP_BLOCK_OVERLAY_1) {
-            memcpy(g_pad_argc_rdata, r, sizeof(r));
-            memcpy(g_pad_argc_gdata, g, sizeof(g));
-            memcpy(g_pad_argc_bdata, b, sizeof(b));
-            g_pad_argc_lut_data.r_data = g_pad_argc_rdata;
-            g_pad_argc_lut_data.g_data = g_pad_argc_gdata;
-            g_pad_argc_lut_data.b_data = g_pad_argc_bdata;
-        }
-        //ASUS_BSP : Louis "store r,g,b lut data" ---
-    }
-
-    //ASUS_BSP:Louis ++
-    if ((pgc_ptr->block == MDP_BLOCK_DMA_P && !asus_padstation_exist_realtime()) ||
-        (pgc_ptr->block == MDP_BLOCK_OVERLAY_1 && asus_padstation_exist_realtime())) {
-        ret = update_ar_gc_lut(offset, pgc_ptr);
-    }
-    //ASUS_BSP:Louis --
-
+	ret = update_ar_gc_lut(offset, pgc_ptr);
 	return ret;
 }
 
@@ -2858,7 +2822,6 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 	int ret = -1;
 	uint32_t *offset = 0, *pgc_enable_offset = 0, lshift_bits = 0;
 	uint32_t blockbase;
-    int temp_data=0x0;   //ASUS_BSP:Louis
 
 	if (!mdp_pp_block2argc(pgc_ptr->block))
 		return ret;
@@ -2900,16 +2863,6 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 			break;
 
 		case 0x2:
-            //ASUS_BSP : Louis ++
-            if (!g_restore_argc) {
-                if (pgc_ptr->block == MDP_BLOCK_DMA_P) {
-                    memcpy(&g_phone_argc_lut_data, pgc_ptr, sizeof(struct mdp_pgc_lut_data));
-                }
-                else if (pgc_ptr->block == MDP_BLOCK_OVERLAY_1) {
-                    memcpy(&g_pad_argc_lut_data, pgc_ptr, sizeof(struct mdp_pgc_lut_data));
-                }
-            }
-            //ASUS_BSP : Louis --
 			ret = mdp4_argc_process_write_req(offset, pgc_ptr);
 			break;
 
@@ -2919,26 +2872,9 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 
 		if (!ret) {
 			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
-        //ASUS_BSP: Louis "enable gamma correction bit"+++
-        #if 0
 			outpdw(pgc_enable_offset, (inpdw(pgc_enable_offset) &
 							~(0x1<<lshift_bits)) |
 				((0x1 & pgc_ptr->flags) << lshift_bits));
-        #endif
-            if (pgc_ptr->block == MDP_BLOCK_DMA_P && !asus_padstation_exist_realtime()) {
-                temp_data = inpdw(MDP_BASE + 0x90000);
-                outpdw(pgc_enable_offset, temp_data | 1<<lshift_bits);
-            }
-            else if(pgc_ptr->block == MDP_BLOCK_OVERLAY_1 && asus_padstation_exist_realtime()) {
-                temp_data = inpdw(MDP_BASE + 0x18014);
-                outpdw(pgc_enable_offset, temp_data | 1<<lshift_bits);
-            }
-            else {
-                outpdw(pgc_enable_offset, (inpdw(pgc_enable_offset) &
-                            ~(0x1<<lshift_bits)) |
-                ((0x1 & pgc_ptr->flags) << lshift_bits));
-            }
-        //ASUS_BSP:Louis  "enable gamma correction bit"---
 			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF,
 									FALSE);
 		}
@@ -3208,4 +3144,103 @@ u32 mdp4_get_mixer_num(u32 panel_type)
 		mixer_num = MDP4_MIXER0;
 	}
 	return mixer_num;
+}
+
+static int is_valid_calib_addr(void *addr)
+{
+	int ret = 0;
+	unsigned int ptr;
+
+	ptr = (unsigned int) addr;
+
+	if (mdp_rev >= MDP_REV_30 && mdp_rev < MDP_REV_40) {
+		/* if request is outside the MDP reg-map or is not aligned 4 */
+		if (ptr == 0x0 || ptr > 0xF0600 || ptr % 0x4)
+			goto end;
+
+		if (ptr >= 0x90000 && ptr < 0x94000) {
+			if (ptr == 0x90000 || ptr == 0x90070)
+				ret = 1;
+			else if (ptr >= 0x93400 && ptr <= 0x93420)
+				ret = 1;
+			else if (ptr >= 0x93500 && ptr <= 0x93508)
+				ret = 1;
+			else if (ptr >= 0x93580 && ptr <= 0x93588)
+				ret = 1;
+			else if (ptr >= 0x93600 && ptr <= 0x93614)
+				ret = 1;
+			else if (ptr >= 0x93680 && ptr <= 0x93694)
+				ret = 1;
+			else if (ptr >= 0x93800 && ptr <= 0x93BFC)
+				ret = 1;
+		}
+	} else if (mdp_rev >= MDP_REV_40 && mdp_rev <= MDP_REV_44) {
+		/* if request is outside the MDP reg-map or is not aligned 4 */
+		if (ptr > 0xF0600 || ptr % 0x4)
+			goto end;
+
+		if (ptr < 0x90000) {
+			if (ptr == 0x0 || ptr == 0x4 || ptr == 0x28200 ||
+								ptr == 0x28204)
+				ret = 1;
+		} else if (ptr < 0x95000) {
+			if (ptr == 0x90000 || ptr == 0x90070)
+				ret = 1;
+			else if (ptr >= 0x93400 && ptr <= 0x93420)
+				ret = 1;
+			else if (ptr >= 0x93500 && ptr <= 0x93508)
+				ret = 1;
+			else if (ptr >= 0x93580 && ptr <= 0x93588)
+				ret = 1;
+			else if (ptr >= 0x93600 && ptr <= 0x93614)
+				ret = 1;
+			else if (ptr >= 0x93680 && ptr <= 0x93694)
+				ret = 1;
+			else if (ptr >= 0x94800 && ptr <= 0x94BFC)
+				ret = 1;
+		} else if (ptr < 0x9A000) {
+			if (ptr >= 0x98800 && ptr <= 0x9883C)
+				ret = 1;
+			else if (ptr >= 0x98880 && ptr <= 0x988AC)
+				ret = 1;
+			else if (ptr >= 0x98900 && ptr <= 0x9893C)
+				ret = 1;
+			else if (ptr >= 0x98980 && ptr <= 0x989BC)
+				ret = 1;
+			else if (ptr >= 0x98A00 && ptr <= 0x98A3C)
+				ret = 1;
+			else if (ptr >= 0x98A80 && ptr <= 0x98ABC)
+				ret = 1;
+			else if (ptr >= 0x99000 && ptr <= 0x993FC)
+				ret = 1;
+			else if (ptr >= 0x99800 && ptr <= 0x99BFC)
+				ret = 1;
+		} else if (ptr >= 0x9A000 && ptr <= 0x9a08c) {
+			ret = 1;
+		}
+	}
+end:
+	return ret;
+}
+
+int mdp4_calib_config(struct mdp_calib_config_data *cfg)
+{
+	int ret = -1;
+	void *ptr = (void *) cfg->addr;
+
+	if (is_valid_calib_addr(ptr))
+		ret = 0;
+	else
+		return ret;
+
+	ptr = (void *)(((unsigned int) ptr) + MDP_BASE);
+	mdp_clk_ctrl(1);
+	if (cfg->ops & MDP_PP_OPS_READ) {
+		cfg->data = inpdw(ptr);
+		ret = 1;
+	} else if (cfg->ops & MDP_PP_OPS_WRITE) {
+		outpdw(ptr, cfg->data);
+	}
+	mdp_clk_ctrl(0);
+	return ret;
 }

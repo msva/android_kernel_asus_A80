@@ -1,6 +1,7 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012 Code Aurora Forum.  All rights reserved.
+   Copyright (c) 2000-2001, The Linux Foundation. All rights reserved.
+   Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -208,15 +209,8 @@ EXPORT_SYMBOL(hci_le_remove_dev_white_list);
 
 static inline bool is_role_switch_possible(struct hci_dev *hdev)
 {
-	//ASUS_BSP BerylHou +++
-	struct hci_conn *conn;
-
-	conn = hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECTED);
-
-	if (conn && !lmp_esco_capable(conn)) 
-	    return false;
-	//ASUS_BSP BerylHou ---
-	
+	if (hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECTED))
+		return false;
 	return true;
 }
 
@@ -476,16 +470,6 @@ static void hci_conn_timeout(unsigned long arg)
 		if (!atomic_read(&conn->refcnt)) {
 			reason = hci_proto_disconn_ind(conn);
 			hci_acl_disconn(conn, reason);
-			//ASUS_BSP+++ ChanceChen "Early delete sco conn"
-			//0x13:Remote User Terminated Connection
-			if(reason == 0x13 && conn->type == SCO_LINK) {
-				BT_DBG("early delete sco conn %p", conn);
-				conn->state = BT_CLOSED;
-				//0x16:Connection Terminated by Local Host
-				hci_proto_disconn_cfm(conn, 0x16, 0);
-				hci_conn_del(conn);
-			}
-			//ASUS_BSP--- ChanceChen "Early delete sco conn"
 		}
 		break;
 	default:
@@ -677,6 +661,9 @@ int hci_conn_del(struct hci_conn *conn)
 	skb_queue_purge(&conn->data_q);
 
 	hci_conn_put_device(conn);
+
+	if (conn->hidp_session_valid)
+		hci_conn_put_device(conn);
 
 	hci_dev_put(hdev);
 
@@ -1096,7 +1083,7 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 timer:
 	if (hdev->idle_timeout > 0) {
 		spin_lock_bh(&conn->lock);
-		if (conn->conn_valid && lmp_sniff_capable(conn)) {
+		if (conn->conn_valid) {
 			mod_timer(&conn->idle_timer,
 				jiffies + msecs_to_jiffies(hdev->idle_timeout));
 			wake_lock(&conn->idle_lock);
@@ -1287,8 +1274,10 @@ EXPORT_SYMBOL(hci_conn_hold_device);
 
 void hci_conn_put_device(struct hci_conn *conn)
 {
-	if (atomic_dec_and_test(&conn->devref))
+	if (atomic_dec_and_test(&conn->devref)) {
+		conn->hidp_session_valid = false;
 		hci_conn_del_sysfs(conn);
+	}
 }
 EXPORT_SYMBOL(hci_conn_put_device);
 
@@ -1426,8 +1415,24 @@ int hci_set_auth_info(struct hci_dev *hdev, void __user *arg)
 
 	hci_dev_lock_bh(hdev);
 	conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &req.bdaddr);
-	if (conn)
+	if (conn) {
 		conn->auth_type = req.type;
+		switch (conn->auth_type) {
+		case HCI_AT_NO_BONDING:
+			conn->pending_sec_level = BT_SECURITY_LOW;
+			break;
+		case HCI_AT_DEDICATED_BONDING:
+		case HCI_AT_GENERAL_BONDING:
+			conn->pending_sec_level = BT_SECURITY_MEDIUM;
+			break;
+		case HCI_AT_DEDICATED_BONDING_MITM:
+		case HCI_AT_GENERAL_BONDING_MITM:
+			conn->pending_sec_level = BT_SECURITY_HIGH;
+			break;
+		default:
+			break;
+		}
+	}
 	hci_dev_unlock_bh(hdev);
 
 	if (!conn)

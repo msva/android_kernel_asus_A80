@@ -199,9 +199,6 @@ int PackedPixelAvailable =0;
 
 unsigned int g_b_isCarkitConnected=0;
 struct switch_dev switch_carkit_cable;
-//ASUS BSP Wei_Lai	+++
-struct switch_dev  switch_mhl_cable;
-//ASUS BSP Wei_Lai	---
 //ASUS_BSP , for A68 otg feature, check carkit cable in/out in MHL and msm otg driver +++
 uint8_t g_b_SwitchCarkitInitial=0;
 uint8_t g_b_SwitchCarkitBootPlugin=0;
@@ -470,17 +467,7 @@ static ssize_t carkit_switch_state(struct switch_dev *sdev, char *buf)
 {
        return sprintf(buf, "%d\n", g_b_isCarkitConnected);
 }
-//ASUS BSP Wei_Lai	+++
-static ssize_t mhlcable_switch_state(struct switch_dev *sdev, char *buf)
-{
-       return sprintf(buf, "%d\n", sdev->state);
-}
-static ssize_t mhlcable_switch_name(struct switch_dev *sdev, char *buf)
-{
-       
-	return sprintf(buf, "Asus-mhlCable\n");
-}
-//ASUS BSP Wei_Lai	---
+
 uint8_t SiiDrvMipiGetSourceStatus( void )
 {
     return 1;
@@ -841,13 +828,14 @@ InterruptEnableMaskInfo_t  g_NonTranscodeInterruptMasks[]=
                                       BIT_INTR8_CEA_NEW_AVI
                                     | BIT_INTR8_CEA_NEW_VSI
                                 )}
-    ,{REG_TPI_INTR_ST0_ENABLE   ,(
+//ASUS_BSP Tom Chu : workaround to mask all HDCP interrupt for pad mode i2c busy issue
+    ,{REG_TPI_INTR_ST0_ENABLE   , 0 /*(
                                       BIT_TPI_INTR_ST0_HDCP_AUTH_STATUS_CHANGE_EVENT
                                     | BIT_TPI_INTR_ST0_HDCP_VPRIME_VALUE_READY_EVENT
                                     | BIT_TPI_INTR_ST0_HDCP_SECURITY_CHANGE_EVENT
                                     | BIT_TPI_INTR_ST0_BKSV_DONE
                                     | BIT_TPI_INTR_ST0_BKSV_ERR
-                                )}
+                                )*/}
 
 };
 
@@ -1506,26 +1494,6 @@ int CarKitInitialize(void)
 
 }
 
-//ASUS BSP Wei_Lai +++
-
-int mhlCableInitialize(void)	
-{
-       int ret=0;
-
-	switch_mhl_cable.name="mhlcable";
-	switch_mhl_cable.print_state=mhlcable_switch_state;
-	switch_mhl_cable.print_name=mhlcable_switch_name;
-	ret=switch_dev_register(&switch_mhl_cable);
-	if (ret < 0){
-	    printk("%s: Unable to register switch dev! %d\n", __FUNCTION__,ret);
-	    return -1;	
-	}	
-
-	return 0;
-
-}
-
-//ASUS BSP Wei_Lai ---
 //////////////////////////////////////////////////////////////////////////////
 //
 // SiiMhlTxChipInitialize
@@ -1982,7 +1950,7 @@ i=i;
 //	}
 	#else
 //ASUS_BSP+++ use INT Low to determine exit ISR function to solve TX hang issue	
-	      if (gpio_get_value(g_GPIO_MHL_IRQ_N))
+	      if (gpio_get_value(W_INT_GPIO))
 	      	{
 			intMStatus = 0;
 			TX_DEBUG_PRINT(("[MHL] Linux loop INT high return \n"));
@@ -2245,32 +2213,16 @@ uint8_t HDMI_MON_PKT_HEADER2;
 			V_RES_L = SiiRegRead(REG_TPI_HW_6C);  // 0x6C
 			V_RES_H = SiiRegRead(REG_TPI_HW_6D);  //0x6D
 
-		   switch (g_A68_hwID)
-		   {
-			case A68_EVB:
-			case A68_SR1_1:
-			case A68_SR1_2:
-			case A68_SR2:
-			case A68_ER1:
-			case A68_ER2:
-			case A68_ER3:
-			case A68_PR:
-			case A68_MP:   					
-//for pass CTS eye diagram, optimize swing value
-			    	if  ((H_RES_L == 0x5a) && (H_RES_H == 0x03) 
-					&& (V_RES_L  == 0x0d) && (V_RES_H== 0x02))   // 480p
-			    	{
-				    SiiRegWrite(REG_MHLTX_CTL7, 0x03);			    		
-			    	}
-				else
-				{
-				    SiiRegWrite(REG_MHLTX_CTL7, 0x09);			    					
-				}
-				break;	
-			default:
-				//for A80, not set swing value
-				break;
-		   	}
+		    if  ((H_RES_L == 0x5a) && (H_RES_H == 0x03) 
+				&& (V_RES_L  == 0x0d) && (V_RES_H== 0x02))   // 480p
+		    	{
+			    SiiRegWrite(REG_MHLTX_CTL7, 0x03);			    		
+		    	}
+			else
+			{
+			    SiiRegWrite(REG_MHLTX_CTL7, 0x09);			    					
+			}
+
 #ifndef KENO_DONGLE_DOWNSTREAM1//KH, skip checking H/V Total, just check AVI InfoFrame is fine.
 		    if ( ((H_RES_L == 0x5a) && (H_RES_H == 0x03) 
 				&& (V_RES_L  == 0x0d) && (V_RES_H== 0x02)) ||   // 480p
@@ -2953,15 +2905,9 @@ static void WriteInitialRegisterValuesPartTwo (void)
 
 		   switch (g_A68_hwID)
 		   {
-			case A68_EVB:
-			case A68_SR1_1:
-			case A68_SR1_2:
-			case A68_SR2:
-			case A68_ER1:
-			case A68_ER2:
-			case A68_ER3:
-			case A68_PR:
-			case A68_MP:   					
+		        case A68_PR:
+		        case A68_MP:
+					
 //for pass CTS eye diagram, optimize swing value
 			    SiiRegModify(REG_MHLTX_CTL4
 			        ,BIT_CLK_SWING_CTL_MASK | BIT_DATA_SWING_CTL_MASK
@@ -2970,19 +2916,7 @@ static void WriteInitialRegisterValuesPartTwo (void)
 			            
 			    SiiRegWrite(REG_MHLTX_CTL7, 0x09);	
 			    break;	
-
-			case A80_EVB:
-			case A80_SR1:			
-			case A80_SR2:
-			case A80_SR3:
-			case A80_SR4:
-			case A80_SR5:
-			case A80_ER:
-			case A80_PR:
-			    SiiRegModify(REG_MHLTX_CTL4
-			        ,BIT_CLK_SWING_CTL_MASK | BIT_DATA_SWING_CTL_MASK
-			            ,0x33);
-				break;
+			    
 			 default:
 // for ER			 
 //for pass CTS eye diagram, optimize swing value
@@ -3265,7 +3199,7 @@ void SiiMhlTxDrvProcessRgndMhl( void )
 
 //ASUS_BSP , for A68 otg feature, check carkit cable in/out in MHL and msm otg driver +++
 static void (*notify_carkit_in_out_func_ptr)(int) = NULL;
-int mhl_registerCarkitInOutNotificaition(void (*callback)(int))
+int dp_registerCarkitInOutNotificaition(void (*callback)(int))
 {
     printk("[MHL]%s +++\n",__FUNCTION__);
     
@@ -3319,15 +3253,6 @@ bool_t mhl_check_carkit_mode(void)
 		return false;
 	}
 }
-
-//ASUS BSP Wei_Lai	+++
-void mhl_switch_cableDetect(bool_t enable)
-{
-		switch_set_state(&switch_mhl_cable, enable);
-		printk("[MHL] %d:  enable: %d %s\n", switch_mhl_cable.state,enable, __func__);
-		
-}
-//ASUS BSP Wei_Lai	---
 ///////////////////////////////////////////////////////////////////////////
 // ProcessRgnd
 //
@@ -4414,7 +4339,7 @@ SiiMhlTxDrvGetEdidBlockResult_e SiiMhlTxDrvGetEdidBlock(uint8_t *pBufEdid,uint8_
 
 	uint16_t	offset = (blockNumber << 7);
     uint16_t    counter=0;
-     uint16_t   edid_read_times = 30;
+
 
 	EDID_DEBUG_PRINT(("EDID HW Assist: Read EDID block number %02X\n", (int)blockNumber));
 //SII8240_VER81	+++
@@ -4448,12 +4373,7 @@ SiiMhlTxDrvGetEdidBlockResult_e SiiMhlTxDrvGetEdidBlock(uint8_t *pBufEdid,uint8_
 	EDID_DEBUG_PRINT(("EDID HW Assist: Waiting for Completion\n" ));
 	// Wait for completion
 //SII8240_VER81	+++	
-       if ((g_pad_tv_mode == MHL_PAD_MODE_H) || (g_pad_tv_mode == MHL_PAD_MODE_L))
-       {
-       	edid_read_times = 1;
-       }
-
-	for (counter =0; counter < edid_read_times;++counter)
+	for (counter =0; counter < 100;++counter)
 	{
     uint8_t temp = SiiRegRead(REG_INTR9);
         if (temp)
@@ -4464,13 +4384,13 @@ SiiMhlTxDrvGetEdidBlockResult_e SiiMhlTxDrvGetEdidBlock(uint8_t *pBufEdid,uint8_
                 SiiRegWrite(REG_INTR9,BIT_INTR9_EDID_DONE);
     			break;
     		}
-//            ERROR_DEBUG_PRINT(("intr9 status: %02x\n",(uint16_t)temp));
+            ERROR_DEBUG_PRINT(("intr9 status: %02x\n",(uint16_t)temp));
             if (BIT_INTR9_EDID_ERROR & temp)
             {
                 // clear the interrupt
                 SiiRegWrite(REG_INTR9,BIT_INTR9_EDID_ERROR);
-                ERROR_DEBUG_PRINT(("EDID read error, retrying (%d)\n", counter));
-//                DumpTPIDebugRegs
+                ERROR_DEBUG_PRINT(("EDID read error, retrying\n"));
+                DumpTPIDebugRegs
             	// Setup which block to read
             	if( 0 == blockNumber)
             	{
@@ -4490,10 +4410,9 @@ SiiMhlTxDrvGetEdidBlockResult_e SiiMhlTxDrvGetEdidBlock(uint8_t *pBufEdid,uint8_
             }
         }
   		// wait a bit
-//  		HalTimerWait(1);
-		msleep(5);
+  		HalTimerWait(1);
 	}
-    if (counter >= edid_read_times)
+    if (counter >= 100)
     {
      ERROR_DEBUG_PRINT(("EDID HW Assist: Timed Out. counter:%d\n",counter));
         return gebTimedOut;

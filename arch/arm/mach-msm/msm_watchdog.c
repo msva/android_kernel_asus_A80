@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,7 @@
 #include <linux/suspend.h>
 #include <linux/percpu.h>
 #include <linux/interrupt.h>
+#include <linux/reboot.h>
 #include <asm/fiq.h>
 #include <asm/hardware/gic.h>
 #include <mach/msm_iomap.h>
@@ -32,8 +33,10 @@
 #include <mach/socinfo.h>
 #include "msm_watchdog.h"
 #include "timer.h"
+//ASUS_BSP ++
 #include <linux/asus_global.h>
 extern struct _asus_global asus_global;
+//ASUS_BSP --
 
 #define MODULE_NAME "msm_watchdog"
 
@@ -66,6 +69,12 @@ static int enable = 1;
 module_param(enable, int, 0);
 
 /*
+ * Watchdog bark reboot timeout in seconds.
+ * Can be specified in kernel command line.
+ */
+static int reboot_bark_timeout = 22;
+module_param(reboot_bark_timeout, int, 0644);
+/*
  * If the watchdog is enabled at bootup (enable=1),
  * the runtime_disable sysfs node at
  * /sys/module/msm_watchdog/runtime_disable
@@ -97,7 +106,7 @@ static int print_all_stacks = 1;
 module_param(print_all_stacks, int,  S_IRUGO | S_IWUSR);
 
 /* Area for context dump in secure mode */
-void *scm_regsave;
+static void *scm_regsave;
 
 static struct msm_watchdog_pdata __percpu **percpu_pdata;
 
@@ -156,6 +165,27 @@ static struct notifier_block panic_blk = {
 	.notifier_call	= panic_wdog_handler,
 };
 
+#define get_sclk_hz(t_ms) ((t_ms / 1000) * WDT_HZ)
+#define get_reboot_bark_timeout(t_s) ((t_s * MSEC_PER_SEC) < bark_time ? \
+		get_sclk_hz(bark_time) : get_sclk_hz(t_s * MSEC_PER_SEC))
+
+static int msm_watchdog_reboot_notifier(struct notifier_block *this,
+		unsigned long code, void *unused)
+{
+
+	u64 timeout = get_reboot_bark_timeout(reboot_bark_timeout);
+	__raw_writel(timeout, msm_wdt_base + WDT_BARK_TIME);
+	__raw_writel(timeout + 3 * WDT_HZ,
+			msm_wdt_base + WDT_BITE_TIME);
+	__raw_writel(1, msm_wdt_base + WDT_RST);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block msm_reboot_notifier = {
+	.notifier_call = msm_watchdog_reboot_notifier,
+};
+
 struct wdog_disable_work_data {
 	struct work_struct work;
 	struct completion complete;
@@ -179,6 +209,7 @@ static void wdog_disable_work(struct work_struct *work)
 	}
 	enable = 0;
 	atomic_notifier_chain_unregister(&panic_notifier_list, &panic_blk);
+	unregister_reboot_notifier(&msm_reboot_notifier);
 	cancel_delayed_work(&dogwork_struct);
 	/* may be suspended after the first write above */
 	__raw_writel(0, msm_wdt_base + WDT_EN);
@@ -222,12 +253,20 @@ done:
 unsigned min_slack_ticks = UINT_MAX;
 unsigned long long min_slack_ns = ULLONG_MAX;
 
+extern int watchdog_test; //adbg++
+
 void pet_watchdog(void)
 {
 	int slack;
 	unsigned long long time_ns;
 	unsigned long long slack_ns;
 	unsigned long long bark_time_ns = bark_time * 1000000ULL;
+
+	if (watchdog_test) {
+		pr_info("stop %s()", __func__);  //adbg++
+		return;
+	}
+
 
 	if (!enable)
 		return;
@@ -302,8 +341,10 @@ static void configure_bark_dump(void)
 		if (scm_regsave) {
 			cmd_buf.addr = __pa(scm_regsave);
 			cmd_buf.len  = PAGE_SIZE;
+//ASUS_BSP ++
 			printk("scm_regsave = 0x%x,cmd_buf.addr = 0x%x\r\n",(unsigned int)scm_regsave,(unsigned int)cmd_buf.addr);
 			asus_global.phycpucontextadd = cmd_buf.addr;
+//ASUS_BSP --
 			ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD,
 				       &cmd_buf, sizeof(cmd_buf), NULL, 0);
 			if (ret)
@@ -333,11 +374,15 @@ static void init_watchdog_work(struct work_struct *work)
 	int ret;
 
 	if (has_vic) {
+		pr_info("%s: request irq for apps_wdog_bark\n", __func__);  //adbg++
 		ret = request_irq(msm_wdog_irq, wdog_bark_handler, 0,
 				  "apps_wdog_bark", NULL);
-		if (ret)
+		if (ret) {
+			pr_err("%s: request irq for apps_wdog_bark error: %d\n", __func__, ret);  //adbg++
 			return;
+		}
 	} else if (appsbark_fiq) {
+		pr_info("%s: set_fiq_handler for msm_wdog\n", __func__);  //adbg++
 		claim_fiq(&wdog_fh);
 		set_fiq_handler(&msm_wdog_fiq_start, msm_wdog_fiq_length);
 		stack = (void *)__get_free_pages(GFP_KERNEL, THREAD_SIZE_ORDER);
@@ -357,10 +402,13 @@ static void init_watchdog_work(struct work_struct *work)
 			return;
 		}
 
+		pr_info("%s: request_percpu_irq for apps_wdog_bark\n", __func__);  //adbg++
+
 		/* Must request irq before sending scm command */
 		ret = request_percpu_irq(msm_wdog_irq,
 			wdog_bark_handler, "apps_wdog_bark", percpu_pdata);
 		if (ret) {
+			pr_err("%s: request_percpu_irq for apps_wdog_bark error: %d\n", __func__, ret);  //adbg++
 			free_percpu(percpu_pdata);
 			return;
 		}
@@ -375,6 +423,10 @@ static void init_watchdog_work(struct work_struct *work)
 
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &panic_blk);
+
+	ret = register_reboot_notifier(&msm_reboot_notifier);
+	if (ret)
+		pr_err("Failed to register reboot notifier\n");
 
 	__raw_writel(1, msm_wdt_base + WDT_EN);
 	__raw_writel(1, msm_wdt_base + WDT_RST);
@@ -398,6 +450,11 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 	}
 
 	bark_time = pdata->bark_time;
+	/* reboot_bark_timeout (in seconds) might have been supplied as
+	 * module parameter.
+	 */
+	if ((reboot_bark_timeout * MSEC_PER_SEC) < bark_time)
+		reboot_bark_timeout = (bark_time / MSEC_PER_SEC);
 	has_vic = pdata->has_vic;
 	if (!pdata->has_secure) {
 		appsbark = 1;

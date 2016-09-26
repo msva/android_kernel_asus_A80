@@ -939,6 +939,7 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 	int flags = info->flags;
 	int ret = 0;
 
+	printk("%s: flag=0x%x activate=0x%x",__func__,flags,var->activate);
 	if (var->activate & FB_ACTIVATE_INV_MODE) {
 		struct fb_videomode mode1, mode2;
 
@@ -988,8 +989,10 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 
 		ret = info->fbops->fb_check_var(var, info);
 
-		if (ret)
+		if (ret){
+			printk("%s:fb_check_var failed\n",__func__);
 			goto done;
+		}
 
 		if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
 			struct fb_var_screeninfo old_var;
@@ -998,8 +1001,9 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 			if (info->fbops->fb_get_caps) {
 				ret = fb_check_caps(info, var, activate);
 
-				if (ret)
+				if (ret){
 					goto done;
+				}
 			}
 
 			old_var = info->var;
@@ -1016,9 +1020,11 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 					goto done;
 				}
 			}
-
+			printk("%s: fb_pan_display\n",__func__);
 			fb_pan_display(info, &info->var);
+			printk("%s: fb_set_cmap\n",__func__);
 			fb_set_cmap(&info->cmap, info);
+			printk("%s: fb_var_to_videomode\n",__func__);
 			fb_var_to_videomode(&mode, &info->var);
 
 			if (info->modelist.prev && info->modelist.next &&
@@ -1030,7 +1036,7 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 				int evnt = (activate & FB_ACTIVATE_ALL) ?
 					FB_EVENT_MODE_CHANGE_ALL :
 					FB_EVENT_MODE_CHANGE;
-
+				printk("%s: evnt=0x%x",__func__,evnt);
 				info->flags &= ~FBINFO_MISC_USEREVENT;
 				event.info = info;
 				event.data = &mode;
@@ -1038,8 +1044,8 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 			}
 		}
 	}
-
  done:
+	printk("%s-",__func__);
 	return ret;
 }
 
@@ -1092,11 +1098,11 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			return -EFAULT;
 		if (!lock_fb_info(info))
 			return -ENODEV;
-		console_lock();
+		//console_lock();
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_set_var(info, &var);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
-		console_unlock();
+		//console_unlock();
 		unlock_fb_info(info);
 		if (!ret && copy_to_user(argp, &var, sizeof(var)))
 			ret = -EFAULT;
@@ -1128,9 +1134,9 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			return -EFAULT;
 		if (!lock_fb_info(info))
 			return -ENODEV;
-		console_lock();
+		//console_lock();
 		ret = fb_pan_display(info, &var);
-		console_unlock();
+		//console_unlock();
 		unlock_fb_info(info);
 		if (ret == 0 && copy_to_user(argp, &var, sizeof(var)))
 			return -EFAULT;
@@ -1175,11 +1181,11 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	case FBIOBLANK:
 		if (!lock_fb_info(info))
 			return -ENODEV;
-		console_lock();
+		//console_lock();
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_blank(info, arg);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
-		console_unlock();
+		//console_unlock();
 		unlock_fb_info(info);
 		break;
 	default:

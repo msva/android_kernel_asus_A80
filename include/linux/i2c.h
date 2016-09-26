@@ -64,10 +64,11 @@ extern int i2c_master_send(const struct i2c_client *client, const char *buf,
 extern int i2c_master_recv(const struct i2c_client *client, char *buf,
 			   int count);
 
-//ASUS_BSP +++ Peter_Lu For camera power on error issue
+//ASUS_BSP +++ Maggie_Lee For camera power on error issue
 #define I2C_BUS_LOCK_TYPE1		1
 #define I2C_BUS_LOCK_TYPE2		2
 extern void sw_i2c_bus_lock( struct i2c_adapter *adapter, int state, int delaytime, int type );
+//ASUS_BSP --- Maggie_Lee For camera power on error issue
 
 /* Transfer num messages.
  */
@@ -394,8 +395,7 @@ struct i2c_adapter {
 
 	struct mutex userspace_clients_lock;
 	struct list_head userspace_clients;
-//Larry Lai, for i2c debug usage	
-	unsigned int mutex_i2c_addr;	
+	unsigned int mutex_i2c_addr;		//ASUS_BSP +++ Maggie_Lee I2C Porting
 };
 #define to_i2c_adapter(d) container_of(d, struct i2c_adapter, dev)
 

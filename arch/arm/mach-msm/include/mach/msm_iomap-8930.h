@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2011, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -102,8 +102,8 @@
 #define MSM8930_HDMI_SIZE		SZ_4K
 
 #ifdef CONFIG_DEBUG_MSM8930_UART
-// #define MSM_DEBUG_UART_BASE		IOMEM(0xFA740000)
-// #define MSM_DEBUG_UART_PHYS		0x16440000
+#define MSM_DEBUG_UART_BASE		IOMEM(0xFA740000)
+#define MSM_DEBUG_UART_PHYS		0x16440000
 #endif
 
 #define MSM8930_QFPROM_PHYS		0x00700000

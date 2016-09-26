@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,14 +20,15 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
-#include <linux/irq.h>
-#include <linux/percpu.h>
 #include <linux/of.h>
 #include <linux/cpu.h>
 #include <linux/platform_device.h>
 #include <mach/scm.h>
 #include <mach/msm_memory_dump.h>
-
+//ASUS_BSP++
+#include <linux/asus_global.h>
+extern struct _asus_global asus_global;
+//ASUS_BSP--
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -59,8 +60,6 @@ struct msm_watchdog_data {
 	struct mutex disable_lock;
 	struct work_struct init_dogwork_struct;
 	struct delayed_work dogwork_struct;
-	bool irq_ppi;
-	struct msm_watchdog_data __percpu **wdog_cpu_dd;
 	struct notifier_block panic_blk;
 };
 
@@ -265,7 +264,7 @@ static void ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 	for_each_cpu(cpu, cpu_online_mask)
 		smp_call_function_single(cpu, keep_alive_response, wdog_dd, 1);
 }
-
+extern int watchdog_test;  //ASUS_BSP++
 static void pet_watchdog_work(struct work_struct *work)
 {
 	unsigned long delay_time;
@@ -273,6 +272,17 @@ static void pet_watchdog_work(struct work_struct *work)
 	struct msm_watchdog_data *wdog_dd = container_of(delayed_work,
 						struct msm_watchdog_data,
 							dogwork_struct);
+//ASUS_BSP++
+	if (watchdog_test){
+		printk("test watchdog function...\r\n");
+		printk("Wdog - STS: 0x%x, CTL: 0x%x, BARK TIME: 0x%x, BITE TIME: 0x%x",
+		__raw_readl(wdog_dd->base + WDT0_STS),
+		__raw_readl(wdog_dd->base + WDT0_EN),
+		__raw_readl(wdog_dd->base + WDT0_BARK_TIME),
+		__raw_readl(wdog_dd->base + WDT0_BITE_TIME));
+		return;
+	} 
+//ASUS_BSP--
 	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
 	if (enable) {
 		if (wdog_dd->do_ipi_ping)
@@ -282,7 +292,7 @@ static void pet_watchdog_work(struct work_struct *work)
 	/* Check again before scheduling *
 	 * Could have been changed on other cpu */
 	if (enable)
-		schedule_delayed_work_on(0, &wdog_dd->dogwork_struct,
+		schedule_delayed_work(&wdog_dd->dogwork_struct,
 							delay_time);
 }
 
@@ -328,13 +338,6 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t wdog_ppi_bark(int irq, void *dev_id)
-{
-	struct msm_watchdog_data *wdog_dd =
-			*(struct msm_watchdog_data **)(dev_id);
-	return wdog_bark_handler(irq, wdog_dd);
-}
-
 static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 {
 	int ret;
@@ -348,6 +351,10 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 	if (wdog_dd->scm_regsave) {
 		cmd_buf.addr = virt_to_phys(wdog_dd->scm_regsave);
 		cmd_buf.len  = PAGE_SIZE;
+//ASUS_BSP++
+		printk("scm_regsave = 0x%x,cmd_buf.addr = 0x%x\r\n",(unsigned int)wdog_dd->scm_regsave,(unsigned int)cmd_buf.addr);
+		asus_global.phycpucontextadd = cmd_buf.addr;
+//ASUS_BSP--
 		ret = scm_call(SCM_SVC_UTIL, SCM_SET_REGSAVE_CMD,
 					&cmd_buf, sizeof(cmd_buf), NULL, 0);
 		if (ret)
@@ -381,32 +388,6 @@ static void init_watchdog_work(struct work_struct *work)
 	unsigned long delay_time;
 	int error;
 	u64 timeout;
-	int ret;
-
-	if (wdog_dd->irq_ppi) {
-		wdog_dd->wdog_cpu_dd = alloc_percpu(struct msm_watchdog_data *);
-		if (!wdog_dd->wdog_cpu_dd) {
-			dev_err(wdog_dd->dev, "fail to allocate cpu data\n");
-			return;
-		}
-		*__this_cpu_ptr(wdog_dd->wdog_cpu_dd) = wdog_dd;
-		ret = request_percpu_irq(wdog_dd->bark_irq, wdog_ppi_bark,
-					"apps_wdog_bark",
-					wdog_dd->wdog_cpu_dd);
-		if (ret) {
-			dev_err(wdog_dd->dev, "failed to request bark irq\n");
-			free_percpu(wdog_dd->wdog_cpu_dd);
-			return;
-		}
-	} else {
-		ret = devm_request_irq(wdog_dd->dev, wdog_dd->bark_irq,
-				wdog_bark_handler, IRQF_TRIGGER_RISING,
-						"apps_wdog_bark", wdog_dd);
-		if (ret) {
-			dev_err(wdog_dd->dev, "failed to request bark irq\n");
-			return;
-		}
-	}
 	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
 	wdog_dd->min_slack_ticks = UINT_MAX;
 	wdog_dd->min_slack_ns = ULLONG_MAX;
@@ -502,7 +483,6 @@ static int __devinit msm_wdog_dt_to_pdata(struct platform_device *pdev,
 								__func__);
 		return -ENXIO;
 	}
-	pdata->irq_ppi = irq_is_per_cpu(pdata->bark_irq);
 	dump_pdata(pdata);
 	return 0;
 }
@@ -522,6 +502,13 @@ static int __devinit msm_watchdog_probe(struct platform_device *pdev)
 		goto err;
 	wdog_dd->dev = &pdev->dev;
 	platform_set_drvdata(pdev, wdog_dd);
+	ret = devm_request_irq(&pdev->dev, wdog_dd->bark_irq, wdog_bark_handler,
+				IRQF_TRIGGER_RISING, "apps_wdog_bark", wdog_dd);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to request bark irq\n");
+		ret = -ENXIO;
+		goto err;
+	}
 	cpumask_clear(&wdog_dd->alive_mask);
 	INIT_WORK(&wdog_dd->init_dogwork_struct, init_watchdog_work);
 	INIT_DELAYED_WORK(&wdog_dd->dogwork_struct, pet_watchdog_work);

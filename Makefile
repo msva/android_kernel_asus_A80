@@ -648,34 +648,39 @@ endif
 ifneq ($(BUILD_NUMBER),)
         KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(BUILD_NUMBER)\"
 else
-        KBUILD_CPPFLAGS += -DASUS_SW_VER=\"A68_ENG\"
+        KBUILD_CPPFLAGS += -DASUS_SW_VER=\"A80_ENG\"
 endif
-
 # ASUS_BSP : miniporting : jackson : add ASUS software version support ---
 
-# jackson : factory compile option support +++
+# ASUS_BSP +++ Jason "support mutliple project build"
+
+# ASUS_BSP +++ Josh_Liao "support mutliple project build"
+KBUILD_CPPFLAGS += -DASUS_A80_PROJECT=1
+# ASUS_BSP --- Josh_Liao "support mutliple project build"
+
+# ASUS_BSP +++ Josh_Liao "factory compile option support"
 ifneq ($(ASUS_FACTORY_BUILD),)
         KBUILD_CPPFLAGS += -DASUS_FACTORY_BUILD=1
 endif
-# jackson : factory compile option support ---
+# ASUS_BSP --- Josh_Liao "factory compile option support"
+# ASUS_BSP +++ Josh_Liao "CTA compile option support"
+ifneq ($(ASUS_CTA_BUILD),)
+        KBUILD_CPPFLAGS += -DASUS_CTA_BUILD=1
+endif
+# ASUS_BSP --- Josh_Liao "CTA compile option support"
+
+# ASUS_BSP add for charging mode +++
+KBUILD_CPPFLAGS += -DASUS_CN_CHARGER_BUILD=1
+# ASUS_BSP add for charging mode ---
+
+# ASUS_BSP : for user build
 ifeq ($(TARGET_BUILD_VARIANT), user)
-# jackson : add ASUS_SHIP_BUILD for user build variant +++
         KBUILD_CPPFLAGS += -DASUS_SHIP_BUILD=1
-# jackson : add ASUS_SHIP_BUILD for user build variant ---
 #        KBUILD_CPPFLAGS += -DASUS_DOWNLOAD_MODE_DISABLE=1
 endif
+# ASUS_BSP : for user build
 
-# Enter_Zhang : CN Charger compile option support +++
-ifeq ($(TARGET_PRODUCT),CN_PadFone)
-        KBUILD_CPPFLAGS += -DASUS_CN_CHARGER_BUILD=1
-endif
-
-ifeq ($(TARGET_PRODUCT),CUCC_PadFone)
-        KBUILD_CPPFLAGS += -DASUS_CN_CHARGER_BUILD=1
-endif
-# Enter_Zhang : CN Charger compile option support ---
-
-# ASUS_BSP : for userdebuf build
+# ASUS_BSP : for userdebug build
 ifeq ($(TARGET_BUILD_VARIANT), userdebug)
         KBUILD_CPPFLAGS += -DASUS_USERDEBUG_BUILD=1
 #        KBUILD_CPPFLAGS += -DASUS_DOWNLOAD_MODE_DISABLE=1

@@ -54,9 +54,11 @@
 //ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 #ifdef CONFIG_EEPROM_NUVOTON
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #include <linux/microp_pin_def.h>
 #include <linux/microp_api.h>
+#endif
+#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
+#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #endif
 //ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 
@@ -90,13 +92,7 @@ static int asus_change_current_compass_orientation_file(char *src, char *str);
 int asus_switch_compass_orientation_file_6050(void);
 //ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation
 
-static int asus_e_compass_event(struct notifier_block *, unsigned long, void *);
 extern struct ext_slave_descr *p05_ami306_get_slave_descr(void);
-
-static struct notifier_block asus_e_compass_notifier = {
-    .notifier_call = asus_e_compass_event,
-    .priority = AMI306_ECOMPASS_MP_NOTIFY,
-};
 
 int isPhoneInPad(void)
 {
@@ -104,8 +100,10 @@ int isPhoneInPad(void)
 }
 EXPORT_SYMBOL_GPL(isPhoneInPad);
 
+#ifdef CONFIG_EEPROM_NUVOTON
 static int asus_e_compass_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
     if((g_A68_hwID >= A80_SR1) && (g_A68_hwID <= A80_PR))
     {
         switch (event) {
@@ -122,7 +120,7 @@ static int asus_e_compass_event(struct notifier_block *this, unsigned long event
                 queue_delayed_work(ami306_wq, &ami306_reinit_phone_compass_work, 3*HZ);
             }
             printk(KERN_INFO "[AMI306][PAD] remove !\n");
-            return NOTIFY_DONE;
+            break;
         case P01_ADD:
             g_inP05 = 1;
 //ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation
@@ -136,19 +134,30 @@ static int asus_e_compass_event(struct notifier_block *this, unsigned long event
                 queue_delayed_work(ami306_wq, &ami306_reinit_pad_compass_work, 3*HZ);
             }
             printk(KERN_INFO "[AMI306][PAD] add !\n");
-            return NOTIFY_DONE;
+            break;
+#ifdef CONFIG_EEPROM_NUVOTON_A80
         case P05_ECOMPASREADY:
             if(g_inP05 == 1)
             {
                 printk(KERN_INFO "[AMI306][PAD] receive data !\n");
             }
-            return NOTIFY_DONE;
+            break;
+#endif
         default:
-            return NOTIFY_DONE;
+            break;
         }   
     }
+    printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
     return NOTIFY_DONE;
 }
+
+static struct notifier_block asus_e_compass_notifier = {
+    .notifier_call = asus_e_compass_event,
+#ifdef CONFIG_EEPROM_NUVOTON_A80
+    .priority = AMI306_ECOMPASS_MP_NOTIFY,
+#endif
+};
+#endif
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //ASUS_BSP +++ Jason Chang "check and recover compass calibration file when compass resume"
 #define AMI_INTER_OFFSET_PAD "7 -24 -17 -34 -59 12\n"     //AICHI-JP Add for ASUS PadFone
@@ -480,6 +489,8 @@ static int __init ami306_mod_init(void)
 		INIT_DELAYED_WORK(&ami306_reinit_pad_compass_work, ami306_pad_compass_reinit);
 #ifdef CONFIG_EEPROM_NUVOTON
 		register_microp_notifier(&asus_e_compass_notifier);
+#endif
+#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
 		notify_register_microp_notifier(&asus_e_compass_notifier, "ami306_6050"); //ASUS_BSP Lenter+
 #endif
 	}
@@ -493,6 +504,8 @@ static void __exit ami306_mod_exit(void)
 	{
 #ifdef CONFIG_EEPROM_NUVOTON
 		unregister_microp_notifier(&asus_e_compass_notifier);
+#endif
+#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
 		notify_unregister_microp_notifier(&asus_e_compass_notifier, "ami306_6050"); //ASUS_BSP Lenter+
 #endif
 	}

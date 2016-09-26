@@ -57,11 +57,6 @@ ccflags-$(CONFIG_SII8240_P03_DEMO_PP) += -DSII8240_P03_DEMO_PP
 ccflags-$(CONFIG_SII8240_VER68) += -DSII8240_VER68
 ccflags-$(CONFIG_SII8240_PM_SUPPORT) += -DSII8240_PM_SUPPORT
 
-# larry lai : for A68 default enable HDCP , A80 default disable HDCP
-ifeq ($(ASUS_BUILD_PROJECT), A68)
-     ccflags-y += -DSII8240_HDCP_ON 
-endif
-
 MHL_MODULE_NAME := sii8240drv
 
 obj-$(CONFIG_FB_MSM_HDMI_MHL_8240) += $(MHL_MODULE_NAME).o
@@ -91,3 +86,5 @@ sii8240drv-objs  += driver/hdmi_tx_lite_drv_8240/si_drv_hdmi_tx_lite_hdcp.o
 sii8240drv-objs  += driver/hdmi_tx_lite_drv_8240/si_drv_hdmi_tx_lite_hdmi.o
 sii8240drv-objs  += driver/hdmi_tx_lite_drv_8240/si_drv_infoframe.o
 
+
+# ccflags-y += -DDEBUG

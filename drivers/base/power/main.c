@@ -1011,14 +1011,10 @@ int dpm_suspend_end(pm_message_t state)
 	int error = dpm_suspend_late(state);
 	if (error)
 		return error;
-
 	error = dpm_suspend_noirq(state);
-	if (error) {
-		dpm_resume_early(state);
-		return error;
-	}
-
-	return 0;
+	if (error)
+		dpm_resume_early(resume_event(state));
+	return error;
 }
 EXPORT_SYMBOL_GPL(dpm_suspend_end);
 
@@ -1074,6 +1070,7 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 
 	if (pm_wakeup_pending()) {
 		async_error = -EBUSY;
+		printk(KERN_ERR "[PM]%s: Device %s cause pm_wakeup_pending(), async_error fail: code %d\n", __func__, dev_name(dev), async_error);
 		goto Complete;
 	}
 
@@ -1143,7 +1140,7 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 	del_timer_sync(&timer);
 	destroy_timer_on_stack(&timer);
 
-Complete:
+ Complete:
 	complete_all(&dev->power.completion);
 
 	if (error)

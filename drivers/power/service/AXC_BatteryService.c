@@ -23,8 +23,12 @@ AXC_Charging_FSM *lpFSM;
 #include <linux/microp_api.h>
 #include <linux/microp_pin_def.h>
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON//ASUS_BSP Eason_Chang 1120 porting ---
+//ASUS_BSP +++ Peter_lu "suspend for Battery0% in  fastboot mode issue"
+#ifdef CONFIG_FASTBOOT
+#include <linux/fastboot.h>
+#endif //#ifdef CONFIG_FASTBOOT
+//ASUS_BSP ---
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
@@ -129,6 +133,7 @@ extern bool g_AcUsbOnline_Change0;
 extern void AcUsbPowerSupplyChange(void);
 extern void PadDock_AC_PowerSupplyChange(void);
 // when A66 Cap = 0% shutdown device no matter if has cable---
+extern bool is_pad_usb_plug_in(void);
 //Eason boot up in BatLow situation, take off cable can shutdown+++
 extern bool g_BootUp_IsBatLow;
 //Eason boot up in BatLow situation, take off cable can shutdown---
@@ -181,15 +186,21 @@ static bool IfUpdateSavedTime = false;
 static int MPdecisionCurrent=0;
 extern int get_current_for_ASUSswgauge(void);
 //Eason: MPdecisionCurrent ---
+int gCurr_ASUSswgauge=0;
+
 //Eason:A80 slowly drop+++
+#ifdef CONFIG_TI_GAUGE
 extern int get_Curr_from_TIgauge(void);
+#endif
 int gCurr_TIgauge=0;
 //Eason:A80 slowly drop---
 //Eason: LowCapCpuThrottle +++
 bool IsInCpuThrottle = false;
 //Eason: LowCapCpuThrottle ---
 
-
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+extern char g_CHG_mode;
+#endif
 
 //Eason : prevent thermal too hot, limit charging current in phone call+++
 extern void setChgDrawCurrent(void);
@@ -309,27 +320,41 @@ PadDrawLimitCurrent_Type JudgePadRuleDrawLimitCurrent(void)
 {
 	if( 1==AX_MicroP_IsP01Connected() )
 	{
-		if(balance_this->A66_capacity <= 8)
+		if((true == DecideIfPadDockHaveExtChgAC())&& (balance_this->Pad_capacity<5))
 		{
-				return PadDraw900;	
-		}else if( true == DecideIfPadDockHaveExtChgAC())
-		{
-				if(balance_this->A66_capacity <= 15)
-				{
-						return PadDraw700;
-				}else{
-						if( (balance_this->A66_capacity-balance_this->Pad_capacity)>=20 )
-									return PadDraw300;
-						else if( (balance_this->A66_capacity-balance_this->Pad_capacity)>=10 )
-									return PadDraw500;
-						else
-									return PadDraw700;
-				}
-
-		}else{
-				return PadDraw700;
+			return PadDraw500;
 		}
-	}else{
+		else if(balance_this->Pad_capacity<5)
+		{
+			return PadDraw300;
+		}
+		else if((balance_this->A66_capacity <= 8)||(2==IsBalanceMode))//ForcePowerBankMode draw 900
+		{
+			return PadDraw900;	
+		}
+		else if( (true == DecideIfPadDockHaveExtChgAC())&&(1==IsBalanceMode) )//only do this rule in balanceMode
+		{
+			if(balance_this->A66_capacity <= 15)
+			{
+				return PadDraw700;
+			}
+			else{
+				if( (balance_this->A66_capacity-balance_this->Pad_capacity)>=20 )
+					return PadDraw300;
+				else if( (balance_this->A66_capacity-balance_this->Pad_capacity)>=10 )
+					return PadDraw500;
+				else
+					return PadDraw700;
+			}
+
+		}
+		else
+		{
+			return PadDraw700;
+		}
+	}
+	else
+	{
 		return PadDraw700;
 	}
 }
@@ -673,6 +698,26 @@ static void judgeIfneedDoBalanceModeWhenSuspend(void)
 static void SetRTCAlarm(void);
 //Eason: dynamic set Pad alarm ---
 
+void charging_policy_set_when_pad_usb_in(struct AXC_BatteryService *_this)
+{
+	pr_info("charging_policy_set_when_pad_usb_in start!\n");
+	if(_this->A66_capacity < _this->Pad_capacity || _this->A66_capacity <= 15)
+	{
+		set_microp_vbus(1);
+		gpCharger->EnableCharging(gpCharger,true);
+		_this->fsm->onChargingStart(_this->fsm);
+	}
+	else if(_this->A66_capacity*10 >=  _this->Pad_capacity*12 && _this->A66_capacity >= 20)
+	{
+		set_microp_vbus(0);
+		gpCharger->EnableCharging(gpCharger,false);
+		if(IsBalanceMode == 1)
+			_this->fsm->onChargingStop(_this->fsm,BALANCE_STOP);
+		else
+			_this->fsm->onChargingStop(_this->fsm,POWERBANK_STOP);
+	}
+}
+			
 static void BatteryServiceDoBalance(struct AXC_BatteryService *_this)
 {
 #ifndef ASUS_FACTORY_BUILD
@@ -817,7 +862,15 @@ static bool DecideIfPadDockHaveExtChgAC(void)
     }else{
             if(1==PadChgCable){
         		IsPadDockExtChgAC = true; 
-        	}   		
+        	}
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+			if(g_CHG_mode == 1){
+				if(2==PadChgCable){
+					IsPadDockExtChgAC = true; 
+				}
+			}
+#endif
+
     }
     pr_debug("[BAT][Ser]:DockI:%d,PadAC:%d,DockAC:%d,ExtChg:%d\n"
                                 ,IsDockIn,PadChgCable,DockChgCable,IsPadDockExtChgAC);
@@ -872,14 +925,19 @@ static ssize_t balanceChg_write_proc(struct file *filp, const char __user *buff,
     if(1==AX_MicroP_IsP01Connected()){
 
 		if( false == DecideIfPadDockHaveExtChgAC()){ 
-				Init_Microp_Vbus__Chg();
+			Init_Microp_Vbus__Chg();
+			if( is_pad_usb_plug_in() == true)
+			{
+				charging_policy_set_when_pad_usb_in(balance_this);
+			}
+			else
 				BatteryServiceDoBalance(balance_this);
 		}else{
-				Init_Microp_Vbus__Chg();
+			Init_Microp_Vbus__Chg();
 		}
 		//Eason: do ForcePowerBankMode+++
 		if(2==IsBalanceMode){
-				DoForcePowerBankMode();
+			DoForcePowerBankMode();
 		}
 		//Eason: do ForcePowerBankMode---
     }
@@ -909,8 +967,13 @@ void static create_balanceChg_proc_file(void)
 static ssize_t MPdecisionCurrent_read_proc(char *page, char **start, off_t off, int count, 
             	int *eof, void *data)
 {
-	if(g_A68_hwID >= A80_SR1)
-				MPdecisionCurrent = get_Curr_from_TIgauge();
+	if(g_A68_hwID >= A80_SR1){
+#ifdef CONFIG_TI_GAUGE
+		MPdecisionCurrent = get_Curr_from_TIgauge();
+#else
+		MPdecisionCurrent = get_current_for_ASUSswgauge();
+#endif
+	}
 	else
 				MPdecisionCurrent = get_current_for_ASUSswgauge();
 	return sprintf(page, "%d\n", MPdecisionCurrent);
@@ -1043,12 +1106,14 @@ bool DockCapNeedUpdate(void)
 }
 //ASUS_BSP +++ Eason_Chang BalanceMode
 #ifdef CONFIG_EEPROM_NUVOTON
+extern void setChgLimitThermalRuleDrawCurrent(void);
 static int batSer_microp_event_handler(
 	struct notifier_block *this,
 	unsigned long event,
 	void *ptr)
 {
     unsigned long flags;
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
 	pr_debug( "[BAT][Bal] %s() +++, evt:%lu \n", __FUNCTION__, event);
 
 	switch (event) {
@@ -1088,14 +1153,20 @@ static int batSer_microp_event_handler(
         //msleep(800);//Eason ,need time delay to get PAD AC/USB
         asus_bat_update_PadAcOnline();    
         printk( "[BAT][Bal]P01_AC_USB_IN\r\n");
-
+		setChgLimitThermalRuleDrawCurrent();
         if(true==DecideIfPadDockHaveExtChgAC()){
                 Init_Microp_Vbus__Chg();
         }
+        else
+		{
+			if(is_pad_usb_plug_in() == true)
+				charging_policy_set_when_pad_usb_in(balance_this);
+		}
 		break;
     case P01_AC_USB_OUT:
         asus_bat_update_PadAcOnline();    
         printk( "[BAT][Bal]P01_AC_USB_OUT \r\n");
+        setChgLimitThermalRuleDrawCurrent();
         schedule_delayed_work(&balance_this->CableOffWorker,1*HZ);//keep 100% 5 min
   //when takeoff extChg default turn off vbus +++
 #ifndef ASUS_FACTORY_BUILD
@@ -1186,18 +1257,20 @@ static int batSer_microp_event_handler(
 	//Eason after Pad update firmware, update status ---
 	
 	//Eason : change pad icon immediately when pad firmware notify +++
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 	case P05_BAT_STATUS_CHANGE:
 		printk( "[BAT][Bal]P05_BAT_STATUS_CHANGE+++\n");
 			schedule_delayed_work(&balance_this->UpdatePadWorker, 0*HZ);
-	break;	
+	break;
+#endif
 	//Eason : change pad icon immediately when pad firmware notify ---	
 
 	default:
 		pr_debug("[BAT][Bal] %s(), not listened evt: %lu \n", __FUNCTION__, event);
-		return NOTIFY_DONE;
+		break;
 	}
 
-
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
 	pr_debug("[BAT][Bal] %s() ---\n", __FUNCTION__);
 	return NOTIFY_DONE;
 }
@@ -2004,7 +2077,12 @@ static void forceResumeLess5minDobalanceWork(struct work_struct *dat)
 {
 		if(false == DecideIfPadDockHaveExtChgAC())
 		{
-	    		printk("[BAT][Ser]:less 5 min forceResume()+++\n");
+    		printk("[BAT][Ser]:less 5 min forceResume()+++\n");
+			if(is_pad_usb_plug_in() == true)
+			{
+				charging_policy_set_when_pad_usb_in(balance_this);
+			}
+			else
 	    		BatteryServiceDoBalance(balance_this);
 			printk("[BAT][Ser]:less 5 min forceResume()---\n");	
 		}	
@@ -2393,7 +2471,11 @@ static void AXC_BatteryService_suspend(struct AXI_BatteryServiceFacade *bat)
 
 //Eason: A68 new balance mode +++
 #ifndef ASUS_FACTORY_BUILD	
-	if ((1==AX_MicroP_IsP01Connected())&&(1 == IsBalanceMode)&&(false == DecideIfPadDockHaveExtChgAC()))
+	if( (1==AX_MicroP_IsP01Connected())&&(is_pad_usb_plug_in() == true))
+	{
+		charging_policy_set_when_pad_usb_in(balance_this);
+	}
+	else if ((1==AX_MicroP_IsP01Connected())&&(1 == IsBalanceMode)&&(false == DecideIfPadDockHaveExtChgAC()))
 	{
 		printk("[BAT][Bal]Phone:%d,Pad:%d\n",_this->A66_capacity,_this->Pad_capacity);
 		doInBalanceModeWhenSuspend();
@@ -2611,7 +2693,6 @@ static void  AXC_BatteryService_constructor(struct AXC_BatteryService *_this,AXI
         balance_this = _this;
         #ifdef CONFIG_EEPROM_NUVOTON
 	        register_microp_notifier(&batSer_microp_notifier);
-	        notify_register_microp_notifier(&batSer_microp_notifier, "axc_batteryservice"); //ASUS_BSP Lenter+
         #endif /* CONFIG_EEPROM_NUVOTON */
         //ASUS_BSP --- Eason_Chang BalanceMode
         mutex_init(&_this->main_lock);
@@ -2977,7 +3058,9 @@ static void set_DisOTGmode_whenCap_0(void)
 //ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
 
 //ASUS BSP Eason_Chang get Cap from TIgauge+++
+#ifdef CONFIG_TI_GAUGE
 int get_Cap_from_TIgauge(void);
+#endif
 //ASUS BSP Eason_Chang get Cap from TIgauge---
 
 //Eason show temp limit +++
@@ -2988,10 +3071,15 @@ extern int showSmb346AICL_Setting(void);
 extern int showSmb346AICL_Result(void);
 //Eason show AICLsetting & AICLresult---
 //check df version do Cap remapping+++
+#ifdef CONFIG_TI_GAUGE
 extern int g_gauge_df_version;
+#endif
+#define DF_VERSION_NOT_NEED_REMAP  5
 #define DF_VERSION_REMAP_START        6
 #define DF_VERSION_REMAP_STOP         10
 #define NO_RESERVE_DF_MAP_NUM	100
+
+#ifdef CONFIG_TI_GAUGE
 static int noReserveDF_map_tbl[NO_RESERVE_DF_MAP_NUM + 1] = 
 							   {  0,   0,  0,   0,  0,   0,   1,   2,  4,  6,
 								7,   9, 10, 11, 13, 14, 16, 17, 18, 19, 	
@@ -3004,7 +3092,12 @@ static int noReserveDF_map_tbl[NO_RESERVE_DF_MAP_NUM + 1] =
 							     80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
 							     90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
 							    100 };
+#endif
 //check df version do Cap remapping---
+//Eason print temp info+++
+extern int gBatteryTemp;
+extern long long gPcbTemp;
+//Eason print temp info---
 
 static void AXC_BatteryService_reportPropertyCapacity(struct AXC_BatteryService *_this, int refcapacity)
 {
@@ -3028,10 +3121,19 @@ static void AXC_BatteryService_reportPropertyCapacity(struct AXC_BatteryService 
 
 //check df version do Cap remapping+++
 	int reMap_refcapacity;
-	if ( (g_A68_hwID >= A80_SR1)&&(DF_VERSION_REMAP_START <= g_gauge_df_version)&&(DF_VERSION_REMAP_STOP >= g_gauge_df_version)  )
+	if (g_A68_hwID >= A80_SR1)
 	{
-		reMap_refcapacity = noReserveDF_map_tbl[refcapacity];
-		printk("[BAT][DFmap]:%d, %d\n",refcapacity ,reMap_refcapacity);
+#ifdef CONFIG_TI_GAUGE
+		if( DF_VERSION_NOT_NEED_REMAP == g_gauge_df_version )
+		{
+				reMap_refcapacity = refcapacity;
+		}else{
+				reMap_refcapacity = noReserveDF_map_tbl[refcapacity];
+				printk("[BAT][DFmap]:%d, %d\n",refcapacity ,reMap_refcapacity);
+		}
+#else
+		reMap_refcapacity = refcapacity;
+#endif
 	}else{
 		reMap_refcapacity = refcapacity;
 	}
@@ -3143,8 +3245,15 @@ if(true==g_BootUp_IsBatLow )
 	gDiff_BMS = lastCapacity - gBMS_Cap ;//for discharge drop
 	//Eason: remember last BMS Cap to filter---
 	//Eason:A80 slowly drop+++
-	 if(g_A68_hwID >= A80_SR1)
-			gCurr_TIgauge = get_Curr_from_TIgauge();
+	if(g_A68_hwID >= A80_SR1){
+#ifdef CONFIG_TI_GAUGE
+		gCurr_TIgauge = get_Curr_from_TIgauge();
+#endif
+	}
+	else{
+		gCurr_ASUSswgauge = get_current_for_ASUSswgauge();
+	}
+	
     	//Eason:A80 slowly drop---
     A66_capacity = _this->gpCapFilterA66->filterCapacity
                                     (_this->gpCapFilterA66,
@@ -3164,21 +3273,11 @@ if(true==g_BootUp_IsBatLow )
     }
 //Eason add to check full & 100%---
 
-    pr_debug("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%ld==>%d\n",
-                                    reMap_refcapacity,
-                                    lastCapacity,
-                                      hasCable,
-                                      EnableBATLifeRise,
-                                      _this->BatteryService_IsCharging,
-                                      _this->BatteryService_IsFULL,
-                                      IsBatLowtoFilter,
-                                      maxMah,
-                                      intervalSinceLastUpdate,
-                                      A66_capacity);
 //ASUS_BSP +++ Eason_Chang add event log +++
-	 if(g_A68_hwID >= A80_SR1)
+	if(g_A68_hwID >= A80_SR1)
  	{
-	     ASUSEvtlog("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%d,%ld==>%d  ,GaugeCur:%d, TempLimit:%d, AICL:%d,%d, DF:%d\n",
+#ifdef CONFIG_TI_GAUGE
+		printk("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%d,%ld  ,GaugeCur:%d, TempLimit:%d, AICL:%d,%d, DF:%d, BatT:%d, PcbT:%lld ==>%d\n",
 					    refcapacity,
 					    reMap_refcapacity,
                                     lastCapacity,
@@ -3189,14 +3288,37 @@ if(true==g_BootUp_IsBatLow )
                                       IsBatLowtoFilter,
                                       maxMah,
                                       intervalSinceLastUpdate,
-                                      A66_capacity,
                                       gCurr_TIgauge,
                                       showSmb346TempLimitReason(),
                                       showSmb346AICL_Setting(),
                                       showSmb346AICL_Result(),
-                                      g_gauge_df_version);
+                                      g_gauge_df_version,
+                                      gBatteryTemp/10,
+                                      gPcbTemp,
+                                      A66_capacity);
+	     
+		ASUSEvtlog("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%d,%ld  ,GaugeCur:%d, TempLimit:%d, AICL:%d,%d, DF:%d, BatT:%d, PcbT:%lld ==>%d\n",
+					    refcapacity,
+					    reMap_refcapacity,
+                                    lastCapacity,
+                                      hasCable,
+                                      EnableBATLifeRise,
+                                      _this->BatteryService_IsCharging,
+                                      _this->BatteryService_IsFULL,
+                                      IsBatLowtoFilter,
+                                      maxMah,
+                                      intervalSinceLastUpdate,
+                                      gCurr_TIgauge,
+                                      showSmb346TempLimitReason(),
+                                      showSmb346AICL_Setting(),
+                                      showSmb346AICL_Result(),
+                                      g_gauge_df_version,
+                                      gBatteryTemp/10,
+                                      gPcbTemp,
+                                      A66_capacity);
+#endif
 	} else{	
-	     ASUSEvtlog("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%ld==>%d  ,BMS:%d, diffBMS:%d\n, TempLimit:%d\n",
+	     printk("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%ld, BMS:%d, diffBMS:%d, TempLimit:%d ==>%d \n",
                                     reMap_refcapacity,
                                     lastCapacity,
                                       hasCable,
@@ -3206,10 +3328,25 @@ if(true==g_BootUp_IsBatLow )
                                       IsBatLowtoFilter,
                                       maxMah,
                                       intervalSinceLastUpdate,
-                                      A66_capacity,
                                       gBMS_Cap,
                                       gDiff_BMS,
-                                      showSmb346TempLimitReason());
+                                      showSmb346TempLimitReason(),
+                                      A66_capacity);
+	     
+	     ASUSEvtlog("[BAT][Ser]report Capacity:%d,%d,%d,%d,%d,%d,%d,%d,%ld, BMS:%d, diffBMS:%d, TempLimit:%d ==>%d \n",
+                                    reMap_refcapacity,
+                                    lastCapacity,
+                                      hasCable,
+                                      EnableBATLifeRise,
+                                      _this->BatteryService_IsCharging,
+                                      _this->BatteryService_IsFULL,
+                                      IsBatLowtoFilter,
+                                      maxMah,
+                                      intervalSinceLastUpdate,
+                                      gBMS_Cap,
+                                      gDiff_BMS,
+                                      showSmb346TempLimitReason(),
+                                      A66_capacity);
 	}
 //ASUS_BSP --- Eason_Chang add event log ---   
 //Eason: remember last BMS Cap to filter+++
@@ -3233,12 +3370,16 @@ if(true==g_BootUp_IsBatLow )
        _this->A66_capacity = A66_capacity;
 
 #ifdef CONFIG_EEPROM_NUVOTON  //ASUS_BSP Eason_Chang 1120 porting +++
-       if(1==AX_MicroP_IsP01Connected()){
-              if( false == DecideIfPadDockHaveExtChgAC()){ 
-                    BatteryServiceDoBalance(_this);
-              }else{
-                    Init_Microp_Vbus__Chg();
-              }
+		if(1==AX_MicroP_IsP01Connected()){
+			if( false == DecideIfPadDockHaveExtChgAC()){ 
+				if(is_pad_usb_plug_in() == true)
+					charging_policy_set_when_pad_usb_in(_this);
+				else
+					BatteryServiceDoBalance(_this);
+			}
+			else{
+				Init_Microp_Vbus__Chg();
+			}
 
 	  	//Eason: dynamic set Pad alarm +++
 #ifndef ASUS_FACTORY_BUILD	  	
@@ -3255,8 +3396,21 @@ if(true==g_BootUp_IsBatLow )
 		//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode +++
 		set_DisOTGmode_whenCap_0();
 		//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
+//ASUS_BSP +++ Peter_lu "suspend for Battery0% in  fastboot mode issue"
+#ifdef CONFIG_FASTBOOT
+          if(is_fastboot_enable()) {
+             printk("[Eason][Fastboot]kernel_power_off\n");
+             kernel_power_off();
+          } else {
+#endif //#ifdef CONFIG_FASTBOOT
+//ASUS_BSP --- Peter_lu
           AcUsbPowerSupplyChange();
           PadDock_AC_PowerSupplyChange();
+//ASUS_BSP +++ Peter_lu "suspend for Battery0% in  fastboot mode issue"
+#ifdef CONFIG_FASTBOOT
+          }
+#endif //#ifdef CONFIG_FASTBOOT
+//ASUS_BSP --- Peter_lu
        }
        // when A66 Cap = 0% shutdown device no matter if has cable---
        //Eason : prevent thermal too hot, limit charging current in phone call+++
@@ -3323,9 +3477,15 @@ static int BatteryServiceGauge_OnCapacityReply(struct AXI_Gauge *gauge, struct A
     }else{
         //Eason:TIgauge through filter prevent 0% while not BatLow+++ 
 	  if(g_A68_hwID >= A80_SR1){
+#ifdef CONFIG_TI_GAUGE
 			AXC_BatteryService_reportPropertyCapacity(
 		             _this,
 		             get_Cap_from_TIgauge());
+#else
+		AXC_BatteryService_reportPropertyCapacity(
+		             _this,
+		             batCap);
+#endif
 	  }else
 	  //Eason:TIgauge through filter prevent 0% while not BatLow---	
         //Eason: choose Capacity type SWGauge/BMS +++ 

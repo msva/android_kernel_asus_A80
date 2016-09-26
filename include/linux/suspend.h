@@ -40,7 +40,7 @@ typedef int __bitwise suspend_state_t;
 
 //Add a timer to trigger wakelock debug
 //struct timer_list unattended_timer;
-#define PM_UNATTENDED_TIMEOUT   1000*60*10		//10min
+#define PM_UNATTENDED_TIMEOUT   1000*30		//30sec
 
 
 

@@ -1,7 +1,7 @@
 /* include/linux/msm_mdp.h
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2012 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -71,27 +71,24 @@
 #define MSMFB_OVERLAY_VSYNC_CTRL _IOW(MSMFB_IOCTL_MAGIC, 160, unsigned int)
 #define MSMFB_VSYNC_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 161, unsigned int)
 #define MSMFB_BUFFER_SYNC  _IOW(MSMFB_IOCTL_MAGIC, 162, struct mdp_buf_sync)
-#define MSMFB_OVERLAY_COMMIT      _IO(MSMFB_IOCTL_MAGIC, 163)
 #define MSMFB_DISPLAY_COMMIT      _IOW(MSMFB_IOCTL_MAGIC, 164, \
 						struct mdp_display_commit)
-#define MSMFB_METADATA_SET  _IOW(MSMFB_IOCTL_MAGIC, 165, struct msmfb_metadata)
-#define MSMFB_WRITEBACK_SET_MIRRORING_HINT _IOW(MSMFB_IOCTL_MAGIC, 166, \
+#define MSMFB_WRITEBACK_SET_MIRRORING_HINT _IOW(MSMFB_IOCTL_MAGIC, 165, \
 						unsigned int)
-#define MSMFB_METADATA_GET  _IOW(MSMFB_IOCTL_MAGIC, 167, struct msmfb_metadata)
+#define MSMFB_METADATA_GET  _IOW(MSMFB_IOCTL_MAGIC, 166, struct msmfb_metadata)
 
-//ASUS_BSP: Louis +++
-#define MSMFB_HW_VER_GET      _IOR(MSMFB_IOCTL_MAGIC, 170, int)
-#define MSMFB_BRIGHTNESS_MODE    _IOW(MSMFB_IOCTL_MAGIC, 172, int)
-#define MSMFB_CE_SET    _IOW(MSMFB_IOCTL_MAGIC, 174, int)
-#define MSMFB_PAD_HSIC_SET _IOW(MSMFB_IOCTL_MAGIC, 175, int)
-#define MSMFB_PHONE_HUE_SET   _IOW(MSMFB_IOCTL_MAGIC, 176, int)
-//ASUS_BSP: Louis ---
-
-#define MSMFB_GET_ASUS_FBINFO    _IOR(MSMFB_IOCTL_MAGIC, 173, struct asus_fb_info)//Mickey+++, add for getting asus_fbinfo ioctl
-
+// ASUS_BSP +++ Tingyi "[A80][MyDP] Support Pad resolution"
+#define MSMFB_PADFONE_STATE    _IOR(MSMFB_IOCTL_MAGIC, 173, int)
+// ASUS_BSP --- Tingyi "[A80][MyDP] Support Pad resolution"
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+// ASUS_BSP +++ Tingyi "[A80][MyDP] Support Pad resolution"
+#define MSMFB_CE_SET    _IOW(MSMFB_IOCTL_MAGIC, 170, int)
+#define MSMFB_PHONE_HUE_SET   _IOW(MSMFB_IOCTL_MAGIC, 171, int)
+#define MSMFB_PAD_HSIC_SET _IOW(MSMFB_IOCTL_MAGIC, 172, int)
+#define MSMFB_BL_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 173, int)
+// ASUS_BSP --- Tingyi "[A80][MyDP] Support Pad resolution"
 
 enum {
 	NOTIFY_UPDATE_START,
@@ -125,8 +122,6 @@ enum {
 	MDP_YCRCB_H1V1,   /* YCrCb interleave */
 	MDP_YCBCR_H1V1,   /* YCbCr interleave */
 	MDP_BGR_565,      /* BGR 565 planer */
-	MDP_BGR_888,      /* BGR 888 */
-	MDP_Y_CBCR_H2V2_VENUS,
 	MDP_IMGTYPE_LIMIT,
 	MDP_RGB_BORDERFILL,	/* border fill pipe */
 	MDP_FB_FORMAT = MDP_IMGTYPE2_START,    /* framebuffer format */
@@ -291,8 +286,10 @@ struct msmfb_writeback_data {
 	struct msmfb_img img;
 };
 
+#define MDP_PP_OPS_ENABLE 0x1
 #define MDP_PP_OPS_READ 0x2
 #define MDP_PP_OPS_WRITE 0x4
+#define MDP_PP_OPS_DISABLE 0x8
 
 struct mdp_qseed_cfg {
 	uint32_t table_num;
@@ -306,16 +303,27 @@ struct mdp_qseed_cfg_data {
 	struct mdp_qseed_cfg qseed_data;
 };
 
+struct mdp_sharp_cfg {
+	uint32_t flags;
+	uint32_t strength;
+	uint32_t edge_thr;
+	uint32_t smooth_thr;
+	uint32_t noise_thr;
+};
+
 #define MDP_OVERLAY_PP_CSC_CFG      0x1
 #define MDP_OVERLAY_PP_QSEED_CFG    0x2
+#define MDP_OVERLAY_PP_PA_CFG    0x4
+#define MDP_OVERLAY_PP_IGC_CFG    0x8
+#define MDP_OVERLAY_PP_SHARP_CFG    0x10
 
 #define MDP_CSC_FLAG_ENABLE	0x1
 #define MDP_CSC_FLAG_YUV_IN	0x2
 #define MDP_CSC_FLAG_YUV_OUT	0x4
 
-//ASUS_BSP:Louis ++
+//ASUS_BSP:Jason Chang ++
 #define ASUS_CSC_FLAG_HSIC    0xff
-//ASUS_BSP:Louis --
+//ASUS_BSP:Jason Chang --
 
 struct mdp_csc_cfg {
 	/* flags for enable CSC, toggling RGB,YUV input/output */
@@ -332,10 +340,28 @@ struct mdp_csc_cfg_data {
 	struct mdp_csc_cfg csc_data;
 };
 
+struct mdp_pa_cfg {
+	uint32_t flags;
+	uint32_t hue_adj;
+	uint32_t sat_adj;
+	uint32_t val_adj;
+	uint32_t cont_adj;
+};
+
+struct mdp_igc_lut_data {
+	uint32_t block;
+	uint32_t len, ops;
+	uint32_t *c0_c1_data;
+	uint32_t *c2_data;
+};
+
 struct mdp_overlay_pp_params {
 	uint32_t config_ops;
 	struct mdp_csc_cfg csc_cfg;
 	struct mdp_qseed_cfg qseed_cfg[2];
+	struct mdp_pa_cfg pa_cfg;
+	struct mdp_igc_lut_data igc_cfg;
+	struct mdp_sharp_cfg sharp_cfg;
 };
 
 enum {
@@ -459,13 +485,6 @@ enum {
 	mdp_lut_max,
 };
 
-struct mdp_igc_lut_data {
-	uint32_t block;
-	uint32_t len, ops;
-	uint32_t *c0_c1_data;
-	uint32_t *c2_data;
-};
-
 struct mdp_ar_gc_lut_data {
 	uint32_t x_start;
 	uint32_t slope;
@@ -511,6 +530,11 @@ struct mdp_calib_config_data {
 	uint32_t data;
 };
 
+struct mdp_pa_cfg_data {
+	uint32_t block;
+	struct mdp_pa_cfg pa_data;
+};
+
 enum {
 	mdp_op_pcc_cfg,
 	mdp_op_csc_cfg,
@@ -531,6 +555,7 @@ struct msmfb_mdp_pp {
 		struct mdp_qseed_cfg_data qseed_cfg_data;
 		struct mdp_bl_scale_data bl_scale_data;
 		struct mdp_calib_config_data calib_cfg;
+		struct mdp_pa_cfg_data pa_cfg_data;
 	} data;
 };
 
@@ -557,19 +582,18 @@ struct msmfb_metadata {
 #define MDP_MAX_FENCE_FD	10
 #define MDP_BUF_SYNC_FLAG_WAIT	1
 
-struct mdp_buf_fence {
-	uint32_t flags;
-	uint32_t acq_fen_fd_cnt;
-	int acq_fen_fd[MDP_MAX_FENCE_FD];
-	int rel_fen_fd[MDP_MAX_FENCE_FD];
-};
-
 struct mdp_buf_sync {
 	uint32_t flags;
 	uint32_t acq_fen_fd_cnt;
 	int *acq_fen_fd;
 	int *rel_fen_fd;
-	int *retire_fen_fd;
+};
+
+struct mdp_buf_fence {
+	uint32_t flags;
+	uint32_t acq_fen_fd_cnt;
+	int acq_fen_fd[MDP_MAX_FENCE_FD];
+	int rel_fen_fd[MDP_MAX_FENCE_FD];
 };
 
 #define MDP_DISPLAY_COMMIT_OVERLAY 0x00000001
@@ -578,7 +602,6 @@ struct mdp_display_commit {
 	uint32_t flags;
 	uint32_t wait_for_finish;
 	struct fb_var_screeninfo var;
-	struct mdp_buf_fence buf_fence;
 };
 
 struct mdp_page_protection {
@@ -594,7 +617,7 @@ struct mdp_mixer_info {
 	int z_order;
 };
 
-#define MAX_PIPE_PER_MIXER  4
+#define MAX_PIPE_PER_MIXER  5
 
 struct msmfb_mixer_info_req {
 	int mixer_num;
@@ -615,7 +638,7 @@ enum {
 };
 
 #ifdef __KERNEL__
-int msm_fb_get_iommu_domain(void);
+
 /* get the framebuffer physical address information */
 int get_fb_phys_info(unsigned long *start, unsigned long *len, int fb_num,
 	int subsys_id);
@@ -629,16 +652,5 @@ int msm_fb_writeback_dequeue_buffer(struct fb_info *info,
 int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 #endif
-
-//Mickey+++
-struct asus_fb_info {
-    int phone_width;
-    int phone_height;
-    int phone_dpi;
-    int pad_width;
-    int pad_height;
-    int pad_dpi;
-};
-//Mickey---
 
 #endif /*_MSM_MDP_H_*/

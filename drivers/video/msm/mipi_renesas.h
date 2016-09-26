@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  */
 
+//ASUS_BSP +++ Jason Chang "[A80][Backlight] Add interface for backlight driver"
+#include <linux/gpio.h>
+int renesas_set_backlight(int value, bool timeout);
+void sharp_set_cabc(int mode);	//ASUS_BSP + Jason Chang "[A80][Backlight]enable CABC"
+//ASUS_BSP --- Jason Chang "[A80][Backlight] Add interface for backlight driver"
 #ifndef MIPI_RENESAS_H
 #define MIPI_RENESAS_H
 

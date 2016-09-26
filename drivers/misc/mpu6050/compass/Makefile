@@ -1,10 +1,11 @@
-#
+ #
 # Compass Slaves MPUxxxx
 #
 obj-$(CONFIG_MPU_SENSORS_AMI30X) += inv_mpu_ami30x.o
 inv_mpu_ami30x-objs +=	ami30x.o
 
 obj-$(CONFIG_MPU_SENSORS_AMI306) += inv_mpu_ami306_6050.o
+
 inv_mpu_ami306_6050-objs +=	ami306_6050.o
 inv_mpu_ami306_6050-objs +=     ami306_6050_pad.o
 inv_mpu_ami306_6050-objs +=     ami306_6050_phone.o

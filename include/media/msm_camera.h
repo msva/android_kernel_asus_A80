@@ -1,5 +1,5 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
- *
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -237,6 +237,18 @@
 #define MSM_CAM_IOCTL_AXI_RELEASE \
 	_IO(MSM_CAM_IOCTL_MAGIC, 67)
 
+#define MSM_CAM_IOCTL_V4L2_EVT_NATIVE_CMD \
+	_IOWR(MSM_CAM_IOCTL_MAGIC, 68, struct msm_camera_v4l2_ioctl_t)
+
+#define MSM_CAM_IOCTL_V4L2_EVT_NATIVE_FRONT_CMD \
+	_IOWR(MSM_CAM_IOCTL_MAGIC, 69, struct msm_camera_v4l2_ioctl_t)
+
+#define MSM_CAM_IOCTL_AXI_LOW_POWER_MODE \
+	_IOWR(MSM_CAM_IOCTL_MAGIC, 70, uint8_t *)
+
+#define MSM_CAM_IOCTL_INTF_MCTL_MAPPING_CFG \
+	_IOR(MSM_CAM_IOCTL_MAGIC, 71, struct intf_mctl_mapping_cfg *)
+
 //ASUS_BSP +++ Stimber "Implement the interface for calibration"
 #define ASUS_SENSOR_CUSTOM_IOCTL_REG_SET \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 100, struct v4l2_control)
@@ -244,6 +256,14 @@
 #define ASUS_SENSOR_CUSTOM_IOCTL_REG_GET \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 101, struct v4l2_control)
 //ASUS_BSP --- Stimber "Implement the interface for calibration"
+
+struct ioctl_native_cmd {
+	unsigned short mode;
+	unsigned short address;
+	unsigned short value_1;
+	unsigned short value_2;
+	unsigned short value_3;
+};
 
 struct v4l2_event_and_payload {
 	struct v4l2_event evt;
@@ -292,16 +312,19 @@ struct msm_mctl_post_proc_cmd {
 #define MAX_ACTUATOR_INIT_SET 12
 #define MAX_ACTUATOR_TYPE_SIZE 32
 #define MAX_ACTUATOR_REG_TBL_SIZE 8
-
+#define MAX_ACTUATOR_AF_TOTAL_STEPS 1024
 
 #define MSM_MAX_CAMERA_CONFIGS 2
 
-#define PP_SNAP  0x01
-#define PP_RAW_SNAP ((0x01)<<1)
-#define PP_PREV  ((0x01)<<2)
-#define PP_THUMB ((0x01)<<3)
-#define PP_RDI_PREV ((0x01)<<4)
-#define PP_MASK		(PP_SNAP|PP_RAW_SNAP|PP_PREV|PP_THUMB|PP_RDI_PREV)
+#define MSM_ACTUATOR_MOVE_SIGNED_FAR -1
+#define MSM_ACTUATOR_MOVE_SIGNED_NEAR  1
+
+#define PP_SNAP  BIT(0)
+#define PP_RAW_SNAP BIT(1)
+#define PP_PREV  BIT(2)
+#define PP_THUMB BIT(3)
+#define PP_RDI   BIT(4)
+#define PP_MASK		(PP_SNAP|PP_RAW_SNAP|PP_PREV|PP_THUMB)
 
 #define MSM_CAM_CTRL_CMD_DONE  0
 #define MSM_CAM_SENSOR_VFE_CMD 1
@@ -310,7 +333,6 @@ struct msm_mctl_post_proc_cmd {
 #define MAX_PLANES 8
 
 #define FRAME_PERIOD    10		//ASUS_BSP Stimber "Add for preview info control"
-
 /*****************************************************
  *  structure
  *****************************************************/
@@ -497,11 +519,11 @@ struct msm_camera_cfg_cmd {
 #define CMD_STATS_AF_ENABLE		13
 #define CMD_STATS_AEC_ENABLE		14
 #define CMD_STATS_AWB_ENABLE		15
-#define CMD_STATS_ENABLE  		16
+#define CMD_STATS_ENABLE		16
 
 #define CMD_STATS_AXI_CFG		17
 #define CMD_STATS_AEC_AXI_CFG		18
-#define CMD_STATS_AF_AXI_CFG 		19
+#define CMD_STATS_AF_AXI_CFG		19
 #define CMD_STATS_AWB_AXI_CFG		20
 #define CMD_STATS_RS_AXI_CFG		21
 #define CMD_STATS_CS_AXI_CFG		22
@@ -554,11 +576,13 @@ struct msm_camera_cfg_cmd {
 #define CMD_AXI_CFG_SEC_ALL_CHNLS      BIT(11)
 #define CMD_AXI_CFG_TERT1              BIT(12)
 #define CMD_AXI_CFG_TERT2              BIT(13)
+#define CMD_AXI_CFG_TERT3              BIT(14)
 
 #define CMD_AXI_START  0xE1
 #define CMD_AXI_STOP   0xE2
 #define CMD_AXI_RESET  0xE3
 #define CMD_AXI_ABORT  0xE4
+#define CMD_AXI_STOP_RECOVERY  0xE5
 
 
 
@@ -707,8 +731,7 @@ struct outputCfg {
 #define OUTPUT_SEC_ALL_CHNLS     BIT(11)
 #define OUTPUT_TERT1             BIT(12)
 #define OUTPUT_TERT2             BIT(13)
-
-
+#define OUTPUT_TERT3             BIT(14)
 
 #define MSM_FRAME_PREV_1	0
 #define MSM_FRAME_PREV_2	1
@@ -729,6 +752,7 @@ struct outputCfg {
 #define OUTPUT_TYPE_SAWB   BIT(12)
 #define OUTPUT_TYPE_IHST   BIT(13)
 #define OUTPUT_TYPE_CSTA   BIT(14)
+#define OUTPUT_TYPE_R2   BIT(15)
 
 struct fd_roi_info {
 	void *info;
@@ -897,7 +921,9 @@ struct msm_stats_buf {
 #define MSM_V4L2_PID_INST_HANDLE            (V4L2_CID_PRIVATE_BASE+16)
 #define MSM_V4L2_PID_MMAP_INST              (V4L2_CID_PRIVATE_BASE+17)
 #define MSM_V4L2_PID_PP_PLANE_INFO          (V4L2_CID_PRIVATE_BASE+18)
-#define MSM_V4L2_PID_MAX                    MSM_V4L2_PID_PP_PLANE_INFO
+#define MSM_V4L2_PID_ultrapixel             (V4L2_CID_PRIVATE_BASE+19)
+#define MSM_V4L2_PID_AVTIMER                (V4L2_CID_PRIVATE_BASE+20)
+#define MSM_V4L2_PID_MAX                     MSM_V4L2_PID_AVTIMER
 
 /* camera operation mode for video recording - two frame output queues */
 #define MSM_V4L2_CAM_OP_DEFAULT         0
@@ -928,6 +954,8 @@ struct msm_stats_buf {
 #define MSM_V4L2_CAM_OP_ZSL_BURST_CAPTURE   	  (MSM_V4L2_CAM_OP_DEFAULT+12)		//ASUS_BSP Stimber "Implement Full Burst Capture mode"
 /* camera operation mode for zsl shapshot - three output queues */
 #define MSM_V4L2_CAM_OP_ZSL_10M_BURST_CAPTURE   	  (MSM_V4L2_CAM_OP_DEFAULT+13)		//ASUS_BSP Stimber "Implement 10M Burst Capture mode"
+/* camera operation mode for Hi-Light mode */
+#define MSM_V4L2_CAM_OP_MODE_11   	  (MSM_V4L2_CAM_OP_DEFAULT+14)		//ASUS_BSP Stimber "Implement 10M Burst Capture mode"
 //ASUS_BSP --- Stimber "Implement 6 ISP resolution mode"	
 
 
@@ -1021,24 +1049,30 @@ struct msm_snapshot_pp_status {
 #define CFG_CONFIG_VREG_ARRAY         52
 #define CFG_CONFIG_CLK_ARRAY          53
 #define CFG_GPIO_OP                   54
+#define CFG_SET_VISION_MODE           55
+#define CFG_SET_VISION_AE             56
+#define CFG_HDR_UPDATE                57
+#define CFG_ACTUAOTOR_REG_INIT        58
+
 //ASUS_BSP +++
-#define CFG_ISP_AF_START              55
-#define CFG_GET_ISP_AF_RESULT         56
-#define CFG_SET_ISP_LED_MODE          57
-#define CFG_SET_ISP_EFFECT_MODE       58
-#define CFG_SET_ISP_WB_MODE           59
-#define CFG_SET_ISP_EV_MODE           60
-#define CFG_SET_ISP_SCENE_MODE        61
-#define CFG_SET_ISP_CAF_MODE          62
-#define CFG_SET_ISP_AECLOCK_MODE      63
-#define CFG_SET_ISP_AWBLOCK_MODE      64
-#define CFG_SET_ISP_ISO_MODE          65
-#define CFG_SET_ISP_FLICKER_MODE      66
-#define CFG_GET_ISP_EXIF              67 //ASUS_BSP Stimber "Implement EXIF info for camera with ISP"
-#define CFG_SET_ISP_AURA_VALUE        68
-#define CFG_SET_ISP_GENERAL_CMD       69 //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
-#define CFG_GET_ISP_GENERAL_CMD       70 //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
-#define CFG_MAX                       71
+#define CFG_ISP_AF_START              60
+#define CFG_GET_ISP_AF_RESULT         61
+#define CFG_SET_ISP_LED_MODE          62
+#define CFG_SET_ISP_EFFECT_MODE       63
+#define CFG_SET_ISP_WB_MODE           64
+#define CFG_SET_ISP_EV_MODE           65
+#define CFG_SET_ISP_SCENE_MODE        66
+#define CFG_SET_ISP_CAF_MODE          67
+#define CFG_SET_ISP_AECLOCK_MODE      68
+#define CFG_SET_ISP_AWBLOCK_MODE      69
+#define CFG_SET_ISP_ISO_MODE          70
+#define CFG_SET_ISP_FLICKER_MODE      71
+#define CFG_GET_ISP_EXIF              72 //ASUS_BSP Stimber "Implement EXIF info for camera with ISP"
+#define CFG_SET_ISP_AURA_VALUE        73
+#define CFG_SET_ISP_GENERAL_CMD       74 //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
+#define CFG_GET_ISP_GENERAL_CMD       75 //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
+#define CFG_SET_ISP_ultrapixel_MODE   76
+#define CFG_MAX                       77
 //ASUS_BSP ---
 
 //ASUS_BSP +++ Stimber "Implement the interface for calibration"
@@ -1062,6 +1096,7 @@ struct msm_snapshot_pp_status {
 #define SENSOR_QVGA_SIZE		2
 #define SENSOR_INVALID_SIZE		3
 
+//ASUS_BSP +++
 #define CAMERA_EFFECT_OFF		0
 #define CAMERA_EFFECT_MONO		1
 #define CAMERA_EFFECT_NEGATIVE		2
@@ -1074,7 +1109,7 @@ struct msm_snapshot_pp_status {
 #define CAMERA_EFFECT_EMBOSS		9
 #define CAMERA_EFFECT_SKETCH		10
 #define CAMERA_EFFECT_NEON		11
-//ASUS_BSP +++
+
 #define CAMERA_EFFECT_NORMAL            12
 #define CAMERA_EFFECT_AURA              13
 #define CAMERA_EFFECT_VINTAGE           14
@@ -1083,7 +1118,13 @@ struct msm_snapshot_pp_status {
 #define CAMERA_EFFECT_RED               17
 #define CAMERA_EFFECT_BLUE              18
 #define CAMERA_EFFECT_YELLOW            19
-#define CAMERA_EFFECT_MAX               20
+#define CAMERA_EFFECT_USER_DEFINED1     20
+#define CAMERA_EFFECT_USER_DEFINED2     21
+#define CAMERA_EFFECT_USER_DEFINED3     22
+#define CAMERA_EFFECT_USER_DEFINED4     23
+#define CAMERA_EFFECT_USER_DEFINED5     24
+#define CAMERA_EFFECT_USER_DEFINED6     25
+#define CAMERA_EFFECT_MAX               26
 //ASUS_BSP ---
 
 /* QRD */
@@ -1272,6 +1313,8 @@ struct sensor_pict_fps {
 struct exp_gain_cfg {
 	uint16_t gain;
 	uint32_t line;
+	int32_t luma_avg;
+	uint16_t fgain;
 };
 
 //ASUS_BSP +++ LiJen "[A68][13M][NA][Others]implement LED/Flash mode"
@@ -1466,7 +1509,7 @@ struct sensor_3d_exp_cfg {
 	uint16_t gb_gain;
 	uint16_t gain_adjust;
 };
-struct sensor_3d_cali_data_t{
+struct sensor_3d_cali_data_t {
 	unsigned char left_p_matrix[3][4][8];
 	unsigned char right_p_matrix[3][4][8];
 	unsigned char square_len[8];
@@ -1520,6 +1563,7 @@ enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL_SINGLE_CAPTURE,   //ASUS_BSP Stimber "Implement Full Single Capture mode"
 	MSM_SENSOR_RES_FULL_BURST_CAPTURE,	//ASUS_BSP Stimber "Implement Full Burst Capture mode"
 	MSM_SENSOR_RES_10M_BURST_CAPTURE,		//ASUS_BSP Stimber "Implement 10M Burst Capture mode"
+	MSM_SENSOR_RES_MODE_11,		//ASUS_BSP Evan "Implement Hi-Light mode"
 	MSM_SENSOR_RES_2,
 	MSM_SENSOR_RES_3,
 	MSM_SENSOR_RES_4,
@@ -1555,6 +1599,17 @@ struct msm_sensor_output_reg_addr_t {
 	uint16_t y_output;
 	uint16_t line_length_pclk;
 	uint16_t frame_length_lines;
+};
+
+enum sensor_hdr_update_t {
+	SENSOR_HDR_UPDATE_AWB,
+	SENSOR_HDR_UPDATE_LSC,
+};
+
+struct sensor_hdr_update_parm_t {
+	enum sensor_hdr_update_t type;
+	uint16_t awb_gain_r, awb_gain_b;
+	uint8_t lsc_table[504];
 };
 
 struct sensor_driver_params_type {
@@ -1595,6 +1650,7 @@ enum general_cmd_id_type {
     GENERAL_CMD_GET_FLASH_STATUS,
     GENERAL_CMD_FIX_FPS,
     GENERAL_CMD_NR,
+    GENERAL_CMD_EIS,
     GENERAL_CMD_MAX,
 };
 
@@ -1707,6 +1763,9 @@ struct csiphy_cfg_data {
 #define CSI_RAW8    0x2A
 #define CSI_RAW10   0x2B
 #define CSI_RAW12   0x2C
+#define CSI_YUV420_Y_8 0x30
+#define CSI_YUV420_UV_8 0x31
+#define CSI_YUV420_JM_8 0x32
 
 #define CSI_DECODE_6BIT 0
 #define CSI_DECODE_8BIT 1
@@ -1900,6 +1959,7 @@ struct sensor_cfg_data {
 		struct sensor_output_info_t output_info;
 		struct msm_eeprom_data_t eeprom_data;
 		struct csi_lane_params_t csi_lane_params;
+		struct sensor_hdr_update_parm_t hdr_update_parm;
 		/* QRD */
 		uint16_t antibanding;
 		uint8_t contrast;
@@ -1914,7 +1974,10 @@ struct sensor_cfg_data {
 		int is_autoflash;
 		struct mirror_flip mirror_flip;
 		void *setting;
-              //ASUS_BSP +++       
+		int32_t vision_mode_enable;
+		int32_t vision_ae;
+
+//ASUS_BSP +++       
 		int wb;
 		int ev;
 		int scene;
@@ -1923,9 +1986,10 @@ struct sensor_cfg_data {
 		int iso;
 		int flicker;
 		int aura;
+		int ultrapixel;
 		struct exif_cfg exif; //ASUS_BSP Stimber "Implement EXIF info for camera with ISP"
 		struct general_cmd_cfg general_cmd; //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
-              //ASUS_BSP ---
+//ASUS_BSP ---
 	} cfg;
 };
 
@@ -1954,6 +2018,7 @@ struct damping_params_t {
 enum actuator_type {
 	ACTUATOR_VCM,
 	ACTUATOR_PIEZO,
+	ACTUATOR_HALL_EFFECT,
 };
 
 enum msm_actuator_data_type {
@@ -2075,12 +2140,12 @@ struct msm_calib_wb {
 	uint16_t b_over_g;
 	uint16_t gr_over_gb;
 };
-
+//ASUS_BSP +++
 struct msm_calib_wb_light_info {
 	uint8_t lightidx[10];
 	struct msm_calib_wb wb_light_info[3];
 };
-
+//ASUS_BSP ---
 struct msm_calib_af {
 	uint16_t macro_dac;
 	uint16_t inf_dac;
@@ -2094,10 +2159,12 @@ struct msm_calib_lsc {
 	uint16_t gb_gain[221];
 };
 
+//ASUS_BSP +++
 struct msm_calib_lsc_light_info {
 	uint8_t lightidx[10];
 	struct msm_calib_lsc lsc_light_info[3];
 };
+//ASUS_BSP ---
 
 struct pixel_t {
 	int x;
@@ -2330,6 +2397,10 @@ struct msm_mctl_set_sdev_data {
 #define VIDIOC_MSM_VFE_RELEASE \
 	_IO('V', BASE_VIDIOC_PRIVATE + 25)
 
+#define VIDIOC_MSM_AXI_LOW_POWER_MODE \
+	_IO('V', BASE_VIDIOC_PRIVATE + 26)
+
+
 struct msm_camera_v4l2_ioctl_t {
 	uint32_t id;
 	uint32_t len;
@@ -2345,6 +2416,7 @@ struct msm_camera_vfe_params_t {
 	uint16_t port_info;
 	uint32_t inst_handle;
 	uint16_t cmd_type;
+	uint8_t stream_error;
 };
 
 enum msm_camss_irq_idx {
@@ -2484,6 +2556,13 @@ struct msm_ver_num_info {
 	uint32_t main;
 	uint32_t minor;
 	uint32_t rev;
+};
+
+struct intf_mctl_mapping_cfg {
+	int is_bayer_sensor;
+	int vnode_id;
+	int num_entries;
+	uint32_t image_modes[MSM_V4L2_EXT_CAPTURE_MODE_MAX];
 };
 
 #define VIDIOC_MSM_CPP_CFG \

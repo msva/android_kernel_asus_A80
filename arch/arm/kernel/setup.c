@@ -674,6 +674,7 @@ static int __init parse_tag_mem32(const struct tag *tag)
     {
         //size = tag->u.mem.size - PRINTK_BUFFER_SIZE;
         PRINTK_BUFFER = tag->u.mem.start + tag->u.mem.size - PRINTK_BUFFER_SIZE;
+        RTB_BUFFER = PRINTK_BUFFER + SZ_1M;
     }
     printk("parse_tag_mem32 %x, %x,\n", tag->u.mem.start, tag->u.mem.size);
 //ASUS_BSP --- [thomas] Reserve asusdebug buffer

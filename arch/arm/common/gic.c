@@ -49,6 +49,8 @@
 
 #include <mach/socinfo.h>
 
+int gic_irq_cnt,gic_resume_irq[8];
+
 union gic_base {
 	void __iomem *common_base;
 	void __percpu __iomem **percpu_base;
@@ -78,8 +80,6 @@ struct gic_chip_data {
 	unsigned int enabled_irqs[32];
 #endif
 };
-
-int gic_irq_cnt,gic_resume_irq[]={};
 
 static DEFINE_RAW_SPINLOCK(irq_controller_lock);
 
@@ -234,37 +234,50 @@ static int gic_suspend(void)
 	return 0;
 }
 
-extern int msm_show_resume_irq_mask;
-
 
 //ASUS_BSP+++ "for wlan wakeup trace"
-static int irq202_flag_rx = 0;
-static int irq202_flag_wdi = 0;
+extern int g_wcnss_wlanrx_irq;
+static int wcnss_irq_flag_rx = 0;
+static int wcnss_irq_flag_wdi = 0;
+static int irq198_flag = 0;
 
-int irq202_flag_function_rx(void)
+int wcnss_irq_flag_function_rx(void)
 {
-    if( irq202_flag_rx == 1 ) {
-        irq202_flag_rx = 0;
+    if( wcnss_irq_flag_rx == 1 ) {
+        wcnss_irq_flag_rx = 0;
         return 1;
     }
 
     return 0;
 }
-EXPORT_SYMBOL(irq202_flag_function_rx);
+EXPORT_SYMBOL(wcnss_irq_flag_function_rx);
 
 
-int irq202_flag_function_wdi(void){
-    if( irq202_flag_wdi == 1 ){
-        irq202_flag_wdi = 0;
-        irq202_flag_rx = 0;
+int wcnss_irq_flag_function_wdi(void){
+    if( wcnss_irq_flag_wdi == 1 ){
+        wcnss_irq_flag_wdi = 0;
+        wcnss_irq_flag_rx = 0;
         return 1;
     }
 
     return 0;
 }
-EXPORT_SYMBOL(irq202_flag_function_wdi);
+EXPORT_SYMBOL(wcnss_irq_flag_function_wdi);
+
+
+int irq198_flag_check_function(void){
+    if( irq198_flag == 1 ){
+	irq198_flag = 0;
+        return 1;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(irq198_flag_check_function);
 //ASUS_BSP--- "for wlan wakeup trace"
 
+
+extern int msm_show_resume_irq_mask;
 
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
@@ -288,17 +301,21 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	for (i = find_first_bit(pending, gic->max_irq);
 	     i < gic->max_irq;
 	     i = find_next_bit(pending, gic->max_irq, i+1)) {
-		if ( i + gic->irq_offset !=TLMM_MSM_SUMMARY_IRQ) {
-			pr_warning("[PM]IRQs triggered: %d\n", i + gic->irq_offset-GIC_SPI_START);
-			gic_resume_irq[gic_irq_cnt]=i + gic->irq_offset-GIC_SPI_START;
+		pr_warning("[PM]IRQ: %d resume triggered\n", i + gic->irq_offset);
+		if(gic_irq_cnt < 8) {
+			gic_resume_irq[gic_irq_cnt]=i + gic->irq_offset;
 			gic_irq_cnt++;
 		}
-        //ASUS_BSP+++ "for wlan wakeup trace"
-        if( (i + gic->irq_offset-GIC_SPI_START) == 202 ){
-            irq202_flag_rx = 1;
-            irq202_flag_wdi = 1;
-        }
-        //ASUS_BSP--- "for wlan wakeup trace"
+
+		//ASUS_BSP+++ "for wlan wakeup trace"
+		if( (i + gic->irq_offset) == g_wcnss_wlanrx_irq ){
+		    wcnss_irq_flag_rx = 1;
+		    wcnss_irq_flag_wdi = 1;
+		}
+		else if ((i + gic->irq_offset-GIC_SPI_START) == 198){
+			irq198_flag = 1;
+		}
+		//ASUS_BSP--- "for wlan wakeup trace"
 	}
 }
 

@@ -56,6 +56,11 @@ struct port_link
 DECLARE_COMPLETION(listen_event);
 extern struct port_link syn_firewall_port_link_head;
 extern spinlock_t listen_port_lock;
+int lp_modem_restart=0;//ASUS_BSP Johnny +++ return listen_port when modem restart
+//ASUS_BSP+++ turn off firewall when tethering on and turn on firewall when tethering off
+extern int if_ip_forward_on;
+extern int if_ip_forward_off;
+//ASUS_BSP---
 static ssize_t listen_port_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) 
 { 
 	unsigned long r=0;
@@ -72,7 +77,38 @@ static ssize_t listen_port_show(struct kobject *kobj, struct kobj_attribute *att
 	    return sprintf(buf, "3"); 
 	}
 	spin_lock_bh(&listen_port_lock);
-	
+
+	//ASUS_BSP Johnny +++ return listen_port when modem restart
+        if(lp_modem_restart==1)
+        {
+
+            printk("[SYN]modem restart return listen port\n");
+            complete(&listen_event);
+            lp_modem_restart=0;
+            spin_unlock_bh(&listen_port_lock);
+
+            return sprintf(buf,"4 1");
+        }
+        //ASUS_BSP ---
+
+        //ASUS_BSP+++ turn off firewall when tethering on and turn on firewall when tethering off
+        if(if_ip_forward_on==1)
+        {
+                if_ip_forward_on=0;
+                spin_unlock_bh(&listen_port_lock);
+                printk("[SYN] Tethering on stop SYN\n");
+                return sprintf(buf, "13 0");
+        }
+        if(if_ip_forward_off==1)
+        {
+                if_ip_forward_off=0;
+                spin_unlock_bh(&listen_port_lock);
+                printk("[SYN] Tethering off turn on SYN\n");
+                return sprintf(buf, "14 0");
+
+        }
+        //ASUS_BSP---
+
 	while(p->next!=NULL)
 	{
 		struct port_link *prev;
@@ -109,15 +145,15 @@ static ssize_t listen_port_show(struct kobject *kobj, struct kobj_attribute *att
 		}
 	}
 	spin_unlock_bh(&listen_port_lock);
-			
 
-	return sprintf(buf, "3"); 
+
+	return sprintf(buf, "3");
 }
 
 static ssize_t listen_port_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) 
 { 
 	printk("[SYN] listen_port_store\n");
-	return count; 
+	return count;
 } 
 
 

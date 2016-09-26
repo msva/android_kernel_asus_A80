@@ -83,6 +83,7 @@ static irqreturn_t HalThreadedIrqHandler(int irq, void *data)
 }
 
 //ASUS_BSP+++ larry lai : carkit gpio un-plug detect
+#ifndef ASUS_FACTORY_BUILD
 extern void mhl_switch_carkit(bool_t enable);
 extern bool_t mhl_check_carkit_mode(void);
 extern bool_t g_b_isCarkitConnected;
@@ -114,6 +115,7 @@ static irqreturn_t mhl_usb_id_detect_handler(int irq, void *dev_id)
 	
 	return IRQ_HANDLED;
 }
+#endif
 //ASUS_BSP--- larry lai : carkit gpio un-plug detect
 
 
@@ -131,7 +133,9 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 	int				retStatus;
 	halReturn_t 	halRet;
 //ASUS_BSP+++ larry lai : carkit gpio un-plug detect
+#ifndef ASUS_FACTORY_BUILD
 	int irq;
+#endif
 //ASUS_BSP--- larry lai : carkit gpio un-plug detect
 	
 	if(irqHandler == NULL)
@@ -154,16 +158,6 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 		return HAL_RET_FAILURE;
 	}
 
-	if (MSM_GPIO_TO_INT(g_GPIO_MHL_IRQ_N) != gMhlDevice.pI2cClient->irq)
-	{
-	    	printk("HalInstallIrqHandler: MHL irq not match board irq = (%d) , driver irq = (%d)\n", gMhlDevice.pI2cClient->irq,  MSM_GPIO_TO_INT(g_GPIO_MHL_IRQ_N) );
-		return HAL_RET_FAILURE;
-	}
-	else
-	{
-	    	printk("HalInstallIrqHandler:### MHL irq match board irq = (%d) , driver irq = (%d)\n", gMhlDevice.pI2cClient->irq,  MSM_GPIO_TO_INT(g_GPIO_MHL_IRQ_N) );
-	}
-		
 	gMhlDevice.irqHandler = irqHandler;
 
 //ASUS_BSP +++ : use INT Low trigger to handle all event to solve TX hang issue	
@@ -189,6 +183,7 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 //	}
 
 //ASUS_BSP+++ larry lai : carkit gpio un-plug detect
+#ifndef ASUS_FACTORY_BUILD
 	irq = MSM_GPIO_TO_INT(MHL_USB_ID_DETECT);
 	if (irq < 0) {
 		ERROR_DEBUG_PRINT(( "%s: could not get MHL_USB_ID_DETECT IRQ resource, error=%d ", __func__, irq));		
@@ -199,6 +194,7 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 	if (retStatus < 0) {
 		ERROR_DEBUG_PRINT(( "%s: FACTORY USB IRQ#%d request failed with error=%d ", __func__, irq, retStatus));				
 	}
+#endif	
 //ASUS_BSP--- larry lai : carkit gpio un-plug detect
 	
 	return HAL_RET_SUCCESS;

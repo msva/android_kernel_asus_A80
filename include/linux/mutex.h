@@ -60,8 +60,10 @@ struct mutex {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
+//ASUS_BSP ++
     const char      *name;//jack
     struct task_struct	*mutex_owner_asusdebug;
+//ASUS_BSP --
 };
 
 /*

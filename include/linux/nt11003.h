@@ -27,7 +27,7 @@
 
 #define NT11003_I2C_NAME "nt1103-ts"
 //define default resolution of the touchscreen
-#define TOUCH_MAX_HEIGHT 	1920//800			
+#define TOUCH_MAX_HEIGHT 	1920//800	
 #define TOUCH_MAX_WIDTH		1080//1280
 #if 0
 #define INT_PORT  	    S3C64XX_GPN(15)						//Int IO port  S3C64XX_GPL(10)

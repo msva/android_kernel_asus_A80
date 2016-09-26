@@ -198,8 +198,10 @@ static int input_handle_abs_event(struct input_dev *dev,
 	if (pold) {
 		*pval = input_defuzz_abs_event(*pval, *pold,
 						dev->absinfo[code].fuzz);
-		if (*pold == *pval && strcmp(dev->name, "cm36283_als"))
+		//ASUS_BSP +++ Maggie Lee "Allow same lux events to be reported to framework"
+		if (*pold == *pval && strcmp(dev->name, "ASUS Lightsensor") && strcmp(dev->name, "ASUS Proximitysensor"))
 			return INPUT_IGNORE_EVENT;
+		//ASUS_BSP --- Maggie Lee
 
 		*pold = *pval;
 	}

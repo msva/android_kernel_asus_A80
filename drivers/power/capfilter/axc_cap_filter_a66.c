@@ -23,19 +23,41 @@ static int g_do_fasterLeverage_count = 0;
 //Eason: choose Capacity type SWGauge/BMS +++
 extern int g_CapType;
 //Eason: choose Capacity type SWGauge/BMS ---
-//Eason: remember last BMS Cap to filter+++
-extern int gDiff_BMS;
-//Eason: remember last BMS Cap to filter---
-//Eason:In  phone call suspend, use 200mA do fasterLeverage+++
-extern int g_flag_csvoice_fe_connected;
-//Eason:In  phone call suspend, use 200mA do fasterLeverage---
 //Eason:A80 slowly drop+++
+static int g_discharge_after_dot = 0;
 extern int gCurr_TIgauge;
+extern int gCurr_ASUSswgauge;
 #define OCV_PER_SPEEDUP_UPDATE_14P	14//Eason: A80 change update interval when Cap<=14% 
+#define OCV_PER_SPEEDUP_UPDATE_35P	35
 //Eason:A80 slowly drop---
 //ASUS_BSP Eason_Chang:BatFilter know past time in phone call+++
 int g_BatFil_InPhoneCall_PastTime = 0;
 //ASUS_BSP Eason_Chang:BatFilter know past time in phone call---
+
+//Eason: more accuracy for discharge after dot+++
+int formula_of_discharge(int maxMah,int batCapMah, int interval)
+{
+	return  ( (maxMah*100*100/batCapMah)*interval/SECOND_OF_HOUR/100 );
+}
+
+int formula_of_discharge_dot(int maxMah,int batCapMah, int interval)
+{
+	return  ( 10*(maxMah*100*100/batCapMah)*interval/SECOND_OF_HOUR/100 )%10;
+}
+
+int discharge_dot_need_plus(void)
+{
+	int total_can_be_plus = 0;
+	
+	if( (g_discharge_after_dot/10)>=1)
+	{
+		total_can_be_plus += (g_discharge_after_dot/10);
+		g_discharge_after_dot = g_discharge_after_dot%10;
+	}
+
+	return total_can_be_plus;
+}
+//Eason: more accuracy for discharge after dot---
 
 /* eval_bat_life_when_discharging - Evaluate conservative battery life when discharging.
  * Use (maximum consuming current * update interval) as one factor.
@@ -44,64 +66,68 @@ static int eval_bat_life_when_discharging(
 	int nowCap, int lastCap, int maxMah, int interval, int batCapMah)
 {
 	int bat_life = 0;
-	int var_drop_base=0;
 	int drop_val = lastCap - nowCap;
+	//Eason: more accuracy for discharge after dot+++
+	int pred_discharge_after_dot = 0;  //predict discharge cap after dot 
+	int fast_discharge_after_dot = 0;   //fastleverage discharger cap after dot
+	//Eason: more accuracy for discharge after dot---
 
-	pr_info( "[BAT][Fil]%s(), drop_val:%d\n",
-		__func__,
-		drop_val);
-
-	//Eason:A80 slowly drop+++
-	if(g_A68_hwID >= A80_SR1)
-		gDiff_BMS = 100;//set gDiffBMS a large value, let cap judge only compare (1)gauge drop value & (2)predict drop value.
-	//Eason:A80 slowly drop---
+	pr_info( "[BAT][Fil]%s(), drop_val:%d\n", __func__, drop_val);
 
 	if (drop_val > 0) {
-		 int max_predict_drop_val = 0;
-		 int finetune_max_predict_drop_val = 0;
-        	 int fasterLeverage_drop_val = 0;
+		int max_predict_drop_val = 0;
+		int finetune_max_predict_drop_val = 0;
+		int fasterLeverage_drop_val = 0;
 
 		if (interval > 0) {
 			/* if interval is more than 108sec, max_predict_drop_val will be more than 1 */
 			//Eason :when  low bat Cap draw large current  +++
 			//max_predict_drop_val = (maxMah*100/batCapMah)*interval/SECOND_OF_HOUR;
-			max_predict_drop_val = (maxMah*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;//fix  suspend  (10*100/2100)will be 0
-			//Eason:A80 slowly drop+++
-			if(g_A68_hwID >= A80_SR1)
-			{
-				if(nowCap<=OCV_PER_SPEEDUP_UPDATE_14P)
-				{
-						if(gCurr_TIgauge>1400)
-						{
-							fasterLeverage_drop_val = (gCurr_TIgauge*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
-						}else
-						{
-		            				//fasterLeverage_drop_val = (1400*100/batCapMah)*interval/SECOND_OF_HOUR;
-		            				fasterLeverage_drop_val = (1400*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
+			max_predict_drop_val = formula_of_discharge(maxMah, batCapMah, interval);
+			pred_discharge_after_dot = formula_of_discharge_dot(maxMah, batCapMah, interval);
+
+			if(10 != maxMah){
+#if 1
+				if(nowCap <= OCV_PER_SPEEDUP_UPDATE_35P){
+					fasterLeverage_drop_val = formula_of_discharge(2800, batCapMah, interval);
+					fast_discharge_after_dot = formula_of_discharge_dot(2800, batCapMah, interval);
+				}		
+#else
+				if(nowCap <= OCV_PER_SPEEDUP_UPDATE_14P){
+					if(gCurr_ASUSswgauge>1400){
+						if(g_A68_hwID >= A80_SR1){
+							fasterLeverage_drop_val = formula_of_discharge(gCurr_TIgauge, batCapMah, interval);
+							fast_discharge_after_dot = formula_of_discharge_dot(gCurr_TIgauge, batCapMah, interval);
 						}
-				}else{
-						if(gCurr_TIgauge>900)
-						{
-							fasterLeverage_drop_val = (gCurr_TIgauge*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
-						}else
-						{
-							//fasterLeverage_drop_val = (900*100/batCapMah)*interval/SECOND_OF_HOUR;
-							fasterLeverage_drop_val = (900*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
+						else{
+							fasterLeverage_drop_val = formula_of_discharge(gCurr_ASUSswgauge, batCapMah, interval);
+							fast_discharge_after_dot = formula_of_discharge_dot(gCurr_ASUSswgauge, batCapMah, interval);
 						}
+					}
+					else{
+						fasterLeverage_drop_val = formula_of_discharge(1400, batCapMah, interval);
+						fast_discharge_after_dot = formula_of_discharge_dot(1400, batCapMah, interval);
+					}
 				}
-			
-			}else
-			//Eason:A80 slowly drop---
-			{
-				if(nowCap<10)
-				{
-	            			//fasterLeverage_drop_val = (1400*100/batCapMah)*interval/SECOND_OF_HOUR;
-	            			fasterLeverage_drop_val = (1400*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
-				}else{
-					//fasterLeverage_drop_val = (900*100/batCapMah)*interval/SECOND_OF_HOUR;
-					fasterLeverage_drop_val = (900*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
+#endif
+				else{
+					if(gCurr_ASUSswgauge>900){
+						if(g_A68_hwID >= A80_SR1){
+							fasterLeverage_drop_val = formula_of_discharge(gCurr_TIgauge, batCapMah, interval);
+							fast_discharge_after_dot = formula_of_discharge_dot(gCurr_TIgauge, batCapMah, interval);
+						}
+						else{
+							fasterLeverage_drop_val = formula_of_discharge(gCurr_ASUSswgauge, batCapMah, interval);
+							fast_discharge_after_dot = formula_of_discharge_dot(gCurr_ASUSswgauge, batCapMah, interval);
+						}
+					}
+					else{
+						fasterLeverage_drop_val = formula_of_discharge(900, batCapMah, interval);
+						fast_discharge_after_dot = formula_of_discharge_dot(900, batCapMah, interval);
+					}
 				}
 			}
+			
 			//Eason :when  low bat Cap draw large current  ---
 			//Eason:prevent in unattend mode mass drop+++
 			if(10==maxMah)
@@ -118,121 +144,88 @@ static int eval_bat_life_when_discharging(
 				*/
 				if(0 == g_BatFil_InPhoneCall_PastTime)
 				{
-					fasterLeverage_drop_val = (30*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
+					fasterLeverage_drop_val = formula_of_discharge(30, batCapMah, interval);
+					fast_discharge_after_dot = formula_of_discharge_dot(30, batCapMah, interval);
 				}else{
-					fasterLeverage_drop_val = (200*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;
-					if(0 == g_flag_csvoice_fe_connected)
-					{
-						g_BatFil_InPhoneCall_PastTime = 0;
-					}
+					fasterLeverage_drop_val = formula_of_discharge(200, batCapMah, interval);
+					fast_discharge_after_dot = formula_of_discharge_dot(200, batCapMah, interval);
 				}
 				//Eason:In  phone call suspend, use 200mA do fasterLeverage---
 			}
-			//Eason:prevent in unattend mode mass drop---
-			/* variable drop base for faster leverage true batter life */
-			if ((drop_val/2) > 0) {
-				var_drop_base = drop_val/2;
-			} else {
-				var_drop_base = 1;
+
+			//Eason add fasterLeverage judge+++  
+			if((drop_val > max_predict_drop_val) && (g_do_fasterLeverage_count < 3)){
+				g_do_fasterLeverage_count++; 
+			}
+			else if((drop_val <= max_predict_drop_val) && (g_do_fasterLeverage_count > 0)){    
+				g_do_fasterLeverage_count--;
 			}
 
-	            //Eason add fasterLeverage judge+++  
-	            if((drop_val > max_predict_drop_val) && (g_do_fasterLeverage_count < 3)){
-	                g_do_fasterLeverage_count++; 
-	            }else if((drop_val <= max_predict_drop_val) && (g_do_fasterLeverage_count > 0)){    
-	                g_do_fasterLeverage_count--;
-	            }
-
-			//Eason:A80 slowly drop+++
-			if( (g_A68_hwID >= A80_SR1)&&(nowCap<=OCV_PER_SPEEDUP_UPDATE_14P) )
-			{
-					finetune_max_predict_drop_val = fasterLeverage_drop_val;
-			}else	
-			//Eason:A80 slowly drop---
-			if( (2<=g_do_fasterLeverage_count)&&(nowCap<10) ){
-					finetune_max_predict_drop_val = fasterLeverage_drop_val;	
-	            }else if(3 == g_do_fasterLeverage_count){
-				    //finetune_max_predict_drop_val = max(var_drop_base, max_predict_drop_val);
-		                finetune_max_predict_drop_val = fasterLeverage_drop_val;
-	            }else{
-	            		//Eason: remember last BMS Cap to filter+++
-	            		 if(gDiff_BMS >=0)//when discharge BMS drop value >=0
-            		 	{
-					finetune_max_predict_drop_val = min(abs(gDiff_BMS),abs(max_predict_drop_val));		
-            		 	}else{
-            		 		//Eason: add BMS absolute value judge value+++
-            		 		 int MinOfBmsPd = 0; 
-					 MinOfBmsPd = min(abs(gDiff_BMS),abs(max_predict_drop_val));	
-					if( abs(gDiff_BMS) == min(abs(MinOfBmsPd),abs(drop_val)) )
-            		 	      	{
-						finetune_max_predict_drop_val = 0;   
-            		 	      	}else{
-            		 	      		finetune_max_predict_drop_val = abs(max_predict_drop_val);  
-    		 	      		}
-					//Eason: add BMS absolute value judge value---
-    		 		}		
-				//Eason: remember last BMS Cap to filter---
-	            }
+			if(nowCap<=OCV_PER_SPEEDUP_UPDATE_35P){
+				finetune_max_predict_drop_val = fasterLeverage_drop_val;
+				//Eason: more accuracy for discharge after dot+++
+				g_discharge_after_dot += fast_discharge_after_dot;
+				printk("[BAT][Fil]formula:%d.%d\n",fasterLeverage_drop_val,fast_discharge_after_dot);
+				finetune_max_predict_drop_val += discharge_dot_need_plus();
+				//Eason: more accuracy for discharge after dot---
+			}
+			else if( (2<=g_do_fasterLeverage_count)&&(nowCap<10) ){
+				finetune_max_predict_drop_val = fasterLeverage_drop_val;
+				//Eason: more accuracy for discharge after dot+++
+				g_discharge_after_dot += fast_discharge_after_dot;
+				printk("[BAT][Fil]formula:%d.%d\n",fasterLeverage_drop_val,fast_discharge_after_dot);
+				finetune_max_predict_drop_val += discharge_dot_need_plus();
+				//Eason: more accuracy for discharge after dot---
+			}
+			else if(3 == g_do_fasterLeverage_count){
+				finetune_max_predict_drop_val = fasterLeverage_drop_val;
+				//Eason: more accuracy for discharge after dot+++
+				g_discharge_after_dot += fast_discharge_after_dot;
+				printk("[BAT][Fil]formula:%d.%d\n",fasterLeverage_drop_val,fast_discharge_after_dot);
+				finetune_max_predict_drop_val += discharge_dot_need_plus();
+				//Eason: more accuracy for discharge after dot---
+			}
+			else{
+				//Eason: more accuracy for discharge after dot+++
+				g_discharge_after_dot += pred_discharge_after_dot;
+				printk("[BAT][Fil]formula:%d.%d\n",max_predict_drop_val,pred_discharge_after_dot);
+				max_predict_drop_val += discharge_dot_need_plus();
+				//Eason: more accuracy for discharge after dot---
+				
+				finetune_max_predict_drop_val = max_predict_drop_val;
+			}
 
 			if(finetune_max_predict_drop_val<0)
 			{
 				finetune_max_predict_drop_val = -finetune_max_predict_drop_val;
-				printk("[BAT][Fil]Error: finetune_max_predict_drop_val over float\n");
+				printk("[BAT][Fil]Error: finetune_max_predict_drop_val overflow\n");
 			}
-	            //Eason add fasterLeverage judge---
+			//Eason add fasterLeverage judge---
             
 			bat_life = lastCap - min(drop_val, finetune_max_predict_drop_val);
-		} else {
+		}
+		else {
 			//bat_life = lastCap - drop_val;
 			bat_life = lastCap;
 			pr_err( "[BAT][Fil]Error!!! %s(), interval < 0\n",
 					__func__);
 		}
 
-		pr_info( "[BAT][Fil] interval:%d, drop_val:%d, max_predict_drop_val:%d, fasterLeverage_drop_val:%d, gDiff_BMS:%d, finetune_max_predict_drop_val:%d, count:%d \n",
+		pr_info( "[BAT][Fil] interval:%d, drop_val:%d, max_predict_drop_val:%d, fasterLeverage_drop_val:%d, finetune_max_predict_drop_val:%d, count:%d \n",
 			interval,
 			drop_val,
 			max_predict_drop_val,
 			fasterLeverage_drop_val,
-			gDiff_BMS,
 			finetune_max_predict_drop_val,
 			g_do_fasterLeverage_count);
-	} else {
-		 int max_predict_drop_val = 0;
- 		 int MinOfBmsPd = 0; 
+	}
+	else {
+		bat_life = lastCap;
 
-		//Eason:A80 slowly drop+++
-		if(g_A68_hwID >= A80_SR1){
-					bat_life = lastCap;
-		}else{
-		//Eason:A80 slowly drop---
-			//Eason: add BMS absolute value judge value+++
-			if (interval > 0) {
-				max_predict_drop_val = (maxMah*100*100/batCapMah)*interval/SECOND_OF_HOUR/100;//fix  suspend  (10*100/2100)will be 0
-				if(gDiff_BMS <= 0)
-				{
-					bat_life = lastCap;
-				}else{
-					MinOfBmsPd = min(abs(gDiff_BMS),abs(max_predict_drop_val));
-					if( abs(drop_val)==min(abs(MinOfBmsPd),abs(drop_val)) )
-					{
-						bat_life = lastCap;
-					}else{
-						bat_life = lastCap - MinOfBmsPd;
-					}
-				}
-					
-			}else{
-				bat_life = lastCap;
-			}	
-			//Eason: add BMS absolute value judge value---
+		if(g_do_fasterLeverage_count > 0){
+			g_do_fasterLeverage_count--;
 		}
 
-        if(g_do_fasterLeverage_count > 0)
-        {
-            g_do_fasterLeverage_count--;
-        }
-                
 		if (drop_val < 0) {
 			pr_info( "[BAT][Fil] Error!!! %s(), drop val less than 0. count:%d\n", __func__,g_do_fasterLeverage_count);
 		}
@@ -368,39 +361,6 @@ int AXC_Cap_Filter_A66_FilterCapacity(struct AXI_Cap_Filter *apCapFilter, int no
 {
 	int bat_life;
 	AXC_Cap_Filter_A66 *this = container_of(apCapFilter, AXC_Cap_Filter_A66, parentCapFilter);
-
-//Eason:A80 slowly drop+++
-#if 0	
-	 //Eason:TIgauge through filter prevent 0% while not BatLow+++
-	 if(g_A68_hwID >= A80_SR1)
- 	{
- 		if (isBatLow && (nowCap <= 0) && (lastCap <= 3)) {
-			return BAT_LIFE_TO_SHUTDOWN;
-		}else if(0==nowCap){
-			return BAT_LIFE_ONE;
-		//Eason : if phone don't has cable, cap can't increase+++	
-		}else{
-				if(false==hasCable)
-				{
-						if(nowCap > lastCap)
-						{
-							bat_life = lastCap;
-							printk("[BAT][Fil][A80]:noCable but cap increase, keep last cap\n");
-						}else{
-							bat_life = nowCap;
-						}
-				}else{
-							bat_life = nowCap;
-				}
-				
-			return bat_life;
-		}
-		//Eason : if phone don't has cable, cap can't increase---
- 	}
-	 //Eason:TIgauge through filter prevent 0% while not BatLow---
-#endif
-//Eason:A80 slowly drop---
-	 
 
 	//Eason: choose Capacity type SWGauge/BMS +++
 	if ((1==g_CapType)&&isBatLow && (nowCap <= 0) && (lastCap <= 3)) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,8 +31,8 @@
 #include <mach/gpiomux.h>
 #include <mach/mpm.h>
 #include "gpio-msm-common.h"
-#include "linux/console.h"
-int gpio_irq_cnt, gpio_resume_irq[]={};
+
+int gpio_irq_cnt, gpio_resume_irq[8];
 
 #ifdef CONFIG_GPIO_MSM_V3
 enum msm_tlmm_register {
@@ -345,9 +345,10 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int flow_type)
 	mb();
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);
 
-	if (msm_gpio_irq_extn.irq_set_type && !((flow_type & IRQ_TYPE_EDGE_BOTH) == IRQ_TYPE_EDGE_BOTH))
- 
-		msm_gpio_irq_extn.irq_set_type(d, flow_type);
+	if ((flow_type & IRQ_TYPE_EDGE_BOTH) != IRQ_TYPE_EDGE_BOTH) {
+		if (msm_gpio_irq_extn.irq_set_type)
+			msm_gpio_irq_extn.irq_set_type(d, flow_type);
+	}
 
 	return 0;
 }
@@ -430,7 +431,7 @@ void msm_gpio_show_resume_irq(void)
 	unsigned long irq_flags;
 	int i, irq, intstat;
 
-        gpio_irq_cnt=0;
+	gpio_irq_cnt=0;
 
 	if (!msm_show_resume_irq_mask)
 		return;
@@ -440,10 +441,11 @@ void msm_gpio_show_resume_irq(void)
 		intstat = __msm_gpio_get_intr_status(i);
 		if (intstat) {
 			irq = msm_gpio_to_irq(&msm_gpio.gpio_chip, i);
-			pr_warning("[PM]GPIO triggered: %d\n", irq-NR_MSM_IRQS);
-                        gpio_resume_irq[gpio_irq_cnt]=irq-NR_MSM_IRQS;
-                        gpio_irq_cnt++;
-//--Ledger
+			pr_warning("[PM] GPIO triggered: %d\n", i);
+			if(gpio_irq_cnt < 8) {
+				gpio_resume_irq[gpio_irq_cnt]=i;
+				gpio_irq_cnt++;
+			}
 		}
 	}
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);

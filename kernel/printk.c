@@ -60,9 +60,11 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
 
+//ASUS_BSP ++
 #ifdef        CONFIG_DEBUG_LL
 extern void printascii(char *);
 #endif
+//ASUS_BSP --
 
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL CONFIG_DEFAULT_MESSAGE_LOGLEVEL
@@ -161,10 +163,12 @@ static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 static int saved_console_loglevel = -1;
 
+//ASUS_BSP ++
 static char *g_printk_log_buf;
 
 //jack 
 int suspend_in_progress = 0;
+//ASUS_BSP --
 
 #ifdef CONFIG_KEXEC
 /*
@@ -583,6 +587,14 @@ void kdb_syslog_data(char *syslog_data[4])
 /*
  * Call the console drivers on a range of log_buf
  */
+
+//ASUS_BSP +++
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+extern char g_CHG_mode;
+#endif
+extern int g_bDebugMode;
+//ASUS_BSP ---
+
 static void __call_console_drivers(unsigned start, unsigned end)
 {
 	struct console *con;
@@ -593,6 +605,18 @@ static void __call_console_drivers(unsigned start, unsigned end)
 		if ((con->flags & CON_ENABLED) && con->write &&
 				(cpu_online(smp_processor_id()) ||
 				(con->flags & CON_ANYTIME)))
+
+//ASUS_BSP +++
+			if(!g_bDebugMode){
+				return;
+			}
+			
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+			if(g_CHG_mode){
+				return;
+			}
+#endif
+//ASUS_BSP ---
 			con->write(con, &LOG_BUF(start), end - start);
 	}
 }
@@ -816,28 +840,33 @@ static int have_callable_console(void)
  *
  * See the vsnprintf() documentation for format string extensions over C99.
  */
-
+//ASUS_BSP ++
 unsigned char debug_mask_setting[ASUS_MSK_GROUP] = DEFAULT_MASK;
 EXPORT_SYMBOL(debug_mask_setting);
 extern int entering_suspend;
 extern int g_user_dbg_mode;
+extern unsigned int asusdebug_enable;
 asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
 	int r;
 	unsigned char *p;
-	
+#ifdef CONFIG_MSM_RTB
+	void *caller = NULL;  //ASUS_BSP ++
+#endif
+
+	if (asusdebug_enable==0x11223344)
+		return 0;
+
 // +++ ASUS_BSP : add for user build
 #ifdef ASUS_SHIP_BUILD
 	if ( g_user_dbg_mode==0 )
 		return 0;
 #endif
-// --- ASUS_BSP : add for user build
-	
+// --- ASUS_BSP : add for user build	
 
 #ifdef CONFIG_MSM_RTB
-	void *caller = __builtin_return_address(0);
-
+	caller = __builtin_return_address(0);  //ASUS_BSP ++
 	uncached_logk_pc(LOGK_LOGBUF, caller, (void *)log_end);
 #endif
 
@@ -849,6 +878,7 @@ asmlinkage int printk(const char *fmt, ...)
 		return r;
 	}
 #endif
+//ASUS_BSP ++
 #if 0
 	va_start(args, fmt);
 	r = vprintk(fmt, args);
@@ -883,6 +913,7 @@ asmlinkage int printk(const char *fmt, ...)
     
 //20100930 jack_wong to add asus_debug mechanism -----
 #endif
+//ASUS_BSP --
 
 	return r;
 }
@@ -958,6 +989,7 @@ static inline void printk_delay(void)
 		}
 	}
 }
+//ASUS_BSP ++
 #if 1
 struct myworker {
     /* on idle list while idle, on busy hash table while busy */
@@ -987,6 +1019,8 @@ static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
 }
 //#endif
 // added by jack for printk hh:mm:ss.ns -----------
+int boot_after_60sec=0;
+//ASUS_BSP --
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -1034,10 +1068,11 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	/* Emit the output into the temporary buffer */
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
-
+//ASUS_BSP ++
 #ifdef	CONFIG_DEBUG_LL
 	printascii(printk_buf);
 #endif
+//ASUS_BSP --
 
 	p = printk_buf;
 
@@ -1050,6 +1085,10 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 		p[2]='>';
 	}
 // ASUS_BSP ---
+
+#ifdef CONFIG_LGE_CRASH_HANDLER
+	store_crash_log(p);
+#endif
 
 	/* Read log level and handle special printk prefix */
 	plen = log_prefix(p, &current_log_level, &special);
@@ -1093,7 +1132,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				printed_len += 3;
 			}
 
-
+//ASUS_BSP ++
             if (printk_time) 
             {
                 int tlen;
@@ -1103,8 +1142,14 @@ asmlinkage int vprintk(const char *fmt, va_list args)
                 if(asus_rtc_set && !suspend_in_progress)
                 {
                     /* Add the current time stamp */
+                    unsigned long long t;
+                    unsigned long nanosec_rem;
+
                     struct timespec ts; 
                     struct rtc_time tm;
+                    
+                    t = cpu_clock(printk_cpu);
+                    nanosec_rem = do_div(t, 1000000000);
                     
                     getnstimeofday(&ts);
                     ts.tv_sec -= sys_tz.tz_minuteswest * 60;
@@ -1130,11 +1175,15 @@ asmlinkage int vprintk(const char *fmt, va_list args)
                     }
                     else
                     {
-                        tlen = sprintf(tbuf, "[%02d:%02d:%02d.%06lu](CPU:%d-pid:%d:%s) ",
-                                tm.tm_hour, tm.tm_min, tm.tm_sec,ts.tv_nsec/1000,
+                        tlen = sprintf(tbuf, "[%5lu.%06lu](CPU:%d-pid:%d:%s) [%02d:%02d:%02d.%06lu] ",
+								(unsigned long) t,      
+								nanosec_rem / 1000,                          
                                 this_cpu,
                                 current->pid, 
-                                current->comm);                    
+                                current->comm,
+                                tm.tm_hour, tm.tm_min, tm.tm_sec,ts.tv_nsec/1000);                    
+                         if (boot_after_60sec == 0 && t >= 60)
+                             boot_after_60sec = 1;
                     }
                 }
                 else
@@ -1177,10 +1226,13 @@ asmlinkage int vprintk(const char *fmt, va_list args)
                                         this_cpu,
                                         current->pid, 
                                         current->comm);                    
+                        if (boot_after_60sec == 0 && t >= 60)
+                             boot_after_60sec = 1;                
                     }
                 }    
 
 				//20100930 jack_wong to add asus_debug mechanism -----
+//ASUS_BSP --
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
 				printed_len += tlen;
@@ -1367,8 +1419,10 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
-        ASUSEvtlog("[UTS] System Suspend");
+//ASUS_BSP ++
+	ASUSEvtlog("[UTS] System Suspend");
 	suspend_in_progress = 1;
+//ASUS_BSP --
 	if (!console_suspend_enabled)
 		return;
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
@@ -1379,27 +1433,26 @@ void suspend_console(void)
 
 void resume_console(void)
 {
+	int i;
+	suspend_in_progress = 0;
+	ASUSEvtlog("[UTS] System Resume");
 
-        int i;
+	if (pm_pwrcs_ret) {
+		ASUSEvtlog("[PM] Suspended for %d.%03d secs ", pwrcs_time/100,pwrcs_time % 100);
 
-        suspend_in_progress = 0;
-        ASUSEvtlog("[UTS] System Resume");
+		if (gpio_irq_cnt>0) {
+			for (i=0;i<gpio_irq_cnt;i++)
+  				ASUSEvtlog("[PM] GPIO triggered: %d", gpio_resume_irq[i]);
+			gpio_irq_cnt=0; //clear log count.
+		}
+		if (gic_irq_cnt>0) {
+			for (i=0;i<gic_irq_cnt;i++)
+				ASUSEvtlog("[PM] IRQs triggered: %d", gic_resume_irq[i]);
+			gic_irq_cnt=0;  //clear log count.
+		}
 
-        if (pm_pwrcs_ret) {
-                ASUSEvtlog("[PM] Suspended for %d.%03d secs ", pwrcs_time/100,pwrcs_time % 100);
-
-                if (gpio_irq_cnt>0) {
-                        for (i=0;i<gpio_irq_cnt;i++)
-                            ASUSEvtlog("[PM] GPIO triggered: %d", gpio_resume_irq[i]);
-                        gpio_irq_cnt=0; //clear log count.
-                }
-                if (gic_irq_cnt>0) {
-                        for (i=0;i<gic_irq_cnt;i++)
-                            ASUSEvtlog("[PM] IRQs triggered: %d", gic_resume_irq[i]);
-                        gic_irq_cnt=0;  //clear log count.
-                }
-                pm_pwrcs_ret=0;
-        }
+		pm_pwrcs_ret=0;
+	}
 
 	if (!console_suspend_enabled)
 		return;
@@ -1434,13 +1487,13 @@ static int __cpuinit console_cpu_notify(struct notifier_block *self,
 	unsigned long action, void *hcpu)
 {
 	switch (action) {
-	case CPU_ONLINE:
 	case CPU_DEAD:
 	case CPU_DOWN_FAILED:
 	case CPU_UP_CANCELED:
 		console_lock();
 		console_unlock();
 		break;
+	case CPU_ONLINE:
 	case CPU_DYING:
 		/* invoked with preemption disabled, so defer */
 		if (!console_trylock())
@@ -2087,6 +2140,7 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 }
 #endif
 
+//ASUS_BSP ++
 //by jack for debug message buffer change
 void printk_buffer_rebase(void)
 {
@@ -2100,8 +2154,9 @@ void printk_buffer_rebase(void)
         printk( "printk_buffer_rebase log_buf_len: allocation failed\n");
         goto out;
     }
-    
-    memset(g_printk_log_buf, 0, PRINTK_BUFFER_SLOT_SIZE);
+
+    if(console_loglevel)
+        memset(g_printk_log_buf, 0, PRINTK_BUFFER_SLOT_SIZE);
     
     raw_spin_lock_irqsave(&logbuf_lock, flags);
     log_buf_len = PRINTK_BUFFER_SLOT_SIZE;
@@ -2167,5 +2222,4 @@ static int __init Asus_ramdump_debug_init(void)
 
 device_initcall(Asus_ramdump_debug_init);
 #endif
-
-
+//ASUS_BSP --

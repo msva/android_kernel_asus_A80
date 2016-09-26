@@ -5,7 +5,10 @@
 #include <linux/rcupdate.h>
 #include <linux/vmalloc.h>
 #include <linux/reboot.h>
+
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 #include <linux/jiffies.h>
+#endif
 
 /*
  *	Notifier list for kernel code which wants to be called
@@ -327,8 +330,8 @@ int blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 }
 EXPORT_SYMBOL_GPL(blocking_notifier_call_chain);
 
-
-
+//ASUS_BSP +++
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 static int __kprobes notifier_call_chain_timeinfo(struct notifier_block **nl,
 					unsigned long val, void *v,
 					int nr_to_call,	int *nr_calls, unsigned short debugPrint)
@@ -402,6 +405,9 @@ int blocking_notifier_call_chain_timeinfo(struct blocking_notifier_head *nh,
 	return __blocking_notifier_call_chain_timeinfo(nh, val, v, -1, NULL, debugPrint);
 }
 EXPORT_SYMBOL_GPL(blocking_notifier_call_chain_timeinfo);
+#endif
+//ASUS_BSP ---
+
 /*
  *	Raw notifier chain routines.  There is no protection;
  *	the caller must provide it.  Use at your own risk!

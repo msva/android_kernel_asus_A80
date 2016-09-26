@@ -22,6 +22,7 @@
  * and macros DECLARE_COMPLETION(), DECLARE_COMPLETION_ONSTACK(), and
  * INIT_COMPLETION().
  */
+//ASUS_BSP ++
 #if 0
 struct completion {
 	unsigned int done;
@@ -39,6 +40,7 @@ struct completion {
 #define COMPLETION_INITIALIZER(work) \
 	{ 0, __WAIT_QUEUE_HEAD_INITIALIZER((work).wait), #work }
 #endif
+//ASUS_BSP --
 #define COMPLETION_INITIALIZER_ONSTACK(work) \
 	({ init_completion(&work); work; })
 

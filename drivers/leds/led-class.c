@@ -23,33 +23,33 @@
 
 #define LED_BUFF_SIZE 50
 
-//++ASUS_BSP: Louis
+//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+#ifdef CONFIG_ASUS_BACKLIGHT
+#ifdef CONFIG_EEPROM_NUVOTON
 #include <linux/microp_notify.h>
+#endif
+#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
 #include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
-#include <linux/mutex.h> 
-static struct mutex thermal_bl_mutex;
-extern int pad_set_backlight(int);
-extern int a80_set_pmic_backlight(int);
+#endif
+
 extern void asus_set_bl_brightness(int);
 extern int backlight_mode_state;
+static unsigned long g_brightness = 102;
+struct led_classdev *g_led_cdev;
 
 enum device_mode {
     phone = 0,
     pad,
 };
-//--ASUS_BSP: Louis
 
-static struct class *leds_class;
-
-//ASUS_BSP jacob kung: add for debug mask ++
 #include <linux/module.h>
 /* Debug levels */
-#define NO_DEBUG       0
-#define DEBUG_POWER     1
-#define DEBUG_INFO  2
-#define DEBUG_VERBOSE 5
-#define DEBUG_RAW      8
-#define DEBUG_TRACE   10
+#define NO_DEBUG		0
+#define DEBUG_POWER	1
+#define DEBUG_INFO		2
+#define DEBUG_VERBOSE	5
+#define DEBUG_RAW		8
+#define DEBUG_TRACE		10
 
 static int debug = DEBUG_INFO;
 
@@ -60,7 +60,10 @@ MODULE_PARM_DESC(debug, "Activate debugging output");
 #define led_debug(level, ...) \
 		if (debug >= (level)) \
 			pr_info(__VA_ARGS__);
-//ASUS_BSP jacob kung: add for debug mask --
+#endif
+//ASUS_BSP --- Maggie Lee "Backlight Porting"
+
+static struct class *leds_class;
 
 static void led_update_brightness(struct led_classdev *led_cdev)
 {
@@ -79,34 +82,6 @@ static ssize_t led_brightness_show(struct device *dev,
 	return snprintf(buf, LED_BUFF_SIZE, "%u\n", led_cdev->brightness);
 }
 
-// ASUS_BSP: Louis +++
-static unsigned long g_brightness = 92;
-static unsigned long g_thermal_fading = 100;
-struct led_classdev *g_led_cdev;
-
-static unsigned long cal_bl_fading_val(unsigned long state)
-{
-	if (state == 19 || state == 1019)
-		{
-			state = 19;
-		}
-	else 
-		{
-	    if ((state >= 1020 && state <= 1255)) { //for outdoor mode
-	        state -= 1000;
-	        state = state * g_thermal_fading / 100 + 1000;  //make sure bl range never lower than 1000
-	    }
-	    else if (state >= 20 && state <= 255)
-	        state = state * g_thermal_fading / 100;
-
-	    if(state < 20 && state > 0)
-	        state = 20;
-	    else if (state < 1020 && state > 1000)
-	        state = 1020;
-		}
-    return state;
-}
-
 static ssize_t led_brightness_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -116,12 +91,12 @@ static ssize_t led_brightness_store(struct device *dev,
 	unsigned long state = simple_strtoul(buf, &after, 10);
 	size_t count = after - buf;
 
-    mutex_lock(&thermal_bl_mutex);
-    g_brightness = state;
-
-	 led_debug(DEBUG_VERBOSE,"[BL] (%s): user set value = %d \n", __func__,(int)state);
-
-    state = cal_bl_fading_val(state);
+	//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+	led_debug(NO_DEBUG, "[BL] %s +++: led_cdev = %s value = %d\n", __func__, led_cdev->name, (int)state);
+	#ifdef CONFIG_ASUS_BACKLIGHT
+	g_brightness = state;
+	#endif
+	//ASUS_BSP --- Maggie Lee "Backlight Porting"
 
 	if (isspace(*after))
 		count++;
@@ -131,78 +106,22 @@ static ssize_t led_brightness_store(struct device *dev,
 
 		if (state == LED_OFF)
 			led_trigger_remove(led_cdev);
-		if (backlight_mode_state == pad)
-			{
-				asus_set_bl_brightness(state);
-			}
-		else if((state >=2000 && state <=2255) ||(state == 1255))
-			{
-				asus_set_bl_brightness(state);
-			}
+		//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+		#ifdef CONFIG_ASUS_BACKLIGHT
+		if (!strcmp(led_cdev->name, "lcd-backlight")) {
+			led_cdev->brightness = state;
+			asus_set_bl_brightness(state);
+		}
 		else
-			{
-				led_set_brightness(led_cdev, state);
-			}
+			led_set_brightness(led_cdev, state);
+		#else
+		led_set_brightness(led_cdev, state);
+		#endif
+		//ASUS_BSP --- Maggie Lee "Backlight Porting"
 	}
 
-    mutex_unlock(&thermal_bl_mutex);
 	return ret;
 }
-
-static ssize_t brightness_thermal_fading_store (struct device *dev,
-        struct device_attribute *attr, const char *buf, size_t size)
-{
-    struct led_classdev *led_cdev = dev_get_drvdata(dev);
-    char *after;
-    unsigned long state = simple_strtoul(buf, &after, 10);
-
-    if (backlight_mode_state == pad) {
-        printk("[Backlight] %s: do not ajust backlight caused by thermal in pad mode\n", __func__);
-        return size;
-    }
-
-    mutex_lock(&thermal_bl_mutex);
-
-    if (state > 100)
-        state = 100;
-    else if (state < 50)
-        state = 50;
-
-    g_thermal_fading = state;
-
-    if ((g_brightness >= 1020 && g_brightness <= 1255)) { //for outdoor mode
-        g_brightness -= 1000;
-        state = g_brightness * g_thermal_fading / 100 + 1000;  //make sure bl range never lower than 1000
-        g_brightness += 1000;
-    }
-    else if (g_brightness >= 20 && g_brightness <= 255)
-        state = g_brightness * g_thermal_fading / 100;
-
-    if (state < 20 && state > 0)
-        state = 20;
-    else if (state < 1020 && state > 1000)
-        state = 1020;
-
-    printk("[BACKLIGHT] (%s): g_thermal_fading = %lu\n", __FUNCTION__ , g_thermal_fading);
-
-    led_set_brightness(led_cdev, state);
-
-    mutex_unlock(&thermal_bl_mutex);
-
-    return size;
-}
-
-static ssize_t brightness_thermal_fading_show (struct device *dev, 
-        struct device_attribute *attr, char *buf)
-{
-    struct led_classdev *led_cdev = dev_get_drvdata(dev);
-
-    /* no lock needed for this */
-    led_update_brightness(led_cdev);
-
-    return snprintf(buf, LED_BUFF_SIZE, "%lu\n", g_thermal_fading);
-}
-//ASUS_BSP: Louis ---
 
 static ssize_t led_max_brightness_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -232,14 +151,7 @@ static ssize_t led_max_brightness_show(struct device *dev,
 }
 
 static struct device_attribute led_class_attrs[] = {
-//++ ASUS_BSP:Louis
-#ifdef ASUS_FACTORY_BUILD
-    __ATTR(brightness, 0666, led_brightness_show, led_brightness_store),
-#else
-    __ATTR(brightness, 0644, led_brightness_show, led_brightness_store),
-#endif
-    __ATTR(thermal_brightness_fading, 0644, brightness_thermal_fading_show, brightness_thermal_fading_store),
-//-- ASUS_BSP:Louis
+	__ATTR(brightness, 0644, led_brightness_show, led_brightness_store),
 	__ATTR(max_brightness, 0644, led_max_brightness_show,
 			led_max_brightness_store),
 #ifdef CONFIG_LEDS_TRIGGERS
@@ -356,7 +268,12 @@ int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 	printk(KERN_DEBUG "Registered led device: %s\n",
 			led_cdev->name);
 
-    g_led_cdev = dev_get_drvdata(led_cdev->dev);   //ASUS_BSP:Louis
+	//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+	#ifdef CONFIG_ASUS_BACKLIGHT
+	if(!strcmp(led_cdev->name, "lcd-backlight"))
+		g_led_cdev = dev_get_drvdata(led_cdev->dev);
+	#endif
+	//ASUS_BSP --- Maggie Lee "Backlight Porting"
 
 	return 0;
 }
@@ -388,37 +305,27 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 }
 EXPORT_SYMBOL_GPL(led_classdev_unregister);
 
-//ASUS_BSP:Louis +++
-#if 1
+//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+#if defined(CONFIG_ASUS_BACKLIGHT) && defined(CONFIG_EEPROM_NUVOTON)
 static int change_backlight_mode(struct notifier_block *this, unsigned long event, void *ptr)
 {
-        static int thermal_curr;
-        unsigned long phone_bl;
-
-        switch (event) {
-            case P01_ADD:
-                backlight_mode_state = pad;
-				printk("[BL][mod] %s change to Pad\n",__func__);
-				thermal_curr = g_thermal_fading;
-                g_thermal_fading = 100;
-				if ((A80_SR2 <= g_A68_hwID) && (g_A68_hwID <= A80_SR4) ){
-						printk("[BL][mod] %s turn off Phone backlight for pmic device\n",__func__);		
-						a80_set_pmic_backlight(0);
-					}
-                pad_set_backlight(g_brightness);
-                return NOTIFY_DONE;
-
-            case P01_REMOVE:
-                backlight_mode_state = phone;
-				printk("[BL][mod] %s change to Phone\n",__func__);
-                g_thermal_fading = thermal_curr;
-                phone_bl = cal_bl_fading_val(g_brightness);
-                led_set_brightness(g_led_cdev, phone_bl);
-                return NOTIFY_DONE;
-
-            default:
-                return NOTIFY_DONE;
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
+	switch (event) {
+		case P01_ADD:
+                	backlight_mode_state = pad;
+			printk("[BL][mod] %s change to Pad\n",__func__);
+			asus_set_bl_brightness(g_brightness);
+                	break;
+		case P01_REMOVE:
+                	backlight_mode_state = phone;
+			printk("[BL][mod] %s change to Phone\n",__func__);
+			asus_set_bl_brightness(g_brightness);
+                	
+           	default:
+                	break;
         }
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 
 static struct notifier_block my_hs_notifier = {
@@ -426,7 +333,7 @@ static struct notifier_block my_hs_notifier = {
         .priority = VIBRATOR_MP_NOTIFY,
 };
 #endif
-//ASUS_BSP:Louis ---
+//ASUS_BSP --- Maggie Lee "Backlight Porting"
 
 static int __init leds_init(void)
 {
@@ -437,11 +344,16 @@ static int __init leds_init(void)
 	leds_class->resume = led_resume;
 	leds_class->dev_attrs = led_class_attrs;
 
-    //ASUS_BSP: Louis +++
-    mutex_init(&thermal_bl_mutex); 
-    register_microp_notifier(&my_hs_notifier);
-    notify_register_microp_notifier(&my_hs_notifier, "led_class"); //ASUS_BSP Lenter+
-    //ASUS_BSP: Louis ---
+	//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+	#ifdef CONFIG_ASUS_BACKLIGHT
+	#ifdef CONFIG_EEPROM_NUVOTON
+	register_microp_notifier(&my_hs_notifier);
+	#endif
+	#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
+	notify_register_microp_notifier(&my_hs_notifier, "led_class"); //ASUS_BSP Lenter+
+    	#endif
+	#endif
+	//ASUS_BSP --- Maggie Lee "Backlight Porting"
 
 	return 0;
 }

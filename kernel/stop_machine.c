@@ -20,7 +20,7 @@
 #include <linux/kallsyms.h>
 
 #include <linux/atomic.h>
-extern void *scm_regsave; 
+
 /*
  * Structure to determine completion condition and record errors.  May
  * be shared by works on different cpus.
@@ -436,10 +436,6 @@ static void ack_state(struct stop_machine_data *smdata)
 		set_state(smdata, smdata->state + 1);
 }
 
-
-extern void pet_watchdog(void);
-
-
 /* This is the cpu_stop function which stops the CPU. */
 static int stop_machine_cpu_stop(void *data)
 {
@@ -448,13 +444,6 @@ static int stop_machine_cpu_stop(void *data)
 	int cpu = smp_processor_id(), err = 0;
 	unsigned long flags;
 	bool is_active;
-	int wait_count = 0;
-	int pet_count = 0;
-
-	if((cpu == 0)&&(scm_regsave != NULL))
-	{
-		pet_watchdog();
-	} 
 
 	/*
 	 * When called from stop_machine_from_inactive_cpu(), irq might
@@ -462,6 +451,10 @@ static int stop_machine_cpu_stop(void *data)
 	 */
 	local_save_flags(flags);
 
+	if (!smdata->active_cpus)
+		is_active = cpu == cpumask_first(cpu_online_mask);
+	else
+		is_active = cpumask_test_cpu(cpu, smdata->active_cpus);
 
 	/* Simple state machine */
 	do {
@@ -475,11 +468,6 @@ static int stop_machine_cpu_stop(void *data)
 				hard_irq_disable();
 				break;
 			case STOPMACHINE_RUN:
-				if (!smdata->active_cpus)
-					is_active = cpu == cpumask_first(cpu_online_mask);
-				else
-					is_active = cpumask_test_cpu(cpu, smdata->active_cpus);
-		
 				if (is_active)
 					err = smdata->fn(smdata->data);
 				break;
@@ -487,18 +475,6 @@ static int stop_machine_cpu_stop(void *data)
 				break;
 			}
 			ack_state(smdata);
-		}
-
-
-		wait_count++;
-		if (((wait_count % 100000) == 0) &&
-			(cpu == 0)&&(scm_regsave != NULL))
-		{
-			if ( pet_count < 1000 )
-			{
-				pet_watchdog();
-				pet_count++;
-			}
 		}
 	} while (curstate != STOPMACHINE_EXIT);
 

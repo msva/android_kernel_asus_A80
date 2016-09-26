@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,18 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-
-//++ ASUS_BSP: Louis
-#include <linux/gpio.h>
-#include <linux/kernel.h> 
-#include "msm_fb.h"
-#define PM8921_GPIO_BASE        NR_GPIO_IRQS
-#define PM8921_GPIO_PM_TO_SYS(pm_gpio)  (pm_gpio - 1 + PM8921_GPIO_BASE)
-
-int sharp_set_brightness(int value);
-void sharp_set_cabc(int mode);
-int renesas_set_brightness(int value);
-//-- ASUS_BSP: Louis
 
 #ifndef MIPI_NOVATEK_BLUE_H
 #define MIPI_NOVATEK_BLUE_H

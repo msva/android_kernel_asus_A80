@@ -184,7 +184,7 @@ int uvc_queue_buffer(struct uvc_video_queue *queue, struct v4l2_buffer *buf)
 	return ret;
 }
 
-//ASUS_BSP+++ Patrick "[A68][USB Cam][NA][Others] Using dequeue with timeout"
+//ASUS_BSP +++ Shunmin "[A68][USB Cam][NA][Others] Using dequeue with timeout"
 #define call_memop(q, op, args...)					\
 	(((q)->mem_ops->op) ?						\
 		((q)->mem_ops->op(args)) : 0)
@@ -453,14 +453,14 @@ int uvc_from_vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblock
 	vb->state = VB2_BUF_STATE_DEQUEUED;
 	return 0;
 }
-//ASUS_BSP--- Patrick "[A68][Camera][NA][Others] Using dequeue with timeout"
+//ASUS_BSP--- Shunmin "[A68][Camera][NA][Others] Using dequeue with timeout"
 int uvc_dequeue_buffer(struct uvc_video_queue *queue, struct v4l2_buffer *buf,
 		       int nonblocking)
 {
 	int ret;
 
 	mutex_lock(&queue->mutex);
-	ret = uvc_from_vb2_dqbuf(&queue->queue, buf, nonblocking); //ASUS_BSP Patrick "[A68][Camera][NA][Others] Using dequeue with timeout"
+	ret = uvc_from_vb2_dqbuf(&queue->queue, buf, nonblocking); //ASUS_BSP Shunmin "[A80][USB Cam][NA][Others] Using dequeue with timeout"
 	mutex_unlock(&queue->mutex);
 
 	return ret;

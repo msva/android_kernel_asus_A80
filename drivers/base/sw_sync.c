@@ -255,4 +255,3 @@ module_init(sw_sync_device_init);
 module_exit(sw_sync_device_remove);
 
 #endif /* CONFIG_SW_SYNC_USER */
-

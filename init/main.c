@@ -159,9 +159,11 @@ __setup("eMMC=", set_emmc_info);
 
 //+++ ASUS_BSP : miniporting
 enum DEVICE_HWID g_A68_hwID=A68_UNKNOWN;
+enum DEVICE_HWID g_ASUS_hwID=A68_UNKNOWN;
 char hwid_info[64]={0};
 
 EXPORT_SYMBOL(g_A68_hwID);
+EXPORT_SYMBOL(g_ASUS_hwID);
 
 static int set_hardware_id(char *str)
 {
@@ -214,6 +216,12 @@ static int set_hardware_id(char *str)
 		g_A68_hwID = A68_PR;
 		strcat(hwid_info,str);
 		printk("Kernel HW ID = A68_PR\n");
+	}
+	else if ( strcmp("A68_PR2", str) == 0 )
+	{
+		g_A68_hwID = A68_PR2;
+		strcat(hwid_info,str);
+		printk("Kernel HW ID = A68_PR2\n");
 	}
 	else if ( strcmp("A68_CD", str) == 0 )
 	{
@@ -281,6 +289,7 @@ static int set_hardware_id(char *str)
 		printk("Kernel HW ID = A68_UNKNOWN\n");
 	}
 	
+	g_ASUS_hwID = g_A68_hwID;
 	return 0;
 }
 
@@ -691,7 +700,7 @@ static inline void smp_prepare_cpus(unsigned int maxcpus) { }
 static void __init setup_command_line(char *command_line)
 {
 	saved_command_line = alloc_bootmem(strlen (boot_command_line)+1);
-	static_command_line = alloc_bootmem(strlen (command_line)+1);	
+	static_command_line = alloc_bootmem(strlen (command_line)+1);
 	strcpy (saved_command_line, boot_command_line);
 	strcpy (static_command_line, command_line);
 }
@@ -828,11 +837,6 @@ asmlinkage void __init start_kernel(void)
 	smp_setup_processor_id();
 	debug_objects_early_init();
 
-	/*
-	 * Set up the the initial canary ASAP:
-	 */
-	boot_init_stack_canary();
-
 	cgroup_init_early();
 
 	local_irq_disable();
@@ -847,6 +851,10 @@ asmlinkage void __init start_kernel(void)
 	page_address_init();
 	printk(KERN_NOTICE "%s", linux_banner);
 	setup_arch(&command_line);
+	/*
+	 * Set up the the initial canary ASAP:
+	 */
+	boot_init_stack_canary();
 	mm_init_owner(&init_mm, &init_task);
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
@@ -1013,26 +1021,15 @@ static int __init_or_module do_one_initcall_debug(initcall_t fn)
 	ktime_t calltime, delta, rettime;
 	unsigned long long duration;
 	int ret;
-	
-	if (initcall_debug)
-		printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
+
+	printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
 	calltime = ktime_get();
 	ret = fn();
 	rettime = ktime_get();
 	delta = ktime_sub(rettime, calltime);
 	duration = (unsigned long long) ktime_to_ns(delta) >> 10;
-	if (initcall_debug)
-		printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n", fn,
-			ret, duration);
-			
-#ifndef ASUS_SHIP_BUILD
-	if (initcall_debug==0)
-	{
-		if (duration > 100000)
-			printk(KERN_WARNING "[debuginit] initcall %pF returned %d after %lld usecs\n", fn,
-				ret, duration);
-	}
-#endif
+	printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n", fn,
+		ret, duration);
 
 	return ret;
 }
@@ -1042,14 +1039,10 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	int count = preempt_count();
 	int ret;
 
-#ifndef ASUS_SHIP_BUILD
-	ret = do_one_initcall_debug(fn);
-#else
 	if (initcall_debug)
 		ret = do_one_initcall_debug(fn);
 	else
 		ret = fn();
-#endif		
 
 	msgbuf[0] = 0;
 

@@ -25,7 +25,7 @@
 #include <linux/i2c.h>
 #include <linux/earlysuspend.h> 
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>
+//#include <linux/microp_notifier_controller.h>
 
 #define CM_EN               0x134
 #define CM_GLOBAL_FUNC      0x800
@@ -354,6 +354,7 @@ static struct i2c_test_case_info DisplayTestCaseInfo[] =
 
 static int change_splendid_mode(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
     switch (event) {
         case P01_ADD:
             g_PadAttach = true;
@@ -370,15 +371,18 @@ static int change_splendid_mode(struct notifier_block *this, unsigned long event
                 cancel_delayed_work_sync(&nt71890_turn_off_cabc_work);
             }
             queue_delayed_work(nt71890_workqueue, &nt71890_turn_off_cabc_work, 2*HZ);
-            return NOTIFY_DONE;
+            break;
 
         case P01_REMOVE:
             g_PadAttach = false;
-            return NOTIFY_DONE;
+            break;
 
         default:
-            return NOTIFY_DONE;
+			break;
+            
     }
+    printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+    return NOTIFY_DONE;
 }
 
 static struct notifier_block my_hs_notifier = {
@@ -494,7 +498,7 @@ static int __init NT71890_init(void)
 	}
 
     register_microp_notifier(&my_hs_notifier);
-    notify_register_microp_notifier(&my_hs_notifier, "nt71890");
+    //notify_register_microp_notifier(&my_hs_notifier, "nt71890");
 
 	printk("[P05][CM] NT71890_init---\n");
 	return err; 

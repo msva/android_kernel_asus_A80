@@ -21,10 +21,54 @@
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/err.h>
-#include "linux/proximity_class.h"
+#include <linux/input.h>
+#include "linux/input/proximity_class.h"
 
+/////////////////////////////////////////////////////////////////////////////////
+// report Lux input event feature
+//
+#include <linux/slab.h>
+struct input_dev *master_input_dev = NULL;
+
+int als_lux_report_event_register(struct input_dev *dev)
+{
+	if (master_input_dev != NULL)	{
+		printk("[als] Input_dev already registered");
+		return -EBUSY;
+	}
+	
+	if (!(master_input_dev = kmalloc(sizeof(struct input_dev), GFP_KERNEL)))
+		return -ENOMEM;
+
+	memset( master_input_dev, 0, sizeof(struct input_dev) );
+
+	master_input_dev = dev;
+	printk("[als] Finish register input_dev for lightsensoer : %s", dev->name);
+
+	return 0;
+}
+EXPORT_SYMBOL(als_lux_report_event_register);
+
+void als_lux_report_event(int lux)
+{
+	printk("[als] ******* report lux = %d\n", lux);
+	if (master_input_dev != NULL)	{
+		input_report_abs(master_input_dev, ABS_MISC, lux);
+		input_event(master_input_dev, EV_SYN, SYN_REPORT, 1);
+		input_sync(master_input_dev);
+	}
+	else
+		printk("[als] Without register input_dev for lightsensoer!!!\n");
+}    
+EXPORT_SYMBOL(als_lux_report_event);
+
+/////////////////////////////////////////////////////////////////////////////////
+// Sensoers kernel note port
+//
 struct class *g_classProximity = NULL;
 static struct device_attribute proximity_attrs[];
+
+int g_HAL_als_switch_on = 0;     //	For Lightsensor turn on/off global flag
 
 static int g_nDevMajor = 0;
 static atomic_t g_nDevCount;
@@ -120,19 +164,19 @@ static ssize_t proximity_store_property(struct device *dev,
 static struct device_attribute proximity_attrs[] = {
 	PROXIMITY_ATTR(interval),
 	PROXIMITY_ATTR(high_threshold),
-    PROXIMITY_ATTR(low_threshold),
+	PROXIMITY_ATTR(low_threshold),
 	PROXIMITY_ATTR(mode),
 	PROXIMITY_ATTR(teststep),
 	PROXIMITY_ATTR_RO(maxrange),
 	PROXIMITY_ATTR_RO(resolution),
 	PROXIMITY_ATTR_RO(version),
 	PROXIMITY_ATTR_RO(current),
-    PROXIMITY_ATTR(calvalue),
-    PROXIMITY_ATTR_RO(adc),
-    PROXIMITY_ATTR_RO(k_adc),
-    PROXIMITY_ATTR_RO(lux),
-    PROXIMITY_ATTR_RO(atd_status),
-    PROXIMITY_ATTR_RO(atd_adc),    
+	PROXIMITY_ATTR(calvalue),
+	PROXIMITY_ATTR_RO(adc),
+	PROXIMITY_ATTR_RO(k_adc),
+	PROXIMITY_ATTR_RO(lux),
+	PROXIMITY_ATTR_RO(atd_status),
+	PROXIMITY_ATTR_RO(atd_adc),    
 	PROXIMITY_ATTR(dbg), /* Add SENSORS_PROP_DBG for debug only */
 
 	PROXIMITY_ATTR(switch),
@@ -185,6 +229,9 @@ int proximity_dev_register(struct proximity_class_dev *prxdev)
 		if (ret < 0)
 			return ret;
 	}
+
+        if (IS_ERR(g_classProximity))
+            return PTR_ERR(g_classProximity);
 
 	INIT_LIST_HEAD(&prxdev->list);
 	mutex_lock(&g_mutexProximity);

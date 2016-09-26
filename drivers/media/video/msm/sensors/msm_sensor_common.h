@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -136,9 +136,9 @@ struct msm_sensor_fn_t {
 	int32_t (*sensor_set_fps) (struct msm_sensor_ctrl_t *,
 			struct fps_cfg *);
 	int32_t (*sensor_write_exp_gain) (struct msm_sensor_ctrl_t *,
-			uint16_t, uint32_t);
+			uint16_t, uint32_t, int32_t, uint16_t);
 	int32_t (*sensor_write_snapshot_exp_gain) (struct msm_sensor_ctrl_t *,
-			uint16_t, uint32_t);
+			uint16_t, uint32_t, int32_t, uint16_t);
 	int32_t (*sensor_setting) (struct msm_sensor_ctrl_t *,
 			int update_type, int rt);
 	int32_t (*sensor_csi_setting) (struct msm_sensor_ctrl_t *,
@@ -157,6 +157,13 @@ struct msm_sensor_fn_t {
 	void (*sensor_adjust_frame_lines) (struct msm_sensor_ctrl_t *s_ctrl);
 	int32_t (*sensor_get_csi_params)(struct msm_sensor_ctrl_t *,
 		struct csi_lane_params_t *);
+	int (*sensor_set_vision_mode)(struct msm_sensor_ctrl_t *s_ctrl,
+			int32_t vision_mode_enable);
+	int (*sensor_set_vision_ae_control)(
+			struct msm_sensor_ctrl_t *s_ctrl, int ae_mode);
+	int32_t (*sensor_read_eeprom)(struct msm_sensor_ctrl_t *);
+	int32_t (*sensor_hdr_update)(struct msm_sensor_ctrl_t *,
+		 struct sensor_hdr_update_parm_t *);
       //ASUS_BSP +++
 	void (*sensor_isp_af_start) (bool, isp3a_af_mode_t, int16_t, int16_t, int16_t, int16_t);
 	uint16_t (*sensor_get_isp_af_result) (struct msm_sensor_ctrl_t *);  
@@ -164,6 +171,7 @@ struct msm_sensor_fn_t {
        void (*sensor_set_isp_wb_mode) (config3a_wb_t); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement WB mode"
        void (*sensor_set_isp_ev_mode) (int16_t);  //ASUS_BSP LiJen "[A68][13M][NA][Others]implement EV mode"
       	void (*sensor_set_isp_iso_mode) (int16_t); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement ISO mode"
+	void (*sensor_set_isp_ultrapixel) (int16_t);
       	void (*sensor_set_isp_flicker_mode) (int16_t); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement FLICKER mode"
 	void (*sensor_set_isp_aeclock_mode) (int16_t); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement AECLOCK mode"
 	void (*sensor_set_isp_awblock_mode) (int16_t); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement AWBLOCK mode"
@@ -217,6 +225,7 @@ struct msm_sensor_ctrl_t {
 	struct msm_sensor_v4l2_ctrl_info_t *msm_sensor_v4l2_ctrl_info;
 	uint16_t num_v4l2_ctrl;
 	uint8_t is_csic;
+	int8_t vision_mode_flag;
 
 	uint16_t curr_line_length_pclk;
 	uint16_t curr_frame_length_lines;

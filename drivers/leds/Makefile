@@ -66,9 +66,5 @@ obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
 obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
 obj-$(CONFIG_LEDS_TRIGGER_DEFAULT_ON)	+= ledtrig-default-on.o
 obj-$(CONFIG_LEDS_TRIGGER_SLEEP)	+= ledtrig-sleep.o
-obj-$(CONFIG_A68_BACKLIGHT)	        += a68_backlight.o
-obj-$(CONFIG_P03_SCALER_UPDATE)     += p03_scaler_update.o
-obj-$(CONFIG_P03_SCALER_INFO)     += p03_scaler_info.o
+obj-$(CONFIG_ASUS_BACKLIGHT)		+= asus_backlight.o
 obj-$(CONFIG_P05_NOVATEK_CM)     += p05_nvt_cm.o
-
-

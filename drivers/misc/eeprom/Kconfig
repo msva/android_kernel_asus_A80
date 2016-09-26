@@ -96,11 +96,30 @@ config EEPROM_DIGSY_MTC_CFG
 	  If unsure, say N.
 
 config EEPROM_NUVOTON
-        tristate "EEPROM NUVOTON support"
+	tristate "EEPROM NUVOTON support"
 	default n
-        help
-          This is a driver for the EEPROM of Nuvoton.
-          The driver supports both read as well as write commands.
+	help
+	  This is a driver for the EEPROM of Nuvoton.
+	  The driver supports both read as well as write commands.
+	  
+	  If unsure, say N.
 
-          If unsure, say N.
+config EEPROM_NUVOTON_A68
+	tristate "EEPROM NUVOTON_A68 support"
+	depends on EEPROM_NUVOTON
+	default n
+	help
+	  to build A68 microp files
+	  
+	  If unsure, say N.
+
+config EEPROM_NUVOTON_A80
+	tristate "EEPROM NUVOTON_A80 support"
+	depends on EEPROM_NUVOTON
+	default n
+	help
+	  to build A80 microp files
+	  
+	  If unsure, say N.
+
 endmenu

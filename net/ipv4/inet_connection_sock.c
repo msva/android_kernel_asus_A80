@@ -697,7 +697,7 @@ int inet_csk_listen_start(struct sock *sk, const int nr_table_entries)
 		sk->sk_prot->hash(sk);
 
     	//ASUS_BSP+++ SYN FIREWALL
-		if(!strcmp(sk->sk_prot->name,"TCP")){
+		if(strstr(sk->sk_prot->name,"TCP")){//[A91][Phone|PS][NA][FIX]fix bug when sk_prot->name is TCPv6
 			if(0!=ntohs(inet->inet_sport)){
 				if(0x0100007f != inet->inet_saddr){
 					struct port_link *p;

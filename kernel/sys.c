@@ -54,6 +54,12 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
+//ASUS_BSP +++
+#ifdef ASUS_A68_PROJECT
+#include <linux/gpio.h>
+#endif
+//ASUS_BSP ---
+
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a,b)	(-EINVAL)
 #endif
@@ -89,21 +95,26 @@
 #include <linux/microp_api.h>
 #include <linux/microp.h>
 #include <linux/microp_pin_def.h>
-extern int getPowerBankCharge(void);
-extern int getBalanceCharge(void);
-extern void decideIfDo_PadBalanceModeInChgMode(void);
 extern bool pad_exist(void);
 extern int uP_nuvoton_write_reg(int cmd, void *data);
+extern int asus_bat_report_phone_status(int phone_bat_status);
+extern int isAlwaysPowerOnMicroP(void);
 //ASUS BSP Eason add A68 charge mode ---
+
 //ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode +++
 extern void UsbSetOtgSwitch(bool switchOtg);
 //ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
-
 //ASUS_BSP:Louis "add panel power off sequence when kernel power off +++
 extern void asus_mipi_display_off(void);
 extern void a80_mipi_dsi_panel_power_off(void);
 //ASUS_BSP:Louis "add panel power off sequence when kernel power off ---
 
+//Enter_Zhang+++: for charger mode
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+extern int g_chg_present;
+extern char g_CHG_mode;
+#endif
+//Enter_Zhang---: for charger mode
 
 /*
  * this is where the system-wide overflow UID and GID are defined, for
@@ -384,6 +395,10 @@ EXPORT_SYMBOL(unregister_reboot_notifier);
  */
 void kernel_restart(char *cmd)
 {
+	//ensure display power off sequence without calling kernel_power_off
+    asus_mipi_display_off();
+    a80_mipi_dsi_panel_power_off();
+
 	kernel_restart_prepare(cmd);
 	if (!cmd)
 		printk(KERN_EMERG "Restarting system.\n");
@@ -425,7 +440,7 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  */
 void kernel_power_off(void)
 {
-       unsigned short off=0xAA;
+	unsigned short off=0xAA; //ASUS_BSP +
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();
@@ -435,54 +450,55 @@ void kernel_power_off(void)
     asus_mipi_display_off();
     a80_mipi_dsi_panel_power_off();
     //ASUS_BSP: Louis :turn off panel power--
-
 	//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode +++
-	printk("[BAT]shutdown DisOTG+++\n ");
-	UsbSetOtgSwitch(false);
-	printk("[BAT]shutdown DisOTG---\n ");
+	//printk("[BAT]shutdown DisOTG+++\n ");
+	//UsbSetOtgSwitch(false);
+	//printk("[BAT]shutdown DisOTG---\n ");
 	//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
+	
 	//ASUS BSP Eason add A68 charge mode +++
-	decideIfDo_PadBalanceModeInChgMode();
-	if(AX_MicroP_IsP01Connected())
+	printk("%s  AX_MicroP_IsP01Connected = %d, g_CHG_mode = %d \n",__func__,AX_MicroP_IsP01Connected(),g_CHG_mode);
+	if(AX_MicroP_IsP01Connected() && g_CHG_mode)
 	{
-	//ASUS BSP Eason: when shutdown force turn off Vbus +++
-		if(1 != AX_MicroP_get_USBDetectStatus(Batt_P01))
-		{
-	       // if (!getBalanceCharge() || !getPowerBankCharge()) 
-		 //{
-			
-			AX_MicroP_setGPIOOutputPin(OUT_uP_VBUS_EN, 0);
-		 //}
-		}
-	//ASUS BSP Eason: when shutdown force turn off Vbus ---	
-		//ASUS_BSP +++ Peter Lu "Trun off scaler"
-		printk("switch_backlight_and_panel off\n");
-		AX_MicroP_setGPIOOutputPin(OUT_uP_LCD_EN, 0);
-		//ASUS_BSP --- Peter Lu
+		AX_MicroP_setGPIOOutputPin(OUT_uP_VBUS_EN, 0);
+		printk("TriggerPadStationPowerOff charger mode\n");
+		
+	//ASUS_BSP +++ Peter Lu "Trun off scaler"
+//	printk("switch_backlight_and_panel off\n");
+//	AX_MicroP_setGPIOOutputPin(OUT_uP_LCD_EN, 0);
+	//ASUS_BSP --- Peter Lu
 
 		uP_nuvoton_write_reg(MICROP_SOFTWARE_OFF,  &off);
-		printk("[ChgMode]:P03 power off\n");
+		printk("[ChgMode]:P05 power off\n");
 	}
 	//ASUS BSP Eason add A68 charge mode ---
 	
 	syscore_shutdown();
 	printk(KERN_EMERG "Power down.\n");
 	kmsg_dump(KMSG_DUMP_POWEROFF);
+	
+//ASUS_BSP +++
+#ifdef ASUS_A68_PROJECT
+	if(g_CHG_mode){
+		int retval;
+
+		retval = gpio_request(55, "flash_led");
+		if (retval) {
+			printk("Failed to get attn gpio 55. Code: %d\n", retval);
+		}
+		else{
+			printk("set gpio 55 to output low before power down in charger mode\n");
+			gpio_direction_output(55, 0);
+		}
+	}
+#endif
+//ASUS_BSP ---
+
 	machine_power_off();
 }
 EXPORT_SYMBOL_GPL(kernel_power_off);
 
 static DEFINE_MUTEX(reboot_mutex);
-
-//Enter_Zhang+++: for charger mode
-#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
-extern int g_chg_present;
-extern char g_CHG_mode;
-extern int getPowerBankCharge(void);
-extern int getBalanceCharge(void);
-extern int isAlwaysPowerOnMicroP(void);
-#endif
-//Enter_Zhang---: for charger mode
 
 /*
  * Reboot system call: for obvious reasons only root may call it,
@@ -497,13 +513,7 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 {
 	char buffer[256];
 	int ret = 0;
-
-	//ASUS_BSP +++ Jason2 Chang "[A80][SF][NA][Other]Reboot device when SF crash in pad mode"
-	if(magic1 == 0x28943447 && magic2 == LINUX_REBOOT_MAGIC2){
-		//printk("SurfaceFlinger die in pad mode, restart machine!");
-		kernel_restart(NULL);
-	}
-	//ASUS_BSP --- Jason2 Chang "[A80][SF][NA][Other]Reboot device when SF crash in pad mode"
+	unsigned short off=0xAA;
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!capable(CAP_SYS_BOOT))
@@ -554,36 +564,36 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	case LINUX_REBOOT_CMD_POWER_OFF:
 //+++ ASUS_BSP Enter_Zhang: enable JB charger mode
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
-		if (g_chg_present && getPowerBankCharge() 
-			&& getBalanceCharge() &&
-			(!AX_MicroP_IsP01Connected() || (AX_MicroP_IsP01Connected() && isAlwaysPowerOnMicroP()))&&
-			!g_CHG_mode){ //if charger present, we should reboot to kernel charging mode instead of turning off
-
-			//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode +++
-			printk("[BAT]shutdown DisOTG+++\n ");
-			UsbSetOtgSwitch(false);
-			printk("[BAT]shutdown DisOTG---\n ");
-			//ASUS_BSP Eason:when shutdown device set smb346 charger to DisOTG mode ---
-			//ASUS BSP Eason add A68 charge mode +++
-			decideIfDo_PadBalanceModeInChgMode();
-			if(AX_MicroP_IsP01Connected())
-			{
-			//ASUS BSP Eason: when shutdown force turn off Vbus +++
-				if(1 != AX_MicroP_get_USBDetectStatus(Batt_P01))
-				{
-				   // if (!getBalanceCharge() || !getPowerBankCharge()) 
-				 //{
-					
-					AX_MicroP_setGPIOOutputPin(OUT_uP_VBUS_EN, 0);
-				 //}
-				}
-			//ASUS BSP Eason: when shutdown force turn off Vbus ---	
-			}
-			//ASUS BSP Eason add A68 charge mode ---
-
+		if (g_chg_present && 
+			(!AX_MicroP_IsP01Connected() || isAlwaysPowerOnMicroP())&&
+			!g_CHG_mode)
+		{ //if charger present, we should reboot to kernel charging mode instead of turning off
+			printk("[BAT] Power off Change To reboot oem-01 ---\n ");
 			kernel_restart("oem-01");
 		}
-		else {		
+		else
+		{
+			if( !g_CHG_mode)
+			{
+				if(1 == asus_bat_report_phone_status(0))
+				{
+					printk("[BAT] [sys] battery is charging, reboot to charger mode ---\n ");
+					kernel_restart("oem-01");
+					break;
+				}
+				else
+				{
+					printk("[sys] battery Not charging, power off ---\n ");
+					if(AX_MicroP_IsP01Connected())
+					{
+						printk("[sys] Turn off VBus ---\n ");
+						AX_MicroP_setGPIOOutputPin(OUT_uP_VBUS_EN, 0);//Not charging, turn off vbus
+							   printk("TriggerPadStationPowerOff normal \n");
+							   //TriggerPadStationPowerOff();
+							   uP_nuvoton_write_reg(MICROP_SOFTWARE_OFF,  &off);
+					}
+				}
+			}
 			kernel_power_off();
 			do_exit(0);
 		}
@@ -1290,15 +1300,16 @@ DECLARE_RWSEM(uts_sem);
  * Work around broken programs that cannot handle "Linux 3.0".
  * Instead we map 3.x to 2.6.40+x, so e.g. 3.0 would be 2.6.40
  */
-static int override_release(char __user *release, int len)
+static int override_release(char __user *release, size_t len)
 {
 	int ret = 0;
-	char buf[65];
 
 	if (current->personality & UNAME26) {
-		char *rest = UTS_RELEASE;
+		const char *rest = UTS_RELEASE;
+		char buf[65] = { 0 };
 		int ndots = 0;
 		unsigned v;
+		size_t copy;
 
 		while (*rest) {
 			if (*rest == '.' && ++ndots >= 3)
@@ -1308,8 +1319,9 @@ static int override_release(char __user *release, int len)
 			rest++;
 		}
 		v = ((LINUX_VERSION_CODE >> 8) & 0xff) + 40;
-		snprintf(buf, len, "2.6.%u%s", v, rest);
-		ret = copy_to_user(release, buf, len);
+		copy = clamp_t(size_t, len, 1, sizeof(buf));
+		copy = scnprintf(buf, copy, "2.6.%u%s", v, rest);
+		ret = copy_to_user(release, buf, copy + 1);
 	}
 	return ret;
 }

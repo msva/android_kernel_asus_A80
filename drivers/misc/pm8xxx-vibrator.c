@@ -22,10 +22,8 @@
 
 #include "../staging/android/timed_output.h"
 
-//Austin++
+//AllenCH_Lin@asus.com +++
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
-
 #include <linux/microp_api.h>
 #include <linux/microp_pin_def.h>
 #include <linux/delay.h>
@@ -44,7 +42,7 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 			printk(message, ## __VA_ARGS__); \
 	} while (0)
 
-//Austin--
+//AllenCH_Lin@asus.com ---
 
 #define VIB_DRV			0x4A
 
@@ -130,7 +128,7 @@ static int pm8xxx_vib_write_u8(struct pm8xxx_vib *vib,
 				 u8 data, u16 reg)
 {
 	int rc;
-    printk("%s: reg = %x , data = %d\n",__func__,reg,data);
+
 	rc = pm8xxx_writeb(vib->dev->parent, reg, data);
 	if (rc < 0)
 		dev_warn(vib->dev, "Error writing pm8xxx: %X - ret %X\n",
@@ -142,8 +140,6 @@ static int pm8xxx_vib_set(struct pm8xxx_vib *vib, int on)
 {
 	int rc;
 	u8 val;
-
-    printk("%s: state = %d !!\n",__func__,vib->state);
 
 	if (on) {
 		val = vib->reg_vib_drv;
@@ -182,13 +178,10 @@ retry:
 	if (value == 0)
 		vib->state = 0;
 	else {
-//ASUS BSP Austin++
+//AllenCH_Lin@asus.com +++
 		if (value >=10000)
-		{
-			if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ){ //A68
-			vib_dev->level = 30;}
-			else if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR ){ //a80
-			vib_dev->level = 30;}
+		{			
+			vib_dev->level = 30;
 			value = value - 10000;
 			printk("[%s] Voltage=%d V  msec=%d\n",__func__,vib_dev->level/10,value);
 		}
@@ -196,23 +189,17 @@ retry:
 		{
 			if (value % 2)
 			{
-				if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ){
-				vib_dev->level = 30;}
-				else if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR ){
-				vib_dev->level = 30;}
+				vib_dev->level = 30;
 				value = value - 1;
 				printk("[%s] Voltage=%d V  msec=%d\n",__func__,vib_dev->level/10,value);
 			}
 			else
 			{
-				if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ){
-				vib_dev->level = 20;}
-				else if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR ){
-				vib_dev->level = 30;}
+				vib_dev->level = 30;
 				printk("[%s] Voltage=%d V  msec=%d\n",__func__,vib_dev->level/10,value);
 			}
 		}
-//ASUS BSP Austin--
+//AllenCH_Lin@asus.com ---
 		value = (value > vib->pdata->max_timeout_ms ?
 				 vib->pdata->max_timeout_ms : value);
 		vib->state = 1;
@@ -340,28 +327,31 @@ err_read_vib:
 	return rc;
 }
 
-//ASUS BSP Austin++
+//AllenCH_Lin@asus.com +++
 static int mp_event_report(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
         switch (event)
 	{
 		case P01_ADD:
 		{
 			printk("[%s] PAD ADD vibrator enable!!\n",__func__);
 			pm8xxx_vib_enable(&vib_dev->timed_dev,500);
-			return NOTIFY_DONE;
+			break;
 		}
 
 		default:
-			return NOTIFY_DONE;
+			break;
         }
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 
 static struct notifier_block mp_notifier = {
         .notifier_call = mp_event_report,
         .priority = VIBRATOR_MP_NOTIFY,
 };
-//ASUS BSP Austin--
+//AllenCH_Lin@asus.com ---
 
 static int __devexit pm8xxx_vib_remove(struct platform_device *pdev)
 {
@@ -390,18 +380,14 @@ static struct platform_driver pm8xxx_vib_driver = {
 
 static int __init pm8xxx_vib_init(void)
 {
-	register_microp_notifier(&mp_notifier);  //ASUS BSP Austin+
-	notify_register_microp_notifier(&mp_notifier, "pm8xxx_vibrator"); //ASUS_BSP Lenter+
-	
+	register_microp_notifier(&mp_notifier);  //AllenCH_Lin@asus.com +++	
 	return platform_driver_register(&pm8xxx_vib_driver);
 }
 module_init(pm8xxx_vib_init);
 
 static void __exit pm8xxx_vib_exit(void)
 {
-	unregister_microp_notifier(&mp_notifier);  //ASUS BSP Austin+
-	notify_unregister_microp_notifier(&mp_notifier, "pm8xxx_vibrator"); //ASUS_BSP Lenter+
-	
+	unregister_microp_notifier(&mp_notifier);  //AllenCH_Lin@asus.com +++
 	platform_driver_unregister(&pm8xxx_vib_driver);
 }
 module_exit(pm8xxx_vib_exit);

@@ -582,25 +582,17 @@ config LEDS_TRIGGER_SLEEP
 	help
 	  This turns LEDs on when the screen is off but the cpu still running.
 
-config P03_SCALER_UPDATE
-	tristate "Enable p03 scaler_update driver"
-	help
-	According to i2c trigger p03 scaler_update driver.
-
-config P03_SCALER_INFO
-	tristate "Enable p03 scaler_info driver"
-	help
-	According to i2c trigger p03 scaler_info driver.
 
 config P05_NOVATEK_CM
 	tristate "Enable P05 color adjustment driver"
 	help
 	  According to i2c trigger p05 HSIC driver.
 	
-config A68_BACKLIGHT
-	tristate "Enable backlight driver"
+config ASUS_BACKLIGHT
+	tristate "Enable asus backlight driver"
 	help
-	  According to PMIC trigger backlight driver.
+	  This config enables asus backlight driver according to driver IC or PMIC.
+
 comment "iptables trigger is under Netfilter config (LED target)"
 	depends on LEDS_TRIGGERS
 

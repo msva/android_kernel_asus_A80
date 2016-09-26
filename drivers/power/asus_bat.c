@@ -8,7 +8,6 @@
 #include <linux/mutex.h>
 #ifdef CONFIG_EEPROM_NUVOTON
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #include <linux/microp_api.h>
 #endif /*CONFIG_EEPROM_NUVOTON */
 #include <linux/platform_device.h>
@@ -549,6 +548,14 @@ static enum asus_bat_charger_cable asus_bat_get_pad_charger_byhw(void)
 	return charger;
 }
 
+bool is_pad_usb_plug_in(void)
+{
+	if(ASUS_BAT_CHARGER_USB == asus_bat_get_pad_charger_byhw())
+		return true;
+	else
+		return false;
+}
+			
 static enum asus_bat_charger_cable asus_bat_get_dock_charger_byhw(void)
 {
 	enum asus_bat_charger_cable charger = ASUS_BAT_CHARGER_NONE;
@@ -2696,6 +2703,7 @@ static int asus_bat_microp_event_handler(
 	unsigned long event,
 	void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
 	mutex_lock(&asus_bat->microp_evt_lock);
 	switch (event) {
 	case P01_ADD:
@@ -2749,13 +2757,14 @@ static int asus_bat_microp_event_handler(
 	default:
 		mutex_unlock(&asus_bat->microp_evt_lock);
 		//printk(DBGMSK_BAT_INFO "[BAT] %s(), not listened evt: %lu \n", __FUNCTION__, event);
+		printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
 		return NOTIFY_DONE;
 	}
 
 	mutex_unlock(&asus_bat->microp_evt_lock);
 
 	asus_bat_update_all_bat();
-
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
 	return NOTIFY_DONE;
 }
 #endif /* CONFIG_EEPROM_NUVOTON */
@@ -2883,16 +2892,6 @@ static void asus_bat_periodic_update(struct work_struct *work)
 		&asus_bat->bat_update_work, (asus_bat->bat_update_work_interval)*HZ);
 }
 
-//ASUS_BSP +++ Victor "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-#include <linux/fastboot.h>
-extern bool is_batt_low(void)
-{
-    return asus_bat->phone_b.bat_low;
-}
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP --- Victor "suspend for fastboot mode"  
-
 //Eason takeoff Battery shutdown +++
 static void checkIfTakeOffBat(int TakeOffBatVolt)
 {
@@ -2976,22 +2975,8 @@ static void asus_phone_bat_low_work(struct work_struct *work)
 		asus_bat->phone_b.bat_low = false;
 	}
 */
-    //ASUS_BSP +++ Victor "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-      if(is_fastboot_enable()){
-        kernel_power_off();
-      }else{
-#endif //#ifdef CONFIG_FASTBOOT
-    //ASUS_BSP --- Victor "suspend for fastboot mode"    
 
 	phone_bat_info->phone_bat_power_supply_changed();
-    //ASUS_BSP +++ Victor "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-    }    
-#endif //#ifdef CONFIG_FASTBOOT
-    //ASUS_BSP --- Victor "suspend for fastboot mode"    
-	
-
 }
 
 //Eason boot up in BatLow situation, take off cable can shutdown+++
@@ -3411,7 +3396,6 @@ static int asus_bat_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_EEPROM_NUVOTON
 	register_microp_notifier(&asus_bat_microp_notifier);
-	notify_register_microp_notifier(&asus_bat_microp_notifier, "asus_bat"); //ASUS_BSP Lenter+
 #endif /* CONFIG_EEPROM_NUVOTON */
 
 	asus_bat_set_pad_bat_present(false);

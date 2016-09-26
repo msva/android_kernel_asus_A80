@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
  * Copyright (c) 2010, Google Inc.
  *
  * Original authors: Code Aurora Forum
@@ -194,21 +194,9 @@ msm_ssbi_pa_transfer(struct msm_ssbi *ssbi, u32 cmd, u8 *data)
 		rd_status = ssbi_readl(ssbi, SSBI_PA_RD_STATUS);
 
 		if (rd_status & SSBI_PA_RD_STATUS_TRANS_DENIED) {
-            //ASUS_BSP +++ Victor "Retry to avoid multiple access"
-
-                        rd_status = ssbi_readl(ssbi, SSBI_PA_RD_STATUS);
-                        
-                        if (rd_status & SSBI_PA_RD_STATUS_TRANS_DENIED) {
-
-            //ASUS_BSP --- Victor "Retry to avoid multiple access"
-                        
 			dev_err(ssbi->dev, "%s: transaction denied (0x%x)\n",
 					__func__, rd_status);
 			return -EPERM;
-            //ASUS_BSP +++ Victor "Retry to avoid multiple access"
-                        }
-            //ASUS_BSP --- Victor "Retry to avoid multiple access"
-                        
 		}
 
 		if (rd_status & SSBI_PA_RD_STATUS_TRANS_DONE) {

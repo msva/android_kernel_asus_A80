@@ -1,7 +1,7 @@
 #ifndef __a80_sr2_GPIO_PINMUX_H
 #define __a80_sr2_GPIO_PINMUX_H
 
-#include "a68_gpio_pinmux_setting.h"
+#include "a80_gpio_pinmux_setting.h"
 
 static struct msm_gpiomux_config a80_sr2_msm8960_gpio_configs[] = {
         {

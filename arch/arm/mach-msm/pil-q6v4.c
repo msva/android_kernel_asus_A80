@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,10 +27,6 @@
 #include "peripheral-loader.h"
 #include "pil-q6v4.h"
 #include "scm-pas.h"
-
-//Bruno++
-#include <linux/slab.h>
-//Bruno++
 
 #define QDSP6SS_RST_EVB		0x0
 #define QDSP6SS_RESET		0x04
@@ -62,24 +58,6 @@
 
 #define Q6SS_CLK_ENA		BIT(1)
 #define Q6SS_SRC_SWITCH_CLK_OVR	BIT(8)
-
-//Bruno++
-extern int g_A68_cpuID;
-static char *q6_0 = NULL;
-static char *q6_1 = NULL;
-static char *q6_3 = NULL;
-static char *q6_4 = NULL;
-static char *q6_5 = NULL;
-static char *q6_6 = NULL;
-static char *q6_m = NULL;
-module_param(q6_0, charp, S_IRUGO | S_IWUSR);
-module_param(q6_1, charp, S_IRUGO | S_IWUSR);
-module_param(q6_3, charp, S_IRUGO | S_IWUSR);
-module_param(q6_4, charp, S_IRUGO | S_IWUSR);
-module_param(q6_5, charp, S_IRUGO | S_IWUSR);
-module_param(q6_6, charp, S_IRUGO | S_IWUSR);
-module_param(q6_m, charp, S_IRUGO | S_IWUSR);
-//Bruno++
 
 struct q6v4_data {
 	void __iomem *base;
@@ -474,48 +452,6 @@ static struct platform_driver pil_q6v4_driver = {
 
 static int __init pil_q6v4_init(void)
 {
-	//Bruno++
-    q6_0 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_1 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_3 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_4 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_5 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_6 = (char *) kmalloc(32, GFP_KERNEL);
-    q6_m = (char *) kmalloc(32, GFP_KERNEL);
-
-    if( (q6_0 == NULL) || (q6_1 == NULL) || (q6_3 == NULL) || (q6_4 == NULL) || (q6_5 == NULL) || (q6_6 == NULL) || (q6_m == NULL) ) {
-        pr_info("[pil-q6v4]: malloc(32) fail.\n");
-    }
-    memset( q6_0, 0, 32 );
-    memset( q6_1, 0, 32 );
-    memset( q6_3, 0, 32 );
-    memset( q6_4, 0, 32 );
-    memset( q6_5, 0, 32 );
-    memset( q6_6, 0, 32 );
-    memset( q6_m, 0, 32 );
-
-    if( (g_A68_cpuID >= 714) && (g_A68_cpuID <= 719) ) {
-        sprintf((char *)(q6_0), "q6_%d.b00", g_A68_cpuID);
-        sprintf((char *)(q6_1), "q6_%d.b01", g_A68_cpuID);
-        sprintf((char *)(q6_3), "q6_%d.b03", g_A68_cpuID);
-        sprintf((char *)(q6_4), "q6_%d.b04", g_A68_cpuID);
-        sprintf((char *)(q6_5), "q6_%d.b05", g_A68_cpuID);
-        sprintf((char *)(q6_6), "q6_%d.b06", g_A68_cpuID);
-        sprintf((char *)(q6_m), "q6_%d.mdt", g_A68_cpuID);
-    }
-    else {
-        sprintf((char *)(q6_0), "q6_715.b00");
-        sprintf((char *)(q6_1), "q6_715.b01");
-        sprintf((char *)(q6_3), "q6_715.b03");
-        sprintf((char *)(q6_4), "q6_715.b04");
-        sprintf((char *)(q6_5), "q6_715.b05");
-        sprintf((char *)(q6_6), "q6_715.b06");
-        sprintf((char *)(q6_m), "q6_715.mdt");
-    }
-
-    pr_info("[pil-q6v4]: %s, %s, %s, %s, %s, %s, %s.\n", q6_0, q6_1, q6_3, q6_4, q6_5, q6_6, q6_m);
-	//Bruno++
-	
 	return platform_driver_register(&pil_q6v4_driver);
 }
 module_init(pil_q6v4_init);

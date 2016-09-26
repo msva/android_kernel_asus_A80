@@ -39,8 +39,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/oom.h>
 
-extern void pet_watchdog(void);
-
 int sysctl_panic_on_oom;
 int sysctl_oom_kill_allocating_task;
 int sysctl_oom_dump_tasks = 1;
@@ -450,8 +448,6 @@ static void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	unsigned int victim_points = 0;
 	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL,
 					      DEFAULT_RATELIMIT_BURST);
-
-	pet_watchdog();
 
 	/*
 	 * If the task is already exiting, don't alarm the sysadmin or kill

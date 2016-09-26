@@ -15,7 +15,9 @@ enum p01_Cable_Status{
        P01_CABLE_NO=0,
        P01_CABLE_CHARGER=1,
        P01_CABLE_USB=2,
+#ifdef CONFIG_EEPROM_NUVOTON_A80
        P01_CABLE_OTG=7,       
+#endif
 };
 
 
@@ -26,13 +28,14 @@ enum p01_Charging_Status{
 	P01_CHARGING_FULL=2,
 };
 
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 enum P05_HW_ID{
 	P05_SR4_HWID=0,
 	P05_SR5_HWID=1,
 	P05_ER_HWID=2,
 	P05_PR_HWID=3,
 };
-
+#endif
 
 /*
 *       Check the status of P01 connectness
@@ -155,7 +158,10 @@ int AX_MicroP_setPWMValue(uint8_t value);
 //           <0: error
 int AX_MicroP_getPWMValue(void);
 
-
+/* @AX_MicroP_Is_3V3_ON
+     return:  1=3v3 on , 2=3v3 off
+*/
+int AX_MicroP_Is_3V3_ON(void);			//ASUS_BSP +++ Maggie Lee "For Pad I2C suspend/resume api"
 
 int AX_MicroP_enterSleeping(void);
 int AX_MicroP_enterResuming(void);
@@ -182,6 +188,9 @@ int AX_MicroP_enablePinInterrupt(unsigned int pinID, int enable);
 
 int AX_MicroP_readBattCapacity(int target);
 
+#ifdef CONFIG_EEPROM_NUVOTON_A68
+int AX_MicroP_readGaugeAvgCurrent(void);
+#endif
 
 /*
 *  @AX_IsPadUsing_MHL_H
@@ -200,9 +209,10 @@ int AX_MicroP_getMHLNvramState(void);
 int AX_MicroP_writeKDataOfLightSensor(uint32_t data);
 uint32_t AX_MicroP_readKDataOfLightSensor(void);
 
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 int AX_MicroP_writeCompassData(char* data, int length);
 int AX_MicroP_readCompassData(char* data, int length);
-
+#endif
 
 /*
 *      Export function for Dock Use
@@ -224,7 +234,18 @@ int AX_MicroP_getLightsensorADC(void);
 int AX_MicroP_setLightsensor_TS_Low(uint16_t val);
 int AX_MicroP_setLightsensor_TS_High(uint16_t val);
 
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 int AX_MicroP_getTSID(void);
 int AX_MicroP_getHWID(void);
 int AX_MicroP_IsMydpNewSKU(void);
+#endif
+
+#ifdef CONFIG_EEPROM_NUVOTON_A80
+/*
+*	@AX_MicroP_IsP05E
+*		return 0 for P05C
+*		return 1 for P05E
+*/
+int AX_MicroP_IsP05E(void);
+#endif
 #endif

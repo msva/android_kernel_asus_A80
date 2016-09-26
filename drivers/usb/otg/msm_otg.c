@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2013, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,140 +41,15 @@
 #include <linux/mfd/pm8xxx/misc.h>
 #include <linux/power_supply.h>
 #include <linux/mhl_8334.h>
+#include <linux/slimport.h>
+
+#include <asm/mach-types.h>
 
 #include <mach/clk.h>
 #include <mach/mpm.h>
 #include <mach/msm_xo.h>
 #include <mach/msm_bus.h>
 #include <mach/rpm-regulator.h>
-//ASUS_BSP+++ BennyCheng "add proc debug files"
-#include <linux/gpio.h>
-#include <linux/proc_fs.h>
-#define GPIO_APQ_MDM_SW_SEL 45
-#define GPIO_USB_MHL_SW_SEL 86
-enum usb_apq_mdm_sw {
-	USB_MDM = 0,
-	USB_APQ,
-};
-
-enum usb_mhl_sw {
-	USB_PORT = 0,
-	MHL_PORT,
-};
-//ASUS_BSP--- BennyCheng "add proc debug files"
-
-//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-#include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
-#include <linux/microp_api.h>
-#include <linux/microp_pin_def.h>
-#include <linux/microp.h>
-#include <linux/fs.h>
-#include <linux/earlysuspend.h>
-#include <linux/mutex.h>
-
-#define MSM_OTG_SUSPEND_CHECK_TIMEOUT 10000L
-
-static bool g_keep_power_on = 0;
-static bool g_suspend_delay_work_run = 0;
-static bool g_host_none_mode = 0;
-static int g_host_mode = 0;
-static bool msm_otg_bsv = 0;
-const char *usb_device_list[] = {"/Removable/USBdisk1", "/Removable/USBdisk2", "/Removable/SD", "/sys/class/net/eth0"};
-
-static struct workqueue_struct *early_suspend_delay_wq;
-static struct delayed_work early_suspend_delay_work;
-static struct wake_lock early_suspend_wlock;
-static struct work_struct late_resume_work;
-static struct workqueue_struct *microp_cb_delay_wq;
-static struct delayed_work microp_cb_delay_work;
-static struct mutex msm_otg_mutex;
-
-//ASUS_BSP+++ Eric5_Ou "add work queue for otg_boot_check"
-static struct work_struct check_at_boot;
-//ASUS_BSP--- Eric5_Ou "add work queue for otg_boot_check"
-
-enum microp_mode_sw {
-	MICROP_SLEEP = 0,
-	MICROP_ACTIVE,
-};
-enum host_auto_sw {
-	HOST_AUTO_NONE = 0,
-	HOST_AUTO_HOST,
-};
-
-static int msm_otg_usb_mhl_switch(enum usb_mhl_sw req_side);
-static void msm_otg_mode_switch(enum usb_mode_type req_mode);
-static void msm_otg_host_mode_cleanup(void);
-extern bool pad_exist(void);
-//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
-
-//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
-#define A80_PAD_PHY_PARA_B 0x6e
-#define A80_PAD_PHY_PARA_C 0x34
-#define A80_PAD_PHY_PARA_D 0x13
-static int g_phy_parameter_b = 0;
-static int g_phy_parameter_c = 0;
-static int g_phy_parameter_d = 0;
-//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
-
-//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-#include <linux/switch.h>
-
-enum asus_otg_state {
-	ASUS_OTG_NONE,
-	ASUS_OTG_CONNECT,
-	ASUS_OTG_DISCONNECT,
-	ASUS_OTG_CARKIT,
-	ASUS_OTG_HOST,
-};
-
-static int g_otg_mode = ASUS_OTG_NONE;
-static int g_carkit_state = 0;
-static int g_charger_ready = 0;
-static bool msm_otg_id = 0;
-
-struct switch_dev switch_otg_carkit;
-extern int mhl_registerCarkitInOutNotificaition(void (*callback)(int));
-extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
-#ifdef CONFIG_ASUS_USB_OTG
-extern void UsbSetOtgSwitch(bool switchOtg);
-#endif
-//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
-//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-extern void usb_ehci_phy_power_control(bool on);
-//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
-//ASUS_BSP+++ BennyCheng "add otg 5v output debug file"
-static int g_otg_5v_output = 0;
-//ASUS_BSP--- BennyCheng "add otg 5v output debug file"
-
-//ASUS_BSP+++ BennyCheng "add otg check at boot"
-static int g_otg_check_at_boot = 0;
-extern bool get_otg_state(void);
-static int msm_otg_get_id_state(void);
-static void msm_otg_set_id_state(int online);
-//ASUS_BSP--- BennyCheng "add otg check at boot"
-
-//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
-#ifdef CONFIG_CHARGER_ASUS
-#include <linux/asus_chg.h>
-static struct delayed_work asus_chg_work;
-static struct work_struct asus_usb_work;
-static int g_charger_mode = ASUS_CHG_SRC_NONE;
-enum msm_otg_usb_boot_state {
-	MSM_OTG_USB_BOOT_INIT,
-	MSM_OTG_USB_BOOT_IRQ,//check IRQ to make sure USB is ready
-	MSM_OTG_USB_BOOT_DOWN,
-};
-static int g_usb_boot = MSM_OTG_USB_BOOT_INIT;
-#endif
-//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
-
-//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
-#include <linux/asusdebug.h>
-//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 
 #define MSM_USB_BASE	(motg->regs)
 #define DRIVER_NAME	"msm_otg"
@@ -195,504 +70,13 @@ static int g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 #define USB_PHY_VDD_DIG_VOL_MIN	1045000 /* uV */
 #define USB_PHY_VDD_DIG_VOL_MAX	1320000 /* uV */
 
+#define ASUS_CARKIT_OFFLINE 0
+#define ASUS_CARKIT_ONLINE 2 //android native defined. Desk:1, CAR:2...
+
 static DECLARE_COMPLETION(pmic_vbus_init);
 static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
 static bool debug_bus_voting_enabled;
-
-//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-static ssize_t otg_carkit_switch_name(struct switch_dev *sdev, char *buf)
-{
-	return sprintf(buf, "Asus-carkit\n");
-}
-
-static ssize_t otg_carkit_switch_state(struct switch_dev *sdev, char *buf)
-{
-	return sprintf(buf, "%d\n", g_carkit_state);
-}
-
-int CarKitNotifyInitialize(void)
-{
-	int ret = 0;
-	switch_otg_carkit.name = "carkitcable";
-	switch_otg_carkit.print_state = otg_carkit_switch_state;
-	switch_otg_carkit.print_name = otg_carkit_switch_name;
-	ret = switch_dev_register(&switch_otg_carkit);
-	if (ret < 0) {
-	    printk("%s: Unable to register switch dev! %d\n", __FUNCTION__, ret);
-	    return -1;
-	}
-	return 0;
-}
-
-static void msm_otg_vbus_out_enable(bool enable, bool force)
-{
-	struct msm_otg *motg = the_msm_otg;
-#ifdef CONFIG_ASUS_USB_OTG
-	if (force) {
-		UsbSetOtgSwitch(enable);
-		//ASUS_BSP+++ BennyCheng "add otg 5v output debug file"
-		g_otg_5v_output = enable;
-		//ASUS_BSP--- BennyCheng "add otg 5v output debug file"
-	} else {
-		if (!AX_MicroP_IsP01Connected() || !pad_exist()) {
-			UsbSetOtgSwitch(enable);
-			//ASUS_BSP+++ BennyCheng "add otg 5v output debug file"
-			g_otg_5v_output = enable;
-			//ASUS_BSP--- BennyCheng "add otg 5v output debug file"
-		} else {
-			dev_dbg(motg->phy.dev, "ignore to set vbus enable in pad (%d)\n", enable);
-		}
-	}
-#else
-	dev_dbg(motg->phy.dev, "phone mode otg is not enabled (%d)\n", enable);
-	return;
-#endif
-}
-//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
-//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-static void msm_otg_suspend_check(struct work_struct *work)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_otg *otg = motg->phy.otg;
-
-	dev_info(motg->phy.dev, "check otg suspend status (%d)\n", pm_runtime_suspended(otg->phy->dev));
-
-	if (!pm_runtime_suspended(otg->phy->dev)) {
-		wake_unlock(&motg->wlock);
-	}
-}
-
-static DECLARE_DELAYED_WORK(msm_otg_suspend_check_work, msm_otg_suspend_check);
-
-static bool msm_otg_keep_power_on_check(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	struct file *flp = NULL;
-	mm_segment_t oldfs;
-	int index = 0, num = 0, ret = 0;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-
-	num = sizeof(usb_device_list)/sizeof(usb_device_list[0]);
-
-	for(index = 0; index < num; index++) {
-		flp = filp_open(usb_device_list[index], O_RDONLY, S_IRWXU);
-		if(IS_ERR(flp))
-			continue;
-		else {
-			ret = 1;
-			filp_close(flp, NULL);
-			dev_info(phy->dev, "%s exist\n", usb_device_list[index]);
-			break;
-		}
-	}
-
-	set_fs(oldfs);
-
-	return ret;
-}
-
-static int msm_otg_get_pad_hub_power(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int pin_level = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_HUB_PWR_EN);
-		if (pin_level < 0) {
-			dev_err(phy->dev, "get pad hub power status failed! (%d)\n", pin_level);
-		} else {
-			dev_dbg(phy->dev, "get pad hub power status success (%d)\n", pin_level);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, cannot get hub power status! (%d)(%d)\n",
-			AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return pin_level;
-}
-
-static int msm_otg_set_pad_hub_power(bool on)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int ret = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_HUB_PWR_EN, on);
-		if (ret < 0) {
-			dev_err(phy->dev, "fail to set pad hub power! (%d)(%d)\n", on, ret);
-		} else {
-			dev_dbg(phy->dev, "set pad hub power success (%d)\n", on);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, skip pad hub power control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
-}
-
-static int msm_otg_get_pad_camera_power(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int pin_level = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_CAM_PWR_EN);
-		if (pin_level < 0) {
-			dev_err(phy->dev, "get pad camera power status failed! (%d)\n", pin_level);
-		} else {
-			dev_dbg(phy->dev, "get pad camera power status success (%d)\n", pin_level);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, cannot get camera power status! (%d)(%d)\n",
-			AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return pin_level;
-}
-
-static int msm_otg_set_pad_camera_power(bool on)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int ret = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_CAM_PWR_EN, on);
-		if (ret < 0) {
-			dev_err(phy->dev, "fail to set pad camera power! (%d)(%d)\n", on, ret);
-		} else {
-			dev_dbg(phy->dev, "set pad camera power success (%d)\n", on);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, skip pad camera power control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
-}
-
-static int msm_otg_get_pad_cbus_en(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int pin_level = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_MHL_CBUS_EN);
-		if (pin_level < 0) {
-			dev_err(phy->dev, "get pad cbus enable status failed! (%d)\n", pin_level);
-		} else {
-			dev_dbg(phy->dev, "get pad cbus enable status success (%d)\n", pin_level);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, cannot get cbus enable status! (%d)(%d)\n",
-			AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return pin_level;
-}
-
-static int msm_otg_set_pad_cbus_en(bool on)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-	int ret = -1;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_MHL_CBUS_EN, on);
-		if (ret < 0) {
-			dev_err(phy->dev, "fail to set pad cbus enable! (%d)(%d)\n", on, ret);
-		} else {
-			dev_dbg(phy->dev, "set pad cbus enable success (%d)\n", on);
-		}
-	} else {
-		dev_dbg(phy->dev, "not in pad, skip pad cbus enable control! (%d)(%d)(%d)\n",
-			on, AX_MicroP_IsP01Connected(), pad_exist());
-	}
-
-	return ret;
-}
-
-static void msm_otg_set_microp_mode(enum microp_mode_sw mode)
-{
-	int ret = 0, retries = 0;
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	if (AX_MicroP_IsP01Connected() && pad_exist()) {
-		switch (mode) {
-		case MICROP_SLEEP:
-			ret = AX_MicroP_enterSleeping();
-			if (ret >= 0) {
-				while (st_MICROP_Sleep != AX_MicroP_getOPState() && retries++ < 5);
-
-				if (retries <= 5)
-					dev_dbg(phy->dev, "microp enter sleep success\n");
-				else
-					dev_err(phy->dev, "microp fail to enter sleep!\n");
-			} else {
-				dev_err(phy->dev, "fail to set microp to sleep! (%d)\n", ret);
-			}
-			break;
-		case MICROP_ACTIVE:
-			ret = AX_MicroP_enterResuming();
-			if (ret >= 0) {
-                            dev_dbg(phy->dev, "microp exit sleep success\n");
-			} else {
-				dev_err(phy->dev, "fail to set microp to active! (%d)\n", ret);
-			}
-			break;
-		default:
-				dev_err(phy->dev, "unknown microp mode! (%d)\n", mode);
-			break;
-		}
-	}
-}
-
-static void msm_otg_host_auto_switch(enum host_auto_sw req_mode)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_otg *otg = motg->phy.otg;
-
-	switch (req_mode) {
-	case HOST_AUTO_NONE:
-		printk("[usb_otg] switch to auto none mode\r\n");
-		set_bit(ID, &motg->inputs);
-		clear_bit(B_SESS_VLD, &motg->inputs);
-		g_host_none_mode = 1;
-		break;
-	case HOST_AUTO_HOST:
-		printk("[usb_otg] switch to auto host mode\r\n");
-		clear_bit(ID, &motg->inputs);
-		g_host_none_mode = 0;
-		break;
-	default:
-		printk("[usb_otg] unknown auto mode!!! (%d)\r\n", req_mode);
-		goto out;
-	}
-
-	pm_runtime_resume(otg->phy->dev);
-	queue_work(system_nrt_wq, &motg->sm_work);
-out:
-	return;
-}
-
-void msm_otg_host_power_off(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	if (g_host_mode) {
-		dev_info(phy->dev, "%s()+++ (%d)(%d)\n", __func__, g_keep_power_on, g_host_none_mode);
-		if (!g_host_none_mode) {
-			g_suspend_delay_work_run = 1;
-
-			msm_otg_host_auto_switch(HOST_AUTO_NONE);
-
-			if (AX_MicroP_IsP01Connected() && pad_exist()) {
-				msm_otg_set_microp_mode(MICROP_SLEEP);
-			} else {
-				//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-				msm_otg_vbus_out_enable(false, 0);
-				//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
-			}
-		}
-		dev_info(phy->dev, "%s()---\n", __func__);
-	}
-}
-
-//ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-static void msm_otg_host_power_on(struct work_struct *work)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s()+++\n", __func__);
-
-	if (g_host_mode) {
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			msm_otg_set_microp_mode(MICROP_ACTIVE);
-			if (!msm_otg_get_pad_cbus_en()) {
-				msm_otg_set_pad_cbus_en(1);
-			}
-		}
-	}
-
-	dev_info(phy->dev, "%s()---\n", __func__);
-}
-static DECLARE_WORK(msm_otg_host_power_on_work, msm_otg_host_power_on);
-
-void msm_otg_host_power_on_wq(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s: active microp and cbus\n", __func__);
-	queue_work(system_nrt_wq, &msm_otg_host_power_on_work);
-}
-//ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
-
-static void msm_otg_early_suspend_delay_work(struct work_struct *w)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s()+++\n", __func__);
-
-	g_suspend_delay_work_run = 1;
-
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	if (g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_SR2) {
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			usb_ehci_phy_power_control(0);
-		}
-	}
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
-	if (g_host_mode) {
-		g_keep_power_on = msm_otg_keep_power_on_check();
-		dev_info(phy->dev, "g_keep_power_on (%d)\n", g_keep_power_on);
-
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			if (!g_keep_power_on) {
-				msm_otg_host_auto_switch(HOST_AUTO_NONE);
-
-				if (msm_otg_get_pad_cbus_en()) {
-					msm_otg_set_pad_cbus_en(0);
-				}
-
-				msm_otg_set_microp_mode(MICROP_SLEEP);
-			} else {
-				/*
-				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
-				 * turning off the power of hub in the very end of msm_otg_pm_suspend
-				 */
-				if (msm_otg_get_pad_cbus_en()) {
-					msm_otg_set_pad_cbus_en(0);
-				}
-
-				if (msm_otg_get_pad_camera_power()) {
-					msm_otg_set_pad_camera_power(0);
-				}
-
-				wake_unlock(&motg->wlock);
-			}
-		} else {
-			//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-			if (!g_keep_power_on) {
-				msm_otg_host_auto_switch(HOST_AUTO_NONE);
-				msm_otg_vbus_out_enable(false, 0);
-			} else {
-				/*
-				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
-				 * turning off the power of hub in the very end of msm_otg_pm_suspend
-				 */
-				wake_unlock(&motg->wlock);
-			}
-			//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-		}
-	}
-
-	dev_info(phy->dev, "%s()---\n", __func__);
-}
-
-static void msm_otg_late_resume_work(struct work_struct *w)
-{
-	int wait = 0;
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_otg *otg = motg->phy.otg;
-
-	dev_info(motg->phy.dev, "%s()+++\n", __func__);
-
-	while ((otg->phy->state != OTG_STATE_B_IDLE) && (wait++ < 10)) {
-		msleep(100);
-	}
-
-	if (wait >= 10) {
-		dev_err(motg->phy.dev, "not b_idle state, skip host auto switch (%d)\n", otg->phy->state);
-		return;
-	}
-
-	msm_otg_host_auto_switch(HOST_AUTO_HOST);
-
-	dev_info(motg->phy.dev, "%s()--- (%d)\n", __func__, wait);
-}
-
-static void usb_pad_hub_early_suspend(struct early_suspend *h)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s()+++\n", __func__);
-
-	if (g_host_mode) {
-		wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
-		cancel_work_sync(&late_resume_work);
-		queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
-	}
-
-	dev_info(phy->dev, "%s()---\n", __func__);
-}
-
-static void usb_pad_hub_late_resume(struct early_suspend *h)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s()+++\n", __func__);
-
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	if (g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_SR2) {
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			usb_ehci_phy_power_control(1);
-		}
-	}
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
-	if (g_host_mode) {
-		cancel_delayed_work_sync(&early_suspend_delay_work);
-		if (g_suspend_delay_work_run) {
-			if (g_host_mode) {
-				queue_work(system_nrt_wq, &late_resume_work);
-			}
-			g_suspend_delay_work_run = 0;
-		}
-
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			msm_otg_set_microp_mode(MICROP_ACTIVE);
-
-			if (!msm_otg_get_pad_cbus_en()) {
-				msm_otg_set_pad_cbus_en(1);
-			}
-
-			msm_otg_set_pad_hub_power(1);
-			msm_otg_set_pad_camera_power(1);
-		} else {
-			//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-			msm_otg_vbus_out_enable(true, 0);
-			//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-		}
-	}
-
-	dev_info(phy->dev, "%s()---\n", __func__);
-}
-
-struct early_suspend usb_pad_hub_early_suspend_handler = {
-    .level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
-    .suspend = usb_pad_hub_early_suspend,
-    .resume = usb_pad_hub_late_resume,
-};
-//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
-
 static bool mhl_det_in_progress;
 
 static struct regulator *hsusb_3p3;
@@ -712,6 +96,25 @@ static inline bool aca_enabled(void)
 #endif
 }
 
+//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+#ifdef CONFIG_CHARGER_ASUS
+#include <linux/asus_chg.h>
+static struct delayed_work asus_chg_work;
+static struct work_struct asus_usb_work;
+static int g_charger_mode = ASUS_CHG_SRC_NONE;
+enum msm_otg_usb_boot_state {
+	MSM_OTG_USB_BOOT_INIT,
+	MSM_OTG_USB_BOOT_IRQ,//check IRQ to make sure USB is ready
+	MSM_OTG_USB_BOOT_DOWN,
+};
+static int g_usb_boot = MSM_OTG_USB_BOOT_INIT;
+#endif
+//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+
+//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+#include <linux/asusdebug.h>
+//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+
 static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 		{  /* VDD_CX CORNER Voting */
 			[VDD_NONE]	= RPM_VREG_CORNER_NONE,
@@ -724,6 +127,135 @@ static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 			[VDD_MAX]	= USB_PHY_VDD_DIG_VOL_MAX,
 		},
 };
+
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+#include <linux/microp_notify.h>
+#include <linux/microp_api.h>
+#include <linux/microp_pin_def.h>
+#include <linux/microp.h>
+#include <linux/proc_fs.h>
+
+static int g_host_mode = 0;
+static int g_otg_5v_output = 0;
+
+#ifdef CONFIG_CHARGER_ASUS
+extern void UsbSetOtgSwitch(bool switchOtg);
+#else
+void UsbSetOtgSwitch(bool switchOtg){return;}
+#endif
+extern bool pad_exist(void);
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
+#include <linux/gpio.h>
+
+#define GPIO_APQ_MDM_SW_SEL 45
+#define GPIO_USB_MHL_SW_SEL 86
+
+enum usb_apq_mdm_sw {
+	USB_MDM = 0,
+	USB_APQ,
+};
+
+enum usb_mhl_sw {
+	USB_PORT = 0,
+	MHL_PORT,
+};
+//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+
+//ASUS_BSP+++ BennyCheng "add microp related debug files"
+enum microp_mode_sw {
+	MICROP_SLEEP = 0,
+	MICROP_ACTIVE,
+};
+//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+static struct mutex asus_otg_mutex;
+//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+
+//ASUS_BSP+++ BennyCheng "ignore BSV events in host mode or in pad auto mode"
+static bool asus_otg_bsv = 0;
+//ASUS_BSP--- BennyCheng "ignore BSV events in host mode or in pad auto mode"
+
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#include <linux/switch.h>
+
+enum asus_otg_state {
+	ASUS_OTG_NONE,
+	ASUS_OTG_DISCONNECT,
+	ASUS_OTG_CONNECT,
+	ASUS_OTG_CARKIT,
+	ASUS_OTG_HOST,
+};
+
+static int g_otg_mode = ASUS_OTG_NONE;
+static int g_carkit_state = ASUS_CARKIT_OFFLINE;
+#ifdef CONFIG_CHARGER_ASUS
+static int g_charger_ready = 0;
+#endif
+
+struct switch_dev switch_otg_carkit;
+extern int dp_registerCarkitInOutNotificaition(void (*callback)(int));
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+static void asus_otg_host_mode_prepare(void);
+static void asus_otg_host_mode_cleanup(void);
+static struct workqueue_struct *microp_cb_delay_wq;
+static struct delayed_work microp_cb_delay_work;
+//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+#include <linux/earlysuspend.h>
+
+#elif defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+
+struct notifier_block fb_notif;
+#endif
+
+enum host_auto_sw {
+	HOST_AUTO_NONE = 0,
+	HOST_AUTO_HOST,
+};
+static int g_host_none_mode = 0;
+static int g_keep_power_on = 0;
+static int g_suspend_delay_work_run = 0;
+const char *usb_device_list[] = {"/Removable/USBdisk1", "/Removable/USBdisk2", "/Removable/SD", "/sys/class/net/eth0", "/sys/class/sound/card1"};
+static struct workqueue_struct *early_suspend_delay_wq;
+static struct delayed_work early_suspend_delay_work;
+static struct work_struct late_resume_work;
+static struct wake_lock early_suspend_wlock;
+//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+static struct work_struct check_at_boot;
+static int g_otg_check_at_boot = 0;
+extern bool get_otg_state(void);
+//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
+#define A80_PAD_PHY_PARA_B 0x6e
+#define A80_PAD_PHY_PARA_C 0x34
+#define A80_PAD_PHY_PARA_D 0x13
+static int g_phy_parameter_b = 0;
+static int g_phy_parameter_c = 0;
+static int g_phy_parameter_d = 0;
+//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
+
+//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
+#define MSM_OTG_SUSPEND_CHECK_TIMEOUT 10000L
+static void asus_otg_suspend_check(struct work_struct *work);
+static DECLARE_DELAYED_WORK(asus_otg_suspend_check_work, asus_otg_suspend_check);
+//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
+
+/* ASUS_BSP+++ BennyCheng "support mydp ac charger" */
+bool g_mydp_ac_state;
+extern int dp_registerChargerInOutNotification(void (*callback)(int));
+/* ASUS_BSP--- BennyCheng "support mydp ac charger" */
 
 static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 {
@@ -1206,13 +738,907 @@ static int msm_otg_reset(struct usb_phy *phy)
 	} else if (pdata->otg_control == OTG_PMIC_CONTROL) {
 		ulpi_write(phy, OTG_COMP_DISABLE,
 			ULPI_SET(ULPI_PWR_CLK_MNG_REG));
-		//ASUS_BSP+++ BennyCheng "disable PMIC USB ID pull-up by default"
+		//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 		pm8xxx_usb_id_pullup(0);
-		//ASUS_BSP--- BennyCheng "disable PMIC USB ID pull-up by default"
+		//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 	}
 
 	return 0;
 }
+
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+void asus_otg_vbus_out_enable(bool enable, bool force)
+{
+	struct msm_otg *motg = the_msm_otg;
+
+	if (force) {
+		UsbSetOtgSwitch(enable);
+		g_otg_5v_output = enable;
+	} else {
+		if (!AX_MicroP_IsP01Connected() || !pad_exist()) {
+			UsbSetOtgSwitch(enable);
+			g_otg_5v_output = enable;
+		} else {
+			dev_dbg(motg->phy.dev, "ignore to set vbus enable in pad (%d)\n", enable);
+		}
+	}
+}
+
+static void asus_otg_mode_switch(enum usb_mode_type req_mode)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_otg *otg = motg->phy.otg;
+
+	switch (req_mode) {
+	case USB_NONE:
+		printk("[usb_otg] switch to none mode\r\n");
+		set_bit(ID, &motg->inputs);
+		clear_bit(B_SESS_VLD, &motg->inputs);
+		g_host_mode = 0;
+		break;
+	case USB_PERIPHERAL:
+		printk("[usb_otg] switch to peripheral mode\r\n");
+		//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+		asus_otg_host_mode_cleanup();
+		//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+		set_bit(ID, &motg->inputs);
+		g_host_mode = 0;
+		break;
+	case USB_HOST:
+		printk("[usb_otg] switch to host mode\r\n");
+		//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+		asus_otg_host_mode_prepare();
+		//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+		clear_bit(ID, &motg->inputs);
+		g_host_mode = 1;
+		break;
+	case USB_AUTO:
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			printk("[usb_otg] switch to host mode (auto)\r\n");
+			//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+			asus_otg_host_mode_prepare();
+			//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+			clear_bit(ID, &motg->inputs);
+			g_host_mode = 1;
+		} else {
+			printk("[usb_otg] switch to peripheral mode (auto)\r\n");
+			//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+			asus_otg_host_mode_cleanup();
+			//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+			set_bit(ID, &motg->inputs);
+			g_host_mode = 0;
+		}
+		break;
+	default:
+		printk("[usb_otg] unknown mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	pm_runtime_resume(otg->phy->dev);
+	queue_work(system_nrt_wq, &motg->sm_work);
+out:
+	return;
+}
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
+static int asus_otg_apq_mdm_switch(enum usb_apq_mdm_sw req_side)
+{
+	int ret = -1;
+
+	if (g_A68_hwID > A80_SR2) {
+		printk("[usb_otg] apq-mdm usb switch not support for hwID 0x%x\r\n", g_A68_hwID);
+		return 0;
+	}
+
+	switch (req_side) {
+	case USB_MDM:
+		ret = gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 0);
+		if(ret) {
+			printk("[usb_otg] switch to mdm usb fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_otg] switch to mdm usb (%d)\r\n", gpio_get_value(GPIO_APQ_MDM_SW_SEL));
+		break;
+	case USB_APQ:
+		ret = gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 1);
+		if(ret) {
+			printk("[usb_otg] switch to apq usb fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_otg] switch to apq usb (%d)\r\n", gpio_get_value(GPIO_APQ_MDM_SW_SEL));
+		break;
+	default:
+		printk("[usb_otg] unknown switch!!! (%d)\r\n", req_side);
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+static int asus_otg_usb_mhl_switch(enum usb_mhl_sw req_side)
+{
+	int ret = -1;
+
+	switch (req_side) {
+	case USB_PORT:
+		ret = gpio_direction_output(GPIO_USB_MHL_SW_SEL, 0);
+		if(ret) {
+			printk("[usb_otg] switch to usb port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_otg] switch to usb port (%d)\r\n", gpio_get_value(GPIO_USB_MHL_SW_SEL));
+		break;
+	case MHL_PORT:
+		ret = gpio_direction_output(GPIO_USB_MHL_SW_SEL, 1);
+		if(ret) {
+			printk("[usb_otg] switch to mhl port fail!!!(%d)(%d)\r\n", req_side, ret);
+			goto out;
+		}
+		printk("[usb_otg] switch to mhl port (%d)\r\n", gpio_get_value(GPIO_USB_MHL_SW_SEL));
+		break;
+	default:
+		printk("[usb_otg] unknown switch!!! (%d)\r\n", req_side);
+		goto out;
+	}
+
+out:
+	return ret;
+}
+//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+
+//ASUS_BSP+++ BennyCheng "add microp related debug files"
+static int asus_otg_get_pad_hub_power(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_HUB_PWR_EN);
+		if (pin_level < 0) {
+			dev_err(phy->dev, "get pad hub power status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(phy->dev, "get pad hub power status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, cannot get hub power status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_otg_set_pad_hub_power(bool on)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_HUB_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(phy->dev, "fail to set pad hub power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(phy->dev, "set pad hub power success (%d)\n", on);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, skip pad hub power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static int asus_otg_get_pad_camera_power(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_CAM_PWR_EN);
+		if (pin_level < 0) {
+			dev_err(phy->dev, "get pad camera power status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(phy->dev, "get pad camera power status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, cannot get camera power status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_otg_set_pad_camera_power(bool on)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_CAM_PWR_EN, on);
+		if (ret < 0) {
+			dev_err(phy->dev, "fail to set pad camera power! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(phy->dev, "set pad camera power success (%d)\n", on);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, skip pad camera power control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static int asus_otg_get_pad_cbus_en(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int pin_level = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		pin_level = AX_MicroP_getGPIOOutputPinLevel(OUT_uP_MHL_CBUS_EN);
+		if (pin_level < 0) {
+			dev_err(phy->dev, "get pad cbus enable status failed! (%d)\n", pin_level);
+		} else {
+			dev_dbg(phy->dev, "get pad cbus enable status success (%d)\n", pin_level);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, cannot get cbus enable status! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return pin_level;
+}
+
+static int asus_otg_set_pad_cbus_en(bool on)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int ret = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		ret = AX_MicroP_setGPIOOutputPin(OUT_uP_MHL_CBUS_EN, on);
+		if (ret < 0) {
+			dev_err(phy->dev, "fail to set pad cbus enable! (%d)(%d)\n", on, ret);
+		} else {
+			dev_dbg(phy->dev, "set pad cbus enable success (%d)\n", on);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, skip pad cbus enable control! (%d)(%d)(%d)\n",
+			on, AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return ret;
+}
+
+static int asus_otg_get_microp_mode(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int microp_state = -1;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		microp_state = AX_MicroP_getOPState();
+		if (microp_state < 0) {
+			dev_err(phy->dev, "get microp state failed! (%d)\n", microp_state);
+		} else {
+			dev_dbg(phy->dev, "get microp state success (%d)\n", microp_state);
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, cannot get microp state! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+
+	return microp_state;
+}
+
+static void asus_otg_set_microp_mode(enum microp_mode_sw mode)
+{
+	int ret = 0, retries = 0;
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		switch (mode) {
+		case MICROP_SLEEP:
+			ret = AX_MicroP_enterSleeping();
+			if (ret >= 0) {
+				while (st_MICROP_Sleep != AX_MicroP_getOPState() && retries++ < 5);
+
+				if (retries <= 5)
+					dev_dbg(phy->dev, "microp enter sleep success\n");
+				else
+					dev_err(phy->dev, "microp fail to enter sleep!\n");
+			} else {
+				dev_err(phy->dev, "fail to set microp to sleep! (%d)\n", ret);
+			}
+			break;
+		case MICROP_ACTIVE:
+			ret = AX_MicroP_enterResuming();
+			if (ret >= 0) {
+                            dev_dbg(phy->dev, "microp exit sleep success\n");
+			} else {
+				dev_err(phy->dev, "fail to set microp to active! (%d)\n", ret);
+			}
+			break;
+		default:
+				dev_err(phy->dev, "unknown microp mode! (%d)\n", mode);
+			break;
+		}
+	} else {
+		dev_info(phy->dev, "not in pad, cannot set microp state! (%d)(%d)\n",
+			AX_MicroP_IsP01Connected(), pad_exist());
+	}
+}
+//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+static ssize_t otg_carkit_switch_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "Asus-carkit\n");
+}
+
+static ssize_t otg_carkit_switch_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%d\n", g_carkit_state);
+}
+
+int CarKitNotifyInitialize(void)
+{
+	int ret = 0;
+	switch_otg_carkit.name = "dock";
+	switch_otg_carkit.print_state = otg_carkit_switch_state;
+	switch_otg_carkit.print_name = otg_carkit_switch_name;
+	ret = switch_dev_register(&switch_otg_carkit);
+	if (ret < 0) {
+	    printk("%s: Unable to register switch dev! %d\n", __FUNCTION__, ret);
+	    return -1;
+	}
+	return 0;
+}
+
+#ifdef CONFIG_CHARGER_ASUS
+static void asus_otg_charger_ready(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+
+	printk("OTG: Charger is ready\n");
+	if (!g_charger_ready) {
+		g_charger_ready= 1;
+		queue_work(system_nrt_wq, &motg->sm_work);
+	}
+}
+#endif
+
+static void asus_otg_set_id_state(int online)
+{
+	struct msm_otg *motg = the_msm_otg;
+
+	if (g_A68_hwID < A68_PR) {
+		printk("[usb_otg] OTG not support for the HW!(%d)\n", g_A68_hwID);
+		return;
+	}
+
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
+	if (!g_otg_check_at_boot) {
+		printk("[usb_otg] not handle ID events before boot completed (%d)\n", online);
+		return;
+	}
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+	if (AX_MicroP_IsP01Connected() && pad_exist()) {
+		printk("[usb_otg] ignore abnormal ID events in pad (%d)\n", online);
+		return;
+	}
+
+	if (USB_AUTO != motg->otg_mode) {
+		printk("[usb_otg] OTG not support for non AUTO mode!(%d)\n", motg->otg_mode);
+		return;
+	}
+
+	if((online && (g_otg_mode > ASUS_OTG_DISCONNECT)) || ((!online) && (g_otg_mode <= ASUS_OTG_DISCONNECT))){
+		printk("[usb_otg] ID already set to %d (%d)\n", online, g_otg_mode);
+		return;
+	}
+
+	if (online) {
+		printk("[usb_otg] OTG ID set\n");
+		ASUSEvtlog("[USB] OTG ID set\n");
+		g_otg_mode = ASUS_OTG_CONNECT;
+	} else {
+		printk("[usb_otg] OTG ID clear\n");
+		ASUSEvtlog("[USB] OTG ID clear\n");
+		g_otg_mode = ASUS_OTG_DISCONNECT;
+	}
+
+	if (atomic_read(&motg->pm_suspended))
+		motg->sm_work_pending = true;
+	else
+		queue_work(system_nrt_wq, &motg->sm_work);
+}
+//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+static int asus_otg_get_id_state(void)
+{
+	int otg_state = 0;
+
+	otg_state = get_otg_state();
+
+	printk("[usb_otg] otg state (%d)\n", otg_state);
+
+	return otg_state;
+}
+
+static void asus_otg_check_at_boot(struct work_struct *w)
+{
+	if (!g_otg_check_at_boot) {
+		g_otg_check_at_boot = 1;
+		if (asus_otg_get_id_state()) {
+			printk("[usb_otg] otg connected at boot\n");
+			asus_otg_set_id_state(1);
+		}
+	}
+}
+//ASUS_BSP--- BennyCheng "add otg check at boot"
+
+/* ASUS_BSP+++ BennyCheng "support mydp ac charger" */
+static void asus_otg_mydp_ac_state(int online)
+{
+	g_mydp_ac_state = online;
+	printk("[usb_otg] mydp ac event (%d)\n", g_mydp_ac_state);
+	if (asus_otg_bsv && !pad_exist()) {
+		if (g_mydp_ac_state) {
+			g_charger_mode = ASUS_CHG_SRC_DC;
+			asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+			ASUSEvtlog("[USB] set_chg_mode: MYDP AC\n");
+			printk("[USB] set_chg_mode: MYDP AC\n");
+		}
+	}
+}
+/* ASUS_BSP--- BennyCheng "support mydp ac charger" */
+
+//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+static void asus_otg_host_mode_prepare(void)
+{
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	g_suspend_delay_work_run = 0;
+	g_keep_power_on = 0;
+	g_host_none_mode = 0;
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+	//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
+	schedule_delayed_work(&asus_otg_suspend_check_work,
+		msecs_to_jiffies(MSM_OTG_SUSPEND_CHECK_TIMEOUT));
+	//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
+}
+
+static void asus_otg_host_mode_cleanup(void)
+{
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	cancel_work_sync(&late_resume_work);
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+	//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
+	cancel_delayed_work_sync(&asus_otg_suspend_check_work);
+	//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
+}
+
+static void asus_otg_microp_cb_delay_work(struct work_struct *w)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	asus_otg_usb_mhl_switch(MHL_PORT);
+
+	if (USB_AUTO == motg->otg_mode) {
+		asus_otg_mode_switch(USB_AUTO);
+
+		asus_otg_set_pad_hub_power(1);
+		asus_otg_set_pad_camera_power(1);
+	} else {
+		if (USB_HOST == motg->otg_mode) {
+			asus_otg_set_pad_hub_power(1);
+			asus_otg_set_pad_camera_power(1);
+		}
+		printk("[usb_otg] not auto mode! skip switch! (%d)\r\n", motg->otg_mode);
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+static int asus_otg_microp_event(struct notifier_block *this, unsigned long event, void *ptr)
+{
+	struct msm_otg *motg = the_msm_otg;
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
+	switch (event) {
+		case P01_ADD:
+			printk("[usb_otg] Microp ADD Event +++\n");
+
+			cancel_delayed_work_sync(&microp_cb_delay_work);
+
+			asus_otg_apq_mdm_switch(USB_APQ);
+			asus_otg_usb_mhl_switch(MHL_PORT);
+
+			asus_otg_vbus_out_enable(false, 1);
+
+			asus_otg_set_pad_camera_power(0);
+			asus_otg_set_pad_hub_power(0);
+
+			queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 2 * HZ);
+
+			printk("[usb_otg] Microp ADD Event ---\n");
+		break;
+		case P01_REMOVE:
+			printk("[usb_otg] Microp REMOVE Event +++\n");
+
+			cancel_delayed_work_sync(&microp_cb_delay_work);
+
+			if (USB_AUTO == motg->otg_mode) {
+				asus_otg_host_mode_cleanup();
+
+				if (asus_otg_bsv) {
+					set_bit(B_SESS_VLD, &motg->inputs);
+				} else {
+					clear_bit(B_SESS_VLD, &motg->inputs);
+				}
+
+				asus_otg_mode_switch(USB_AUTO);
+			} else {
+				printk("[usb_otg] not auto mode! skip switch! (%d)\r\n", motg->otg_mode);
+			}
+
+			asus_otg_vbus_out_enable(false, 1);
+
+			asus_otg_usb_mhl_switch(USB_PORT);
+			asus_otg_apq_mdm_switch(USB_MDM);
+
+			printk("[usb_otg] Microp REMOVE Event ---\n");
+		break;
+	default:
+		break;
+	}
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+        return NOTIFY_DONE;
+}
+
+static struct notifier_block asus_otg_microp_notifier = {
+        .notifier_call = asus_otg_microp_event,
+        .priority = USB_MP_NOTIFY,
+};
+//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+static bool asus_otg_keep_power_on_check(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	struct file *flp = NULL;
+	mm_segment_t oldfs;
+	int index = 0, num = 0, ret = 0;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+
+	num = sizeof(usb_device_list)/sizeof(usb_device_list[0]);
+
+	for(index = 0; index < num; index++) {
+		flp = filp_open(usb_device_list[index], O_RDONLY, S_IRWXU);
+		if(IS_ERR(flp))
+			continue;
+		else {
+			ret = 1;
+			filp_close(flp, NULL);
+			dev_info(phy->dev, "%s exist\n", usb_device_list[index]);
+			break;
+		}
+	}
+
+	set_fs(oldfs);
+
+	return ret;
+}
+
+static void asus_otg_host_auto_switch(enum host_auto_sw req_mode)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_otg *otg = motg->phy.otg;
+
+	switch (req_mode) {
+	case HOST_AUTO_NONE:
+		printk("[usb_otg] switch to auto none mode\r\n");
+		set_bit(ID, &motg->inputs);
+		clear_bit(B_SESS_VLD, &motg->inputs);
+		g_host_none_mode = 1;
+		break;
+	case HOST_AUTO_HOST:
+		printk("[usb_otg] switch to auto host mode\r\n");
+		clear_bit(ID, &motg->inputs);
+		g_host_none_mode = 0;
+		break;
+	default:
+		printk("[usb_otg] unknown auto mode!!! (%d)\r\n", req_mode);
+		goto out;
+	}
+
+	pm_runtime_resume(otg->phy->dev);
+	queue_work(system_nrt_wq, &motg->sm_work);
+out:
+	return;
+}
+
+void asus_otg_host_power_off(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	if (g_host_mode) {
+		dev_info(phy->dev, "%s()+++ (%d)(%d)\n", __func__, g_keep_power_on, g_host_none_mode);
+		if (!g_host_none_mode) {
+			g_suspend_delay_work_run = 1;
+
+			asus_otg_host_auto_switch(HOST_AUTO_NONE);
+
+			if (AX_MicroP_IsP01Connected() && pad_exist()) {
+				asus_otg_set_microp_mode(MICROP_SLEEP);
+			} else {
+				asus_otg_vbus_out_enable(false, 0);
+			}
+		}
+		dev_info(phy->dev, "%s()---\n", __func__);
+	}
+}
+
+static void asus_otg_early_suspend_delay_work(struct work_struct *w)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	g_suspend_delay_work_run = 1;
+
+	if (g_host_mode) {
+		g_keep_power_on = asus_otg_keep_power_on_check();
+		dev_info(phy->dev, "g_keep_power_on (%d)\n", g_keep_power_on);
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			if (!g_keep_power_on) {
+				asus_otg_host_auto_switch(HOST_AUTO_NONE);
+
+				if (asus_otg_get_pad_cbus_en()) {
+					asus_otg_set_pad_cbus_en(0);
+				}
+
+				asus_otg_set_microp_mode(MICROP_SLEEP);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the very end of msm_otg_pm_suspend
+				 */
+				if (asus_otg_get_pad_cbus_en()) {
+					asus_otg_set_pad_cbus_en(0);
+				}
+
+				if (asus_otg_get_pad_camera_power()) {
+					asus_otg_set_pad_camera_power(0);
+				}
+
+				wake_unlock(&motg->wlock);
+			}
+		} else {
+			if (!g_keep_power_on) {
+				asus_otg_host_auto_switch(HOST_AUTO_NONE);
+				asus_otg_vbus_out_enable(false, 0);
+			} else {
+				/*
+				 * If a usb storage is plugged, unlocking lock here to allow the usb storgae enter pm suspend and
+				 * turning off the power of hub in the very end of msm_otg_pm_suspend
+				 */
+				wake_unlock(&motg->wlock);
+			}
+		}
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+static void asus_otg_late_resume_work(struct work_struct *w)
+{
+	int wait = 0;
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_otg *otg = motg->phy.otg;
+
+	dev_info(motg->phy.dev, "%s()+++\n", __func__);
+
+	while ((otg->phy->state != OTG_STATE_B_IDLE) && (wait++ < 10)) {
+		msleep(100);
+	}
+
+	if (wait >= 10) {
+		dev_err(motg->phy.dev, "not b_idle state, skip host auto switch (%d)\n", otg->phy->state);
+		return;
+	}
+
+	asus_otg_host_auto_switch(HOST_AUTO_HOST);
+
+	dev_info(motg->phy.dev, "%s()--- (%d)\n", __func__, wait);
+}
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+static void asus_otg_early_suspend(struct early_suspend *h)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	if (g_host_mode) {
+		wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
+		cancel_work_sync(&late_resume_work);
+		queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+static void asus_otg_late_resume(struct early_suspend *h)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	if (g_host_mode) {
+		cancel_delayed_work_sync(&early_suspend_delay_work);
+		if (g_suspend_delay_work_run) {
+			if (g_host_mode) {
+				queue_work(system_nrt_wq, &late_resume_work);
+			}
+			g_suspend_delay_work_run = 0;
+		}
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_otg_set_microp_mode(MICROP_ACTIVE);
+
+			if (!asus_otg_get_pad_cbus_en()) {
+				asus_otg_set_pad_cbus_en(1);
+			}
+
+			asus_otg_set_pad_hub_power(1);
+			asus_otg_set_pad_camera_power(1);
+		} else {
+			asus_otg_vbus_out_enable(true, 0);
+		}
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+struct early_suspend asus_otg_early_suspend_handler = {
+    .level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
+    .suspend = asus_otg_early_suspend,
+    .resume = asus_otg_late_resume,
+};
+
+#elif defined(CONFIG_FB)
+
+static void asus_otg_early_suspend(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	if (g_host_mode) {
+		wake_lock_timeout(&early_suspend_wlock, 5 * HZ);
+		cancel_work_sync(&late_resume_work);
+		queue_delayed_work_on(0, early_suspend_delay_wq, &early_suspend_delay_work, 4 * HZ);
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+static void asus_otg_late_resume(void)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+
+	dev_info(phy->dev, "%s()+++\n", __func__);
+
+	if (g_host_mode) {
+		cancel_delayed_work_sync(&early_suspend_delay_work);
+		if (g_suspend_delay_work_run) {
+			if (g_host_mode) {
+				queue_work(system_nrt_wq, &late_resume_work);
+			}
+			g_suspend_delay_work_run = 0;
+		}
+
+		if (AX_MicroP_IsP01Connected() && pad_exist()) {
+			asus_otg_set_microp_mode(MICROP_ACTIVE);
+
+			if (!asus_otg_get_pad_cbus_en()) {
+				asus_otg_set_pad_cbus_en(1);
+			}
+
+			asus_otg_set_pad_hub_power(1);
+			asus_otg_set_pad_camera_power(1);
+		} else {
+			asus_otg_vbus_out_enable(true, 0);
+		}
+	}
+
+	dev_info(phy->dev, "%s()---\n", __func__);
+}
+
+static int asus_otg_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	static int blank_old = 0;
+	int *blank;
+
+	if (evdata && evdata->data && event == FB_EVENT_BLANK) {
+		blank = evdata->data;
+		if (*blank == FB_BLANK_UNBLANK) {
+			if (blank_old == FB_BLANK_POWERDOWN) {
+				blank_old = FB_BLANK_UNBLANK;
+				asus_otg_late_resume();
+			}
+		} else if (*blank == FB_BLANK_POWERDOWN) {
+			if (blank_old == 0 || blank_old == FB_BLANK_UNBLANK) {
+				blank_old = FB_BLANK_POWERDOWN;
+				asus_otg_early_suspend();
+			}
+		}
+	}
+
+	return 0;
+}
+#endif
+//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
+static int myxtoi(const char *name)
+{
+	int val = 0;
+
+	for (;; name++) {
+		switch (*name) {
+		case '0' ... '9':
+			val = 16*val+(*name-'0');
+			break;
+		case 'A' ... 'F':
+			val = 16*val+(*name-'A'+10);
+			break;
+		case 'a' ... 'f':
+			val = 16*val+(*name-'a'+10);
+			break;
+		default:
+			return val;
+		}
+	}
+}
+//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
+
+//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
+static void asus_otg_suspend_check(struct work_struct *work)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_otg *otg = motg->phy.otg;
+
+	dev_info(motg->phy.dev, "check otg suspend status (%d)\n", pm_runtime_suspended(otg->phy->dev));
+
+	if (!pm_runtime_suspended(otg->phy->dev)) {
+		wake_unlock(&motg->wlock);
+	}
+}
+//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
 
 static const char *timer_string(int bit)
 {
@@ -1276,9 +1702,9 @@ static void msm_otg_del_timer(struct msm_otg *motg)
 
 static void msm_otg_start_timer(struct msm_otg *motg, int time, int bit)
 {
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "reduce delay time to 0 for otg timer"
 	time = 0;
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP--- BennyCheng "reduce delay time to 0 for otg timer"
 	clear_bit(bit, &motg->tmouts);
 	motg->active_tmout = bit;
 	pr_debug("starting %s timer\n", timer_string(bit));
@@ -1375,9 +1801,12 @@ static int msm_otg_set_suspend(struct usb_phy *phy, int suspend)
 	if (aca_enabled())
 		return 0;
 
-	if (atomic_read(&motg->in_lpm) == suspend)
-		return 0;
-
+	/*
+	 * UDC and HCD call usb_phy_set_suspend() to enter/exit LPM
+	 * during bus suspend/resume.  Update the relevant state
+	 * machine inputs and trigger LPM entry/exit.  Checking
+	 * in_lpm flag would avoid unnecessary work scheduling.
+	 */
 	if (suspend) {
 		switch (phy->state) {
 		case OTG_STATE_A_WAIT_BCON:
@@ -1387,14 +1816,16 @@ static int msm_otg_set_suspend(struct usb_phy *phy, int suspend)
 		case OTG_STATE_A_HOST:
 			pr_debug("host bus suspend\n");
 			clear_bit(A_BUS_REQ, &motg->inputs);
-			queue_work(system_nrt_wq, &motg->sm_work);
+			if (!atomic_read(&motg->in_lpm))
+				queue_work(system_nrt_wq, &motg->sm_work);
 			break;
 		case OTG_STATE_B_PERIPHERAL:
 			pr_debug("peripheral bus suspend\n");
 			if (!(motg->caps & ALLOW_LPM_ON_DEV_SUSPEND))
 				break;
 			set_bit(A_BUS_SUSPEND, &motg->inputs);
-			queue_work(system_nrt_wq, &motg->sm_work);
+			if (!atomic_read(&motg->in_lpm))
+				queue_work(system_nrt_wq, &motg->sm_work);
 			break;
 
 		default:
@@ -1402,20 +1833,29 @@ static int msm_otg_set_suspend(struct usb_phy *phy, int suspend)
 		}
 	} else {
 		switch (phy->state) {
+		case OTG_STATE_A_WAIT_BCON:
+			/* Remote wakeup or resume */
+			set_bit(A_BUS_REQ, &motg->inputs);
+			/* ensure hardware is not in low power mode */
+			if (atomic_read(&motg->in_lpm))
+				pm_runtime_resume(phy->dev);
+			break;
 		case OTG_STATE_A_SUSPEND:
 			/* Remote wakeup or resume */
 			set_bit(A_BUS_REQ, &motg->inputs);
 			phy->state = OTG_STATE_A_HOST;
 
 			/* ensure hardware is not in low power mode */
-			pm_runtime_resume(phy->dev);
+			if (atomic_read(&motg->in_lpm))
+				pm_runtime_resume(phy->dev);
 			break;
 		case OTG_STATE_B_PERIPHERAL:
 			pr_debug("peripheral bus resume\n");
 			if (!(motg->caps & ALLOW_LPM_ON_DEV_SUSPEND))
 				break;
 			clear_bit(A_BUS_SUSPEND, &motg->inputs);
-			queue_work(system_nrt_wq, &motg->sm_work);
+			if (atomic_read(&motg->in_lpm))
+				queue_work(system_nrt_wq, &motg->sm_work);
 			break;
 		default:
 			break;
@@ -1434,17 +1874,22 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	struct usb_bus *bus = phy->otg->host;
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	int cnt = 0;
-	bool host_bus_suspend, device_bus_suspend, dcp;
+	bool host_bus_suspend, device_bus_suspend, dcp, prop_charger;
 	u32 phy_ctrl_val = 0, cmd_val;
 	unsigned ret;
 	u32 portsc;
 
-	if (atomic_read(&motg->in_lpm))
-		return 0;
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_lock(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	mutex_lock(&msm_otg_mutex);
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	if (atomic_read(&motg->in_lpm)) {
+		//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+		dev_info(phy->dev, "%s: Already suspended\n", __func__);
+		mutex_unlock(&asus_otg_mutex);
+		//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+		return 0;
+	}
 
 	disable_irq(motg->irq);
 	host_bus_suspend = !test_bit(MHL, &motg->inputs) && phy->otg->host &&
@@ -1453,21 +1898,24 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		test_bit(A_BUS_SUSPEND, &motg->inputs) &&
 		motg->caps & ALLOW_LPM_ON_DEV_SUSPEND;
 	dcp = motg->chg_type == USB_DCP_CHARGER;
+	prop_charger = motg->chg_type == USB_PROPRIETARY_CHARGER;
 
 	/*
 	 * Abort suspend when,
 	 * 1. charging detection in progress due to cable plug-in
 	 * 2. host mode activation in progress due to Micro-A cable insertion
 	 */
-	//ASUS_BSP+++ "[USB][NA][Fix] not check vbus state during suspend"
+
+	//ASUS_BSP+++ BennyCheng "not check vbus state during suspend"
 	/*
 	if ((test_bit(B_SESS_VLD, &motg->inputs) && !device_bus_suspend &&
-		!dcp) || test_bit(A_BUS_REQ, &motg->inputs)) {
+		!dcp && !prop_charger) || test_bit(A_BUS_REQ, &motg->inputs)) {
 		enable_irq(motg->irq);
 		return -EBUSY;
 	}
 	*/
-	//ASUS_BSP--- "[USB][NA][Fix] not check vbus state during suspend"
+	//ASUS_BSP--- BennyCheng "not check vbus state during suspend"
+
 	/*
 	 * Chipidea 45-nm PHY suspend sequence:
 	 *
@@ -1514,10 +1962,10 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		dev_err(phy->dev, "Unable to suspend PHY\n");
 		msm_otg_reset(phy);
 		enable_irq(motg->irq);
-		//ASUS_BSP+++ BennyCheng "release mutex & wakelock when suspend failed"
+		//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
 		wake_unlock(&motg->wlock);
-		mutex_unlock(&msm_otg_mutex);
-		//ASUS_BSP--- BennyCheng "release mutex & wakelock when suspend failed"
+		mutex_unlock(&asus_otg_mutex);
+		//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 		return -ETIMEDOUT;
 	}
 
@@ -1535,7 +1983,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	 */
 	cmd_val = readl_relaxed(USB_USBCMD);
 	if (host_bus_suspend || device_bus_suspend ||
-		(motg->pdata->otg_control == OTG_PHY_CONTROL && dcp))
+		(motg->pdata->otg_control == OTG_PHY_CONTROL))
 		cmd_val |= ASYNC_INTR_CTRL | ULPI_STP_CTRL;
 	else
 		cmd_val |= ULPI_STP_CTRL;
@@ -1609,13 +2057,15 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	enable_irq(motg->irq);
 	wake_unlock(&motg->wlock);
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
 	if (g_host_mode) {
-		cancel_delayed_work(&msm_otg_suspend_check_work);
+		cancel_delayed_work(&asus_otg_suspend_check_work);
 	}
+	//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
 
-	mutex_unlock(&msm_otg_mutex);
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_unlock(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 
 	dev_info(phy->dev, "USB in low power mode\n");
 
@@ -1632,12 +2082,17 @@ static int msm_otg_resume(struct msm_otg *motg)
 	u32 phy_ctrl_val = 0;
 	unsigned ret;
 
-	if (!atomic_read(&motg->in_lpm))
-		return 0;
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_lock(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	mutex_lock(&msm_otg_mutex);
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	if (!atomic_read(&motg->in_lpm)) {
+		//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+		dev_info(phy->dev, "%s: Already resumed\n", __func__);
+		mutex_unlock(&asus_otg_mutex);
+		//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+		return 0;
+	}
 
 	wake_lock(&motg->wlock);
 
@@ -1731,14 +2186,16 @@ skip_phy_resume:
 	if (motg->async_irq)
 		disable_irq(motg->async_irq);
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "add otg pm lock timeout check"
 	if (g_host_mode) {
-		schedule_delayed_work(&msm_otg_suspend_check_work,
+		schedule_delayed_work(&asus_otg_suspend_check_work,
 			msecs_to_jiffies(MSM_OTG_SUSPEND_CHECK_TIMEOUT));
 	}
+	//ASUS_BSP--- BennyCheng "add otg pm lock timeout check"
 
-	mutex_unlock(&msm_otg_mutex);
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_unlock(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 
 	dev_info(phy->dev, "USB exited from low power mode\n");
 
@@ -1748,13 +2205,26 @@ skip_phy_resume:
 
 static int msm_otg_notify_host_mode(struct msm_otg *motg, bool host_mode)
 {
+	int ret;
+
 	if (!psy)
 		goto psy_not_supported;
 
-	if (host_mode)
-		power_supply_set_scope(psy, POWER_SUPPLY_SCOPE_SYSTEM);
-	else
-		power_supply_set_scope(psy, POWER_SUPPLY_SCOPE_DEVICE);
+	if (host_mode) {
+		ret = power_supply_set_scope(psy, POWER_SUPPLY_SCOPE_SYSTEM);
+	} else {
+		ret = power_supply_set_scope(psy, POWER_SUPPLY_SCOPE_DEVICE);
+		/*
+		 * VBUS comparator is disabled by PMIC charging driver
+		 * when SYSTEM scope is selected.  For ID_GND->ID_A
+		 * transition, give 50 msec delay so that PMIC charger
+		 * driver detect the VBUS and ready for accepting
+		 * charging current value from USB.
+		 */
+		if (test_bit(ID_A, &motg->inputs))
+			msleep(50);
+	}
+	return ret;
 
 psy_not_supported:
 	dev_dbg(motg->phy.dev, "Power Supply doesn't support USB charger\n");
@@ -1764,14 +2234,11 @@ psy_not_supported:
 #ifndef CONFIG_BATTERY_ASUS
 static int msm_otg_notify_chg_type(struct msm_otg *motg)
 {
-	static int charger_type;
-
+	int charger_type;
 	/*
 	 * TODO
 	 * Unify OTG driver charger types and power supply charger types
 	 */
-	if (charger_type == motg->chg_type)
-		return 0;
 
 	if (motg->chg_type == USB_SDP_CHARGER)
 		charger_type = POWER_SUPPLY_TYPE_USB;
@@ -1786,19 +2253,11 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		motg->chg_type == USB_ACA_C_CHARGER))
 		charger_type = POWER_SUPPLY_TYPE_USB_ACA;
 	else
-		charger_type = POWER_SUPPLY_TYPE_BATTERY;
+		charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 
-	if (!psy) {
-		pr_err("No USB power supply registered!\n");
-		return -EINVAL;
-	}
-
-	pr_debug("setting usb power supply type %d\n", charger_type);
-	power_supply_set_supply_type(psy, charger_type);
-	return 0;
+	return pm8921_set_usb_power_supply_type(charger_type);
 }
-#endif
-#ifndef CONFIG_CHARGER_ASUS
+
 static int msm_otg_notify_power_supply(struct msm_otg *motg, unsigned mA)
 {
 
@@ -1846,13 +2305,14 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 			"Failed notifying %d charger type to PMIC\n",
 							motg->chg_type);
 	#endif
-	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 	if (motg->cur_power == mA)
 		return;
 
 	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	#ifndef CONFIG_CHARGER_ASUS
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
+
 	/*
 	 *  Use Power Supply API if supported, otherwise fallback
 	 *  to legacy pm8921 API.
@@ -1887,6 +2347,7 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 	struct msm_otg *motg = container_of(otg->phy, struct msm_otg, phy);
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	struct usb_hcd *hcd;
+	int rc;
 
 	if (!otg->host)
 		return;
@@ -1907,6 +2368,17 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 		 */
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(OTG_STATE_A_HOST);
+
+		/*
+		 * Increase 3.3V rail voltage to increase cross over voltage.
+		 * This is required to get some full speed audio headsets
+		 * working.
+		 */
+		rc = regulator_set_voltage(hsusb_3p3, USB_PHY_3P3_VOL_MAX,
+				USB_PHY_3P3_VOL_MAX);
+		if (rc)
+			dev_dbg(otg->phy->dev, "unable to increase 3.3V rail\n");
+
 		usb_add_hcd(hcd, hcd->irq, IRQF_SHARED);
 	} else {
 		dev_dbg(otg->phy->dev, "host off\n");
@@ -1921,6 +2393,11 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 		if (pdata->otg_control == OTG_PHY_CONTROL)
 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
 				ULPI_CLR(ULPI_PWR_CLK_MNG_REG));
+
+		rc = regulator_set_voltage(hsusb_3p3, USB_PHY_3P3_VOL_MIN,
+				USB_PHY_3P3_VOL_MAX);
+		if (rc)
+			dev_dbg(otg->phy->dev, "unable to restore 3.075V rail\n");
 	}
 }
 
@@ -2003,14 +2480,14 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 	int ret;
 	static bool vbus_is_on;
 
-	//ASUS_BSP+++ BennyCheng "remove vbus power control for usb host"
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 	/*
-	 * A68 does not support USB host mode, so it is not required to request power from PMIC.
+	 * A80 does not support USB host mode, so it is not required to request power from PMIC.
 	 * USB host mode only supports when A68 is plugged to a Pad or a Pad with a dock. For these cases,
 	 * Vbus power is provided by external power source.
 	 */
 	return;
-	//ASUS_BSP--- BennyCheng "remove vbus power control for usb host"
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 	if (vbus_is_on == on)
 		return;
@@ -2066,20 +2543,22 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 		return -ENODEV;
 	}
 
-	//ASUS_BSP+++ BennyCheng "remove vbus power control for usb host"
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 	/*
-	 * A68 does not support USB host mode, so it is not required to request power from PMIC.
+	 * A80 does not support USB host mode, so it is not required to request power from PMIC.
 	 * USB host mode only supports when A68 is plugged to a Pad or a Pad with a dock. For these cases,
 	 * Vbus power is provided by external power source.
-	if (!motg->pdata->vbus_power && host) {
-		vbus_otg = devm_regulator_get(motg->phy.dev, "vbus_otg");
-		if (IS_ERR(vbus_otg)) {
-			pr_err("Unable to get vbus_otg\n");
-			return -ENODEV;
+	if (!machine_is_apq8064_mako()) {
+		if (!motg->pdata->vbus_power && host) {
+			vbus_otg = devm_regulator_get(motg->phy.dev, "vbus_otg");
+			if (IS_ERR(vbus_otg)) {
+				pr_err("Unable to get vbus_otg\n");
+				return -ENODEV;
+			}
 		}
 	}
 	*/
-	//ASUS_BSP--- BennyCheng "remove vbus power control for usb host"
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 	if (!host) {
 		if (otg->phy->state == OTG_STATE_A_HOST) {
@@ -2232,11 +2711,6 @@ static int msm_otg_mhl_register_callback(struct msm_otg *motg,
 {
 	struct usb_phy *phy = &motg->phy;
 	int ret;
-
-	if (!motg->pdata->mhl_enable) {
-		dev_dbg(phy->dev, "MHL feature not enabled\n");
-		return -ENODEV;
-	}
 
 	if (motg->pdata->otg_control != OTG_PMIC_CONTROL ||
 			!motg->pdata->pmic_id_irq) {
@@ -2697,6 +3171,8 @@ static void msm_chg_block_on(struct msm_otg *motg)
 		udelay(20);
 		break;
 	case SNPS_28NM_INTEGRATED_PHY:
+		/* disable DP and DM pull down resistors */
+		ulpi_write(phy, 0x6, 0xC);
 		/* Clear charger detecting control bits */
 		ulpi_write(phy, 0x1F, 0x86);
 		/* Clear alt interrupt latch and enable bits */
@@ -2754,8 +3230,38 @@ static const char *chg_to_string(enum usb_chg_type chg_type)
 	}
 }
 
-#define MSM_CHG_DCD_POLL_TIME		(100 * HZ/1000) /* 100 msec */
-#define MSM_CHG_DCD_MAX_RETRIES		6 /* Tdcd_tmout = 6 * 100 msec */
+#define MSM_CHECK_TA_DELAY (5 * HZ)
+#define PORTSC_LS  (3 << 10) /* Read - Port's Line status */
+static void msm_ta_detect_work(struct work_struct *w)
+{
+	struct msm_otg *motg = container_of(w, struct msm_otg, check_ta_work.work);
+	struct usb_otg *otg = motg->phy.otg;
+
+	pr_debug("msm_ta_detect_work: ta detection work\n");
+
+	/* Presence of FRame Index or FRINDEX rollover implies USB communication */
+	if( (readl(USB_FRINDEX) != 0) || ( readl(USB_USBSTS) & (1<<3) ) ) {
+		pr_info("msm_ta_detect_work: USB exit ta detection - frindex\n");
+		return;
+	}
+
+	if ((readl(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
+		pr_info("msm_ta_detect_work: ta dectection success\n");
+		/* inform to user space that SDP is no longer detected */
+		msm_otg_notify_charger(motg, 0);
+		motg->chg_state = USB_CHG_STATE_DETECTED;
+		motg->chg_type = USB_DCP_CHARGER;
+		motg->cur_power = 0;
+		msm_otg_start_peripheral(otg, 0);
+		otg->phy->state = OTG_STATE_B_IDLE;
+		schedule_work(&motg->sm_work);
+		return;
+	}
+	schedule_delayed_work(&motg->check_ta_work, MSM_CHECK_TA_DELAY);
+}
+
+#define MSM_CHG_DCD_TIMEOUT		(750 * HZ/1000) /* 750 msec */
+#define MSM_CHG_DCD_POLL_TIME		(50 * HZ/1000) /* 50 msec */
 #define MSM_CHG_PRIMARY_DET_TIME	(50 * HZ/1000) /* TVDPSRC_ON */
 #define MSM_CHG_SECONDARY_DET_TIME	(50 * HZ/1000) /* TVDMSRC_ON */
 
@@ -2775,16 +3281,15 @@ static void asus_chg_detect_work(struct work_struct *w)
 {
 	struct msm_otg *motg = the_msm_otg;
 	if(g_usb_boot == MSM_OTG_USB_BOOT_DOWN){
-		if(msm_otg_bsv){
+		if(asus_otg_bsv){
 			g_charger_mode = ASUS_CHG_SRC_UNKNOWN;
 			asus_chg_set_chg_mode(ASUS_CHG_SRC_UNKNOWN);
 			//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
 			ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
 			//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 			printk("[USB] set_chg_mode: UNKNOWN\n");
-		}
-		else{
-			printk("[USB] asus_chg_detect_work: BSV is not set,need re-check.(%d,%d)\n",msm_otg_bsv,test_bit(B_SESS_VLD, &motg->inputs));
+		}else{
+			printk("[USB] asus_chg_detect_work: BSV is not set,need re-check.(%d,%d)\n",asus_otg_bsv,test_bit(B_SESS_VLD, &motg->inputs));
 			queue_work(system_nrt_wq, &motg->sm_work);
 		}
 	}else{
@@ -2816,14 +3321,20 @@ static void msm_chg_detect_work(struct work_struct *w)
 	switch (motg->chg_state) {
 	case USB_CHG_STATE_UNDEFINED:
 		msm_chg_block_on(motg);
-		if (motg->pdata->enable_dcd)
-			msm_chg_enable_dcd(motg);
+		msm_chg_enable_dcd(motg);
 		msm_chg_enable_aca_det(motg);
 		motg->chg_state = USB_CHG_STATE_WAIT_FOR_DCD;
-		motg->dcd_retries = 0;
+		motg->dcd_time = 0;
 		delay = MSM_CHG_DCD_POLL_TIME;
 		break;
 	case USB_CHG_STATE_WAIT_FOR_DCD:
+		if (slimport_is_connected()) {
+			msm_chg_block_off(motg);
+			motg->chg_state = USB_CHG_STATE_DETECTED;
+			motg->chg_type = USB_SDP_CHARGER;
+			queue_work(system_nrt_wq, &motg->sm_work);
+			return;
+		}
 		if (msm_chg_mhl_detect(motg)) {
 			msm_chg_block_off(motg);
 			motg->chg_state = USB_CHG_STATE_DETECTED;
@@ -2844,12 +3355,11 @@ static void msm_chg_detect_work(struct work_struct *w)
 				break;
 			}
 		}
-		if (motg->pdata->enable_dcd)
-			is_dcd = msm_chg_check_dcd(motg);
-		tmout = ++motg->dcd_retries == MSM_CHG_DCD_MAX_RETRIES;
+		is_dcd = msm_chg_check_dcd(motg);
+		motg->dcd_time += MSM_CHG_DCD_POLL_TIME;
+		tmout = motg->dcd_time >= MSM_CHG_DCD_TIMEOUT;
 		if (is_dcd || tmout) {
-			if (motg->pdata->enable_dcd)
-				msm_chg_disable_dcd(motg);
+			msm_chg_disable_dcd(motg);
 			msm_chg_enable_primary_det(motg);
 			delay = MSM_CHG_PRIMARY_DET_TIME;
 			motg->chg_state = USB_CHG_STATE_DCD_DONE;
@@ -2991,7 +3501,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 					set_bit(ID, &motg->inputs);
 				else
 					clear_bit(ID, &motg->inputs);
-			//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
+			//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 			} else {
 				if (AX_MicroP_IsP01Connected() && pad_exist()) {
 					printk("[usb_otg] switch to host mode (boot)\r\n");
@@ -3010,7 +3520,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 			 */
 			if (!g_host_mode)
 				wait_for_completion(&pmic_vbus_init);
-			//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+			//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 		}
 		break;
 	case USB_HOST:
@@ -3043,28 +3553,30 @@ static void msm_otg_sm_work(struct work_struct *w)
 	bool work = 0, srp_reqd;
 
 	pm_runtime_resume(otg->phy->dev);
-	dev_dbg(otg->phy->dev, "%s work\n", otg_state_string(otg->phy->state));
+	pr_debug("%s work\n", otg_state_string(otg->phy->state));
 
 	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
+#ifdef CONFIG_CHARGER_ASUS
 	if (!g_charger_ready) {
 		return;
 	}
+#endif
 
 	if (g_otg_mode == ASUS_OTG_CONNECT) {
 		set_bit(B_SESS_VLD, &motg->inputs);//temp set VBUS to detect Charger
-		msm_otg_vbus_out_enable(true, 0);
+		asus_otg_vbus_out_enable(true, 0);
 	} else if (g_otg_mode == ASUS_OTG_DISCONNECT) {
 		clear_bit(B_SESS_VLD, &motg->inputs);
 		g_otg_mode = ASUS_OTG_NONE;
-		msm_otg_vbus_out_enable(false, 0);
+		asus_otg_vbus_out_enable(false, 0);
 		if (g_carkit_state) {
-			g_carkit_state=0;
-			switch_set_state(&switch_otg_carkit, 0);
+			g_carkit_state=ASUS_CARKIT_OFFLINE;
+			switch_set_state(&switch_otg_carkit, ASUS_CARKIT_OFFLINE);
 		} else if (g_host_mode) {
-			msm_otg_host_mode_cleanup();
-			msm_otg_mode_switch(USB_PERIPHERAL);
+			asus_otg_mode_switch(USB_PERIPHERAL);
+			return;
 		}
-	} else if(g_otg_mode == ASUS_OTG_CARKIT && msm_otg_bsv ){//notify carkit charger
+	} else if(g_otg_mode == ASUS_OTG_CARKIT && asus_otg_bsv ){//notify carkit charger
 #ifdef CONFIG_CHARGER_ASUS
 		asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
 #endif
@@ -3078,7 +3590,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		msm_otg_init_sm(motg);
 		psy = power_supply_get_by_name("usb");
 		if (!psy)
-			dev_err(otg->phy->dev, "couldn't get usb power supply\n");
+			pr_err("couldn't get usb power supply\n");
 		otg->phy->state = OTG_STATE_B_IDLE;
 		if (!test_bit(B_SESS_VLD, &motg->inputs) &&
 				test_bit(ID, &motg->inputs)) {
@@ -3094,7 +3606,15 @@ static void msm_otg_sm_work(struct work_struct *w)
 			pm_runtime_suspend(otg->phy->dev);
 		} else if ((!test_bit(ID, &motg->inputs) ||
 				test_bit(ID_A, &motg->inputs)) && otg->host) {
-			dev_dbg(otg->phy->dev, "!id || id_A\n");
+			pr_debug("!id || id_A\n");
+			//ASUS_BSP+++ BennyCheng "skip slimport check for pad mode in sm_work"
+			if (!AX_MicroP_IsP01Connected() || !pad_exist()) {
+				if (slimport_is_connected()) {
+					work = 1;
+					break;
+				}
+			}
+			//ASUS_BSP--- BennyCheng "skip slimport check for pad mode in sm_work"
 			if (msm_chg_mhl_detect(motg)) {
 				work = 1;
 				break;
@@ -3103,15 +3623,13 @@ static void msm_otg_sm_work(struct work_struct *w)
 			set_bit(A_BUS_REQ, &motg->inputs);
 			otg->phy->state = OTG_STATE_A_IDLE;
 			work = 1;
-
 			//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 			#ifdef CONFIG_CHARGER_ASUS
 			cancel_delayed_work_sync(&asus_chg_work);
 			#endif
 			//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
-
 		} else if (test_bit(B_SESS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "b_sess_vld\n");
+			pr_debug("b_sess_vld\n");
 			switch (motg->chg_state) {
 			case USB_CHG_STATE_UNDEFINED:
 				//msm_chg_detect_work(&motg->chg_work.work);
@@ -3126,10 +3644,10 @@ static void msm_otg_sm_work(struct work_struct *w)
 					//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
 					if (g_otg_mode == ASUS_OTG_CONNECT) {
 						g_otg_mode = ASUS_OTG_CARKIT;
-						g_carkit_state = 1;
-						msm_otg_vbus_out_enable(false, 0);
-						switch_set_state(&switch_otg_carkit, 1);
-						if(msm_otg_bsv){//notify carkit charger
+						g_carkit_state = ASUS_CARKIT_ONLINE;
+						asus_otg_vbus_out_enable(false, 0);
+						switch_set_state(&switch_otg_carkit, ASUS_CARKIT_ONLINE);
+						if(asus_otg_bsv){//notify carkit charger
 #ifdef CONFIG_CHARGER_ASUS
 							asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
 #endif
@@ -3141,7 +3659,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
 					if(g_otg_mode == ASUS_OTG_CONNECT){
 						g_otg_mode = ASUS_OTG_HOST;
-						msm_otg_mode_switch(USB_HOST);
+						asus_otg_mode_switch(USB_HOST);
 					}
 					//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 					msm_otg_notify_charger(motg,
@@ -3175,10 +3693,31 @@ static void msm_otg_sm_work(struct work_struct *w)
 					//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
 					if (g_otg_mode == ASUS_OTG_CONNECT) {
 						g_otg_mode = ASUS_OTG_HOST;
-						msm_otg_mode_switch(USB_HOST);
+						asus_otg_mode_switch(USB_HOST);
 					} else {
-						msm_otg_start_peripheral(otg, 1);
-						otg->phy->state = OTG_STATE_B_PERIPHERAL;
+						if(!slimport_is_connected()) {
+							msm_otg_start_peripheral(otg, 1);
+							otg->phy->state =
+								OTG_STATE_B_PERIPHERAL;
+						/* ASUS_BSP+++ BennyCheng "support mydp ac charger" */
+						} else {
+							if (asus_otg_bsv && !pad_exist()) {
+								if (g_mydp_ac_state) {
+									g_charger_mode = ASUS_CHG_SRC_DC;
+									asus_chg_set_chg_mode(ASUS_CHG_SRC_DC);
+									ASUSEvtlog("[USB] set_chg_mode: MYDP AC\n");
+									printk("[USB] set_chg_mode: MYDP AC\n");
+								} else {
+									g_charger_mode = ASUS_CHG_SRC_UNKNOWN;
+									asus_chg_set_chg_mode(ASUS_CHG_SRC_UNKNOWN);
+									ASUSEvtlog("[USB] set_chg_mode: MYDP UNKNOWN\n");
+									printk("[USB] set_chg_mode: MYDP UNKNOWN\n");
+								}
+							}
+						}
+						/* ASUS_BSP--- BennyCheng "support mydp ac charger" */
+						schedule_delayed_work(&motg->check_ta_work,
+							MSM_CHECK_TA_DELAY);
 					}
 					//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 					break;
@@ -3190,7 +3729,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				break;
 			}
 		} else if (test_bit(B_BUS_REQ, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "b_sess_end && b_bus_req\n");
+			pr_debug("b_sess_end && b_bus_req\n");
 			if (msm_otg_start_srp(otg) < 0) {
 				clear_bit(B_BUS_REQ, &motg->inputs);
 				work = 1;
@@ -3200,9 +3739,10 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_start_timer(motg, TB_SRP_FAIL, B_SRP_FAIL);
 			break;
 		} else {
-			dev_dbg(otg->phy->dev, "chg_work cancel");
+			pr_debug("chg_work cancel");
+			clear_bit(A_BUS_REQ, &motg->inputs);
 			cancel_delayed_work_sync(&motg->chg_work);
-
+			cancel_delayed_work_sync(&motg->check_ta_work);
 			//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 			#ifdef CONFIG_CHARGER_ASUS
 			cancel_delayed_work_sync(&asus_chg_work);
@@ -3214,7 +3754,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 			printk("[USB] set_chg_mode: None\n");
 			#endif
 			//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
-
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 0);
@@ -3241,7 +3780,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				test_bit(ID_C, &motg->inputs) ||
 				(test_bit(B_SESS_VLD, &motg->inputs) &&
 				!test_bit(ID_B, &motg->inputs))) {
-			dev_dbg(otg->phy->dev, "!id || id_a/c || b_sess_vld+!id_b\n");
+			pr_debug("!id || id_a/c || b_sess_vld+!id_b\n");
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_B_IDLE;
 			/*
@@ -3251,8 +3790,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 			ulpi_write(otg->phy, 0x0, 0x98);
 			work = 1;
 		} else if (test_bit(B_SRP_FAIL, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "b_srp_fail\n");
-			dev_info(otg->phy->dev, "A-device did not respond to SRP\n");
+			pr_debug("b_srp_fail\n");
+			pr_info("A-device did not respond to SRP\n");
 			clear_bit(B_BUS_REQ, &motg->inputs);
 			clear_bit(B_SRP_FAIL, &motg->tmouts);
 			otg_send_event(OTG_EVENT_NO_RESP_FOR_SRP);
@@ -3267,7 +3806,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				test_bit(ID_A, &motg->inputs) ||
 				test_bit(ID_B, &motg->inputs) ||
 				!test_bit(B_SESS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!id  || id_a/b || !b_sess_vld\n");
+			pr_debug("!id  || id_a/b || !b_sess_vld\n");
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 0);
@@ -3286,7 +3825,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		} else if (test_bit(B_BUS_REQ, &motg->inputs) &&
 				otg->gadget->b_hnp_enable &&
 				test_bit(A_BUS_SUSPEND, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "b_bus_req && b_hnp_en && a_bus_suspend\n");
+			pr_debug("b_bus_req && b_hnp_en && a_bus_suspend\n");
 			msm_otg_start_timer(motg, TB_ASE0_BRST, B_ASE0_BRST);
 			/* D+ pullup should not be disconnected within 4msec
 			 * after A device suspends the bus. Otherwise PET will
@@ -3303,7 +3842,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_start_host(otg, 1);
 		} else if (test_bit(A_BUS_SUSPEND, &motg->inputs) &&
 				   test_bit(B_SESS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "a_bus_suspend && b_sess_vld\n");
+			pr_debug("a_bus_suspend && b_sess_vld\n");
 			if (motg->caps & ALLOW_LPM_ON_DEV_SUSPEND) {
 				pm_runtime_put_noidle(otg->phy->dev);
 				pm_runtime_suspend(otg->phy->dev);
@@ -3317,7 +3856,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				test_bit(ID_A, &motg->inputs) ||
 				test_bit(ID_B, &motg->inputs) ||
 				!test_bit(B_SESS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!id || id_a/b || !b_sess_vld\n");
+			pr_debug("!id || id_a/b || !b_sess_vld\n");
 			msm_otg_del_timer(motg);
 			/*
 			 * A-device is physically disconnected during
@@ -3333,7 +3872,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_reset(otg->phy);
 			work = 1;
 		} else if (test_bit(A_CONN, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "a_conn\n");
+			pr_debug("a_conn\n");
 			clear_bit(A_BUS_SUSPEND, &motg->inputs);
 			otg->phy->state = OTG_STATE_B_HOST;
 			/*
@@ -3346,8 +3885,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_start_timer(motg, TB_TST_CONFIG,
 						B_TST_CONFIG);
 		} else if (test_bit(B_ASE0_BRST, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "b_ase0_brst_tmout\n");
-			dev_info(otg->phy->dev, "B HNP fail:No response from A device\n");
+			pr_debug("b_ase0_brst_tmout\n");
+			pr_info("B HNP fail:No response from A device\n");
 			msm_otg_start_host(otg, 0);
 			msm_otg_reset(otg->phy);
 			otg->host->is_b_host = 0;
@@ -3365,7 +3904,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		if (!test_bit(B_BUS_REQ, &motg->inputs) ||
 				!test_bit(A_CONN, &motg->inputs) ||
 				!test_bit(B_SESS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!b_bus_req || !a_conn || !b_sess_vld\n");
+			pr_debug("!b_bus_req || !a_conn || !b_sess_vld\n");
 			clear_bit(A_CONN, &motg->inputs);
 			clear_bit(B_BUS_REQ, &motg->inputs);
 			msm_otg_start_host(otg, 0);
@@ -3381,7 +3920,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		otg->default_a = 1;
 		if (test_bit(ID, &motg->inputs) &&
 			!test_bit(ID_A, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "id && !id_a\n");
+			pr_debug("id && !id_a\n");
 			otg->default_a = 0;
 			clear_bit(A_BUS_DROP, &motg->inputs);
 			otg->phy->state = OTG_STATE_B_IDLE;
@@ -3393,7 +3932,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		} else if (!test_bit(A_BUS_DROP, &motg->inputs) &&
 				(test_bit(A_SRP_DET, &motg->inputs) ||
 				 test_bit(A_BUS_REQ, &motg->inputs))) {
-			dev_dbg(otg->phy->dev, "!a_bus_drop && (a_srp_det || a_bus_req)\n");
+			pr_debug("!a_bus_drop && (a_srp_det || a_bus_req)\n");
 
 			clear_bit(A_SRP_DET, &motg->inputs);
 			/* Disable SRP detection */
@@ -3413,7 +3952,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_hsusb_vbus_power(motg, 1);
 			msm_otg_start_timer(motg, TA_WAIT_VRISE, A_WAIT_VRISE);
 		} else {
-			dev_dbg(otg->phy->dev, "No session requested\n");
+			pr_debug("No session requested\n");
 			clear_bit(A_BUS_DROP, &motg->inputs);
 			if (test_bit(ID_A, &motg->inputs)) {
 					msm_otg_notify_charger(motg,
@@ -3437,14 +3976,14 @@ static void msm_otg_sm_work(struct work_struct *w)
 				!test_bit(ID_A, &motg->inputs)) ||
 				test_bit(A_BUS_DROP, &motg->inputs) ||
 				test_bit(A_WAIT_VRISE, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "id || a_bus_drop || a_wait_vrise_tmout\n");
+			pr_debug("id || a_bus_drop || a_wait_vrise_tmout\n");
 			clear_bit(A_BUS_REQ, &motg->inputs);
 			msm_otg_del_timer(motg);
 			msm_hsusb_vbus_power(motg, 0);
 			otg->phy->state = OTG_STATE_A_WAIT_VFALL;
 			msm_otg_start_timer(motg, TA_WAIT_VFALL, A_WAIT_VFALL);
 		} else if (test_bit(A_VBUS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "a_vbus_vld\n");
+			pr_debug("a_vbus_vld\n");
 			otg->phy->state = OTG_STATE_A_WAIT_BCON;
 			if (TA_WAIT_BCON > 0)
 				msm_otg_start_timer(motg, TA_WAIT_BCON,
@@ -3462,10 +4001,10 @@ static void msm_otg_sm_work(struct work_struct *w)
 				!test_bit(ID_A, &motg->inputs)) ||
 				test_bit(A_BUS_DROP, &motg->inputs) ||
 				test_bit(A_WAIT_BCON, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "(id && id_a/b/c) || a_bus_drop ||"
+			pr_debug("(id && id_a/b/c) || a_bus_drop ||"
 					"a_wait_bcon_tmout\n");
 			if (test_bit(A_WAIT_BCON, &motg->tmouts)) {
-				dev_info(otg->phy->dev, "Device No Response\n");
+				pr_info("Device No Response\n");
 				otg_send_event(OTG_EVENT_DEV_CONN_TMOUT);
 			}
 			msm_otg_del_timer(motg);
@@ -3483,7 +4022,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			otg->phy->state = OTG_STATE_A_WAIT_VFALL;
 			msm_otg_start_timer(motg, TA_WAIT_VFALL, A_WAIT_VFALL);
 		} else if (!test_bit(A_VBUS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!a_vbus_vld\n");
+			pr_debug("!a_vbus_vld\n");
 			clear_bit(B_CONN, &motg->inputs);
 			msm_otg_del_timer(motg);
 			msm_otg_start_host(otg, 0);
@@ -3506,7 +4045,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		if ((test_bit(ID, &motg->inputs) &&
 				!test_bit(ID_A, &motg->inputs)) ||
 				test_bit(A_BUS_DROP, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "id_a/b/c || a_bus_drop\n");
+			pr_debug("id_a/b/c || a_bus_drop\n");
 			clear_bit(B_CONN, &motg->inputs);
 			clear_bit(A_BUS_REQ, &motg->inputs);
 			msm_otg_del_timer(motg);
@@ -3516,7 +4055,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_hsusb_vbus_power(motg, 0);
 			msm_otg_start_timer(motg, TA_WAIT_VFALL, A_WAIT_VFALL);
 		} else if (!test_bit(A_VBUS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!a_vbus_vld\n");
+			pr_debug("!a_vbus_vld\n");
 			clear_bit(B_CONN, &motg->inputs);
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_A_VBUS_ERR;
@@ -3527,7 +4066,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			 * a_bus_req is de-asserted when root hub is
 			 * suspended or HNP is in progress.
 			 */
-			dev_dbg(otg->phy->dev, "!a_bus_req\n");
+			pr_debug("!a_bus_req\n");
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_A_SUSPEND;
 			if (otg->host->b_hnp_enable)
@@ -3536,7 +4075,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			else
 				pm_runtime_put_sync(otg->phy->dev);
 		} else if (!test_bit(B_CONN, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!b_conn\n");
+			pr_debug("!b_conn\n");
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_A_WAIT_BCON;
 			if (TA_WAIT_BCON > 0)
@@ -3565,7 +4104,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				!test_bit(ID_A, &motg->inputs)) ||
 				test_bit(A_BUS_DROP, &motg->inputs) ||
 				test_bit(A_AIDL_BDIS, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "id_a/b/c || a_bus_drop ||"
+			pr_debug("id_a/b/c || a_bus_drop ||"
 					"a_aidl_bdis_tmout\n");
 			msm_otg_del_timer(motg);
 			clear_bit(B_CONN, &motg->inputs);
@@ -3576,7 +4115,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_hsusb_vbus_power(motg, 0);
 			msm_otg_start_timer(motg, TA_WAIT_VFALL, A_WAIT_VFALL);
 		} else if (!test_bit(A_VBUS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!a_vbus_vld\n");
+			pr_debug("!a_vbus_vld\n");
 			msm_otg_del_timer(motg);
 			clear_bit(B_CONN, &motg->inputs);
 			otg->phy->state = OTG_STATE_A_VBUS_ERR;
@@ -3584,14 +4123,14 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_reset(otg->phy);
 		} else if (!test_bit(B_CONN, &motg->inputs) &&
 				otg->host->b_hnp_enable) {
-			dev_dbg(otg->phy->dev, "!b_conn && b_hnp_enable");
+			pr_debug("!b_conn && b_hnp_enable");
 			otg->phy->state = OTG_STATE_A_PERIPHERAL;
 			msm_otg_host_hnp_enable(otg, 1);
 			otg->gadget->is_a_peripheral = 1;
 			msm_otg_start_peripheral(otg, 1);
 		} else if (!test_bit(B_CONN, &motg->inputs) &&
 				!otg->host->b_hnp_enable) {
-			dev_dbg(otg->phy->dev, "!b_conn && !b_hnp_enable");
+			pr_debug("!b_conn && !b_hnp_enable");
 			/*
 			 * bus request is dropped during suspend.
 			 * acquire again for next device.
@@ -3614,7 +4153,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		if ((test_bit(ID, &motg->inputs) &&
 				!test_bit(ID_A, &motg->inputs)) ||
 				test_bit(A_BUS_DROP, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "id _f/b/c || a_bus_drop\n");
+			pr_debug("id _f/b/c || a_bus_drop\n");
 			/* Clear BIDL_ADIS timer */
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_A_WAIT_VFALL;
@@ -3626,7 +4165,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_hsusb_vbus_power(motg, 0);
 			msm_otg_start_timer(motg, TA_WAIT_VFALL, A_WAIT_VFALL);
 		} else if (!test_bit(A_VBUS_VLD, &motg->inputs)) {
-			dev_dbg(otg->phy->dev, "!a_vbus_vld\n");
+			pr_debug("!a_vbus_vld\n");
 			/* Clear BIDL_ADIS timer */
 			msm_otg_del_timer(motg);
 			otg->phy->state = OTG_STATE_A_VBUS_ERR;
@@ -3634,7 +4173,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			otg->gadget->is_a_peripheral = 0;
 			msm_otg_start_host(otg, 0);
 		} else if (test_bit(A_BIDL_ADIS, &motg->tmouts)) {
-			dev_dbg(otg->phy->dev, "a_bidl_adis_tmout\n");
+			pr_debug("a_bidl_adis_tmout\n");
 			msm_otg_start_peripheral(otg, 0);
 			otg->gadget->is_a_peripheral = 0;
 			otg->phy->state = OTG_STATE_A_WAIT_BCON;
@@ -3748,7 +4287,7 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		set_bit(A_BUS_REQ, &motg->inputs);
 		work = 1;
 	} else if (otgsc & OTGSC_BSVIS) {
-		writel_relaxed(otgsc, USB_OTGSC);
+		writel_relaxed(otgsc, USB_OTGSC);	
 		//ASUS_BSP+++ "[USB][NA][Fix] Ignore BSVIS when OTG_PMIC_CONTROL"
 		if (motg->pdata->otg_control == OTG_PMIC_CONTROL){
 			return IRQ_HANDLED;
@@ -3866,128 +4405,48 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	return ret;
 }
 
-//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-#ifdef CONFIG_CHARGER_ASUS
-static void msm_otg_charger_ready(void)
-{
-	struct msm_otg *motg = the_msm_otg;
-
-	printk("OTG: Charger is ready\n");
-	if (!g_charger_ready) {
-		g_charger_ready= 1;
-		queue_work(system_nrt_wq, &motg->sm_work);
-	}
-}
-#endif
-
-//ASUS_BSP+++ BennyCheng "add otg check at boot"
-static void msm_otg_check_at_boot(struct work_struct *w)
-{
-	if (!g_otg_check_at_boot) {
-		g_otg_check_at_boot = 1;
-		if (msm_otg_get_id_state()) {
-			printk("[usb_otg] otg connected at boot\n");
-			msm_otg_set_id_state(1);
-		}
-	}
-}
-//ASUS_BSP--- BennyCheng "add otg check at boot"
-
-//ASUS_BSP+++ BennyCheng "add otg check at boot"
-static int msm_otg_get_id_state(void)
-{
-	int otg_state = 0;
-
-	otg_state = get_otg_state();
-
-	printk("[usb_otg] otg state (%d)\n", otg_state);
-
-	return otg_state;
-}
-//ASUS_BSP--- BennyCheng "add otg check at boot"
-
-static void msm_otg_set_id_state(int online)
-{
-	struct msm_otg *motg = the_msm_otg;
-
-	msm_otg_id = online;
-	if (g_A68_hwID < A68_PR) {
-		dev_err(motg->phy.dev, "OTG not support for the HW!(%d)\n", g_A68_hwID);
-		return;
-	}
-
-	if (USB_AUTO != motg->otg_mode) {
-		dev_err(motg->phy.dev, "OTG not support for non AUTO mode!(%d)\n", motg->otg_mode);
-		return;
-	}
-
-	if (USB_AUTO == motg->otg_mode && AX_MicroP_IsP01Connected() && pad_exist()) {
-		dev_err(motg->phy.dev, "ignore ID events in pad for auto mode (%d)\n", online);
-		return;
-	}
-
-	if((online && (g_otg_mode != ASUS_OTG_NONE))||((!online) && (g_otg_mode == ASUS_OTG_NONE))){
-		printk("OTG: ID already set to %d\n",online);
-		return;
-	}
-
-	if (online) {
-		printk("[USB] OTG ID set\n");
-		ASUSEvtlog("[USB] OTG ID set\n");
-		g_otg_mode = ASUS_OTG_CONNECT;
-	} else {
-		printk("[USB] OTG ID clear\n");
-		ASUSEvtlog("[USB] OTG ID clear\n");
-		g_otg_mode = ASUS_OTG_DISCONNECT;
-	}
-
-	if (atomic_read(&motg->pm_suspended))
-		motg->sm_work_pending = true;
-	else
-		queue_work(system_nrt_wq, &motg->sm_work);
-}
-//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
 static void msm_otg_set_vbus_state(int online)
 {
 	static bool init;
 	struct msm_otg *motg = the_msm_otg;
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	msm_otg_bsv = online;
+	//ASUS_BSP+++ BennyCheng "ignore BSV events in host mode or in pad auto mode"
+	asus_otg_bsv = online;
 	if (g_host_mode || (USB_AUTO == motg->otg_mode && AX_MicroP_IsP01Connected() && pad_exist())) {
 		dev_err(motg->phy.dev, "PMIC: ignore BSV events in host mode or in pad auto mode (%d)(%d)(%d)(%d)\n",
 			online, AX_MicroP_IsP01Connected(), pad_exist(), motg->otg_mode);
 		return;
 	}
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP--- BennyCheng "ignore BSV events in host mode or in pad auto mode"
 
-//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	if((test_bit(B_SESS_VLD, &motg->inputs) && online) ||
 		(!test_bit(B_SESS_VLD, &motg->inputs) && !online)){
 		if(init){
 			pr_debug("PMIC: BSV already set to %d\n",online);
-
 			//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
 			if(g_otg_mode == ASUS_OTG_NONE)
 				return;
 			//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
 		}
 	}
-//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 
 	if (online) {
 		pr_debug("PMIC: BSV set\n");
 		set_bit(B_SESS_VLD, &motg->inputs);
-//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
 		ASUSEvtlog("[USB] plugin\n");
-//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 	} else {
 		pr_debug("PMIC: BSV clear\n");
 		clear_bit(B_SESS_VLD, &motg->inputs);
-//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
 		ASUSEvtlog("[USB] unplug\n");
-//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+		//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+		/* ASUS_BSP+++ BennyCheng "support mydp ac charger" */
+		g_mydp_ac_state = 0;
+		/* ASUS_BSP--- BennyCheng "support mydp ac charger" */
 	}
 
 	if (!init) {
@@ -4034,6 +4493,7 @@ static void msm_pmic_id_status_w(struct work_struct *w)
 		else
 			queue_work(system_nrt_wq, &motg->sm_work);
 	}
+
 }
 
 #define MSM_PMIC_ID_STATUS_DELAY	5 /* 5msec */
@@ -4055,539 +4515,6 @@ static irqreturn_t msm_pmic_id_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-//ASUS_BSP+++ BennyCheng "add proc debug files"
-static int msm_otg_apq_mdm_switch(enum usb_apq_mdm_sw req_side)
-{
-	int ret = -1;
-
-	if (g_A68_hwID > A80_SR2) {
-		printk("[usb_otg] apq-mdm usb switch not support for hwID 0x%x\r\n", g_A68_hwID);
-		return 0;
-	}
-
-	switch (req_side) {
-	case USB_MDM:
-		ret = gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 0);
-		if(ret) {
-			printk("[usb_otg] switch to mdm usb fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_otg] switch to mdm usb (%d)\r\n", gpio_get_value(GPIO_APQ_MDM_SW_SEL));
-		break;
-	case USB_APQ:
-		ret = gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 1);
-		if(ret) {
-			printk("[usb_otg] switch to apq usb fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_otg] switch to apq usb (%d)\r\n", gpio_get_value(GPIO_APQ_MDM_SW_SEL));
-		break;
-	default:
-		printk("[usb_otg] unknown switch!!! (%d)\r\n", req_side);
-		goto out;
-	}
-
-out:
-	return ret;
-}
-
-static int msm_otg_usb_mhl_switch(enum usb_mhl_sw req_side)
-{
-	int ret = -1;
-
-	switch (req_side) {
-	case USB_PORT:
-		ret = gpio_direction_output(GPIO_USB_MHL_SW_SEL, 0);
-		if(ret) {
-			printk("[usb_otg] switch to usb port fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_otg] switch to usb port (%d)\r\n", gpio_get_value(GPIO_USB_MHL_SW_SEL));
-		break;
-	case MHL_PORT:
-		ret = gpio_direction_output(GPIO_USB_MHL_SW_SEL, 1);
-		if(ret) {
-			printk("[usb_otg] switch to mhl port fail!!!(%d)(%d)\r\n", req_side, ret);
-			goto out;
-		}
-		printk("[usb_otg] switch to mhl port (%d)\r\n", gpio_get_value(GPIO_USB_MHL_SW_SEL));
-		break;
-	default:
-		printk("[usb_otg] unknown switch!!! (%d)\r\n", req_side);
-		goto out;
-	}
-
-out:
-	return ret;
-}
-//ASUS_BSP--- BennyCheng "add proc debug files"
-
-//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-static int msm_otg_mode_show(struct seq_file *s, void *unused)
-{
-	struct msm_otg *motg = s->private;
-
-	if (USB_AUTO == motg->otg_mode) {
-		if(!test_bit(ID, &motg->inputs)) {
-			seq_printf(s, "host (auto)\n");
-		} else {
-			seq_printf(s, "peripheral (auto)\n");
-		}
-	} else {
-		if(!test_bit(ID, &motg->inputs)) {
-			seq_printf(s, "host\n");
-		} else {
-			seq_printf(s, "peripheral\n");
-		}
-	}
-
-	return 0;
-}
-
-static int msm_otg_mode_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_mode_show, inode->i_private);
-}
-
-static void msm_otg_host_mode_prepare(void) {
-	g_suspend_delay_work_run = 0;
-	g_keep_power_on = 0;
-	g_host_none_mode = 0;
-}
-
-static void msm_otg_host_mode_cleanup(void) {
-	cancel_work_sync(&late_resume_work);
-	cancel_delayed_work_sync(&early_suspend_delay_work);
-	cancel_delayed_work_sync(&microp_cb_delay_work);
-	cancel_delayed_work_sync(&msm_otg_suspend_check_work);
-}
-
-static void msm_otg_mode_switch(enum usb_mode_type req_mode)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_otg *otg = motg->phy.otg;
-
-	switch (req_mode) {
-	case USB_NONE:
-		printk("[usb_otg] switch to none mode\r\n");
-		set_bit(ID, &motg->inputs);
-		clear_bit(B_SESS_VLD, &motg->inputs);
-		g_host_mode = 0;
-		break;
-	case USB_PERIPHERAL:
-		printk("[usb_otg] switch to peripheral mode\r\n");
-		set_bit(ID, &motg->inputs);
-		g_host_mode = 0;
-		break;
-	case USB_HOST:
-		printk("[usb_otg] switch to host mode\r\n");
-		msm_otg_host_mode_prepare();
-		clear_bit(ID, &motg->inputs);
-		g_host_mode = 1;
-		break;
-	case USB_AUTO:
-		if (AX_MicroP_IsP01Connected() && pad_exist()) {
-			printk("[usb_otg] switch to host mode (auto)\r\n");
-			msm_otg_host_mode_prepare();
-			clear_bit(ID, &motg->inputs);
-			g_host_mode = 1;
-		} else {
-			printk("[usb_otg] switch to peripheral mode (auto)\r\n");
-			set_bit(ID, &motg->inputs);
-			g_host_mode = 0;
-		}
-		break;
-	default:
-		printk("[usb_otg] unknown mode!!! (%d)\r\n", req_mode);
-		goto out;
-	}
-
-	pm_runtime_resume(otg->phy->dev);
-	queue_work(system_nrt_wq, &motg->sm_work);
-out:
-	return;
-}
-
-static ssize_t msm_otg_mode_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	struct seq_file *s = file->private_data;
-	struct msm_otg *motg = s->private;
-	char buf[16];
-	int status = count;
-	enum usb_mode_type req_mode;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "host", 4)) {
-		req_mode = USB_HOST;
-		//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-		msm_otg_vbus_out_enable(true, 0);
-		//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-	} else if (!strncmp(buf, "peripheral", 10)) {
-		req_mode = USB_PERIPHERAL;
-		//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-		msm_otg_vbus_out_enable(false, 0);
-		//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-	} else if (!strncmp(buf, "none", 4)) {
-		req_mode = USB_NONE;
-	} else if (!strncmp(buf, "auto", 4)) {
-		//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-		msm_otg_vbus_out_enable(false, 0);
-		//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-		req_mode = USB_AUTO;
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-
-	motg->otg_mode = req_mode;
-	msm_otg_mode_switch(req_mode);
-out:
-	return status;
-}
-
-static void msm_otg_microp_cb_delay_work(struct work_struct *w)
-{
-	struct msm_otg *motg = the_msm_otg;
-	struct usb_phy *phy = &motg->phy;
-
-	dev_info(phy->dev, "%s()+++\n", __func__);
-
-	msm_otg_usb_mhl_switch(MHL_PORT);
-
-	if (USB_AUTO == motg->otg_mode) {
-		msm_otg_mode_switch(USB_AUTO);
-
-		msm_otg_set_pad_hub_power(1);
-		msm_otg_set_pad_camera_power(1);
-	} else {
-		if (USB_HOST == motg->otg_mode) {
-			msm_otg_set_pad_hub_power(1);
-			msm_otg_set_pad_camera_power(1);
-		}
-		printk("[usb_otg] not auto mode! skip switch! (%d)\r\n", motg->otg_mode);
-	}
-
-	dev_info(phy->dev, "%s()---\n", __func__);
-}
-
-static int usb_otg_microp_event(struct notifier_block *this, unsigned long event, void *ptr)
-{
-	struct msm_otg *motg = the_msm_otg;
-
-	switch (event) {
-		case P01_ADD:
-			printk("[usb_otg] Microp ADD Event +++\n");
-
-			msm_otg_apq_mdm_switch(USB_APQ);
-			msm_otg_usb_mhl_switch(MHL_PORT);
-
-			//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-			msm_otg_vbus_out_enable(false, 1);
-			//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
-			msm_otg_set_pad_camera_power(0);
-			msm_otg_set_pad_hub_power(0);
-
-			//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-			if (g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_SR2) {
-				usb_ehci_phy_power_control(1);
-			}
-			//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
-			queue_delayed_work_on(0, microp_cb_delay_wq, &microp_cb_delay_work, 2 * HZ);
-
-			printk("[usb_otg] Microp ADD Event ---\n");
-		break;
-		case P01_REMOVE:
-			printk("[usb_otg] Microp REMOVE Event +++\n");
-
-			if (USB_AUTO == motg->otg_mode) {
-				msm_otg_host_mode_cleanup();
-
-				//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-				if (g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_SR2) {
-					usb_ehci_phy_power_control(0);
-				}
-				//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
-				if (msm_otg_bsv) {
-					set_bit(B_SESS_VLD, &motg->inputs);
-				} else {
-					clear_bit(B_SESS_VLD, &motg->inputs);
-				}
-
-				msm_otg_mode_switch(USB_AUTO);
-			} else {
-				printk("[usb_otg] not auto mode! skip switch! (%d)\r\n", motg->otg_mode);
-			}
-
-			//ASUS_BSP+++ BennyCheng "disable otg 5v output when remove from pad"
-			msm_otg_vbus_out_enable(false, 1);
-			//ASUS_BSP--- BennyCheng "disable otg 5v output when remove from pad"
-
-			msm_otg_usb_mhl_switch(USB_PORT);
-			msm_otg_apq_mdm_switch(USB_MDM);
-
-			printk("[usb_otg] Microp REMOVE Event ---\n");
-		break;
-	default:
-		break;
-	}
-
-        return NOTIFY_DONE;
-}
-
-static struct notifier_block usb_otg_microp_notifier = {
-        .notifier_call = usb_otg_microp_event,
-        .priority = USB_MP_NOTIFY,
-};
-
-static ssize_t msm_otg_pad_hub_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "on", 2)) {
-		msm_otg_set_pad_hub_power(1);
-	} else if (!strncmp(buf, "off", 3)) {
-		msm_otg_set_pad_hub_power(0);
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-out:
-	return status;
-}
-
-static int msm_otg_pad_hub_show(struct seq_file *s, void *unused)
-{
-	int pin_level = -1;
-
-	pin_level = msm_otg_get_pad_hub_power();
-
-	if (pin_level >= 0) {
-		if (pin_level) {
-			seq_printf(s, "on\n");
-		} else {
-			seq_printf(s, "off\n");
-		}
-	} else {
-		seq_printf(s, "err\n");
-	}
-
-	return 0;
-}
-
-static int msm_otg_pad_hub_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_pad_hub_show, inode->i_private);
-}
-
-const struct file_operations msm_otg_pad_hub_fops = {
-	.open = msm_otg_pad_hub_open,
-	.read = seq_read,
-	.write = msm_otg_pad_hub_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static ssize_t msm_otg_pad_camera_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "on", 2)) {
-		msm_otg_set_pad_camera_power(1);
-	} else if (!strncmp(buf, "off", 3)) {
-		msm_otg_set_pad_camera_power(0);
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-out:
-	return status;
-}
-
-static int msm_otg_pad_camera_show(struct seq_file *s, void *unused)
-{
-	int pin_level = -1;
-
-	pin_level = msm_otg_get_pad_camera_power();
-
-	if (pin_level >= 0) {
-		if (pin_level) {
-			seq_printf(s, "on\n");
-		} else {
-			seq_printf(s, "off\n");
-		}
-	} else {
-		seq_printf(s, "err\n");
-	}
-
-	return 0;
-}
-
-static int msm_otg_pad_camera_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_pad_camera_show, inode->i_private);
-}
-
-const struct file_operations msm_otg_pad_camera_fops = {
-	.open = msm_otg_pad_camera_open,
-	.read = seq_read,
-	.write = msm_otg_pad_camera_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int msm_otg_gpio_apq_mdm_sw_show(struct seq_file *s, void *unused)
-{
-	struct msm_otg *motg = s->private;
-	int gpio_value = 0;
-
-	if (g_A68_hwID == A68_EVB || g_A68_hwID == A68_UNKNOWN || g_A68_hwID > A80_SR2) {
-		dev_err(motg->phy.dev, "not support for the HW!(%d)\n", g_A68_hwID);
-		return -EPERM;
-	}
-
-	gpio_value = gpio_get_value(GPIO_APQ_MDM_SW_SEL);
-
-	if (1 == gpio_value) {
-		seq_printf(s, "apq (%d)(%d)\n", GPIO_APQ_MDM_SW_SEL, gpio_value);
-	} else if (0 == gpio_value) {
-		seq_printf(s, "mdm (%d)(%d)\n", GPIO_APQ_MDM_SW_SEL, gpio_value);
-	} else {
-		seq_printf(s, "unknown (%d)(%d)\n", GPIO_APQ_MDM_SW_SEL, gpio_value);
-	}
-
-	return 0;
-}
-
-static int msm_otg_gpio_apq_mdm_sw_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_gpio_apq_mdm_sw_show, inode->i_private);
-}
-
-static ssize_t msm_otg_gpio_apq_mdm_sw_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	struct seq_file *s = file->private_data;
-	struct msm_otg *motg = s->private;
-	char buf[16];
-	int status = count;
-
-	if (g_A68_hwID == A68_EVB || g_A68_hwID == A68_UNKNOWN || g_A68_hwID > A80_SR2) {
-		dev_err(motg->phy.dev, "not support for the HW!(%d)\n", g_A68_hwID);
-		return -EPERM;
-	}
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "0", 1)) {
-		gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 0);
-	} else if (!strncmp(buf, "1", 1)) {
-		gpio_direction_output(GPIO_APQ_MDM_SW_SEL, 1);
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_gpio_apq_mdm_sw_fops = {
-	.open = msm_otg_gpio_apq_mdm_sw_open,
-	.read = seq_read,
-	.write = msm_otg_gpio_apq_mdm_sw_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int msm_otg_gpio_usb_mhl_sw_show(struct seq_file *s, void *unused)
-{
-	int gpio_value = 0;
-
-	gpio_value = gpio_get_value(GPIO_USB_MHL_SW_SEL);
-
-	if (1 == gpio_value) {
-		seq_printf(s, "mhl (%d)(%d)\n", GPIO_USB_MHL_SW_SEL, gpio_value);
-	} else if (0 == gpio_value) {
-		seq_printf(s, "usb (%d)(%d)\n", GPIO_USB_MHL_SW_SEL, gpio_value);
-	} else {
-		seq_printf(s, "unknown (%d)(%d)\n", GPIO_USB_MHL_SW_SEL, gpio_value);
-	}
-
-	return 0;
-}
-
-static int msm_otg_gpio_usb_mhl_sw_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_gpio_usb_mhl_sw_show, inode->i_private);
-}
-
-static ssize_t msm_otg_gpio_usb_mhl_sw_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "0", 1)) {
-		gpio_direction_output(GPIO_USB_MHL_SW_SEL, 0);
-	} else if (!strncmp(buf, "1", 1)) {
-		gpio_direction_output(GPIO_USB_MHL_SW_SEL, 1);
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_gpio_usb_mhl_sw_fops = {
-	.open = msm_otg_gpio_usb_mhl_sw_open,
-	.read = seq_read,
-	.write = msm_otg_gpio_usb_mhl_sw_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
-
-#if 0 //org mode switch
 static int msm_otg_mode_show(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
@@ -4683,195 +4610,6 @@ static ssize_t msm_otg_mode_write(struct file *file, const char __user *ubuf,
 out:
 	return status;
 }
-#endif //org mode switch
-
-//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
-static int myxtoi(const char *name)
-{
-	int val = 0;
-
-	for (;; name++) {
-		switch (*name) {
-		case '0' ... '9':
-			val = 16*val+(*name-'0');
-			break;
-		case 'A' ... 'F':
-			val = 16*val+(*name-'A'+10);
-			break;
-		case 'a' ... 'f':
-			val = 16*val+(*name-'a'+10);
-			break;
-		default:
-			return val;
-		}
-	}
-}
-
-static int msm_otg_phy_parameter_b_show(struct seq_file *s, void *unused)
-{
-	seq_printf(s, "reg: 0x81, value: 0x%X\n", g_phy_parameter_b);
-	return 0;
-}
-
-static int msm_otg_phy_parameter_b_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_phy_parameter_b_show, inode->i_private);
-}
-
-static ssize_t msm_otg_phy_parameter_b_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	g_phy_parameter_b = myxtoi(buf);
-
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_phy_parameter_b_fops = {
-	.open = msm_otg_phy_parameter_b_open,
-	.read = seq_read,
-	.write = msm_otg_phy_parameter_b_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int msm_otg_phy_parameter_c_show(struct seq_file *s, void *unused)
-{
-	seq_printf(s, "reg: 0x82, value: 0x%X\n", g_phy_parameter_c);
-	return 0;
-}
-
-static int msm_otg_phy_parameter_c_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_phy_parameter_c_show, inode->i_private);
-}
-
-static ssize_t msm_otg_phy_parameter_c_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	g_phy_parameter_c = myxtoi(buf);
-
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_phy_parameter_c_fops = {
-	.open = msm_otg_phy_parameter_c_open,
-	.read = seq_read,
-	.write = msm_otg_phy_parameter_c_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int msm_otg_phy_parameter_d_show(struct seq_file *s, void *unused)
-{
-	seq_printf(s, "reg: 0x83, value: 0x%X\n", g_phy_parameter_d);
-	return 0;
-}
-
-static int msm_otg_phy_parameter_d_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_phy_parameter_d_show, inode->i_private);
-}
-
-static ssize_t msm_otg_phy_parameter_d_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	g_phy_parameter_d = myxtoi(buf);
-
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_phy_parameter_d_fops = {
-	.open = msm_otg_phy_parameter_d_open,
-	.read = seq_read,
-	.write = msm_otg_phy_parameter_d_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
-
-//ASUS_BSP+++ BennyCheng "add otg 5v output debug file"
-static int msm_otg_5v_output_show(struct seq_file *s, void *unused)
-{
-	if (g_otg_5v_output) {
-		seq_printf(s, "enable\n");
-	} else {
-		seq_printf(s, "disable\n");
-	}
-
-	return 0;
-}
-
-static int msm_otg_5v_output_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_5v_output_show, inode->i_private);
-}
-
-static ssize_t msm_otg_5v_output_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	char buf[16];
-	int status = count;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "enable", 6)) {
-		msm_otg_vbus_out_enable(true, 1);
-	} else if (!strncmp(buf, "disable", 7)) {
-		msm_otg_vbus_out_enable(false, 1);
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_5v_output_fops = {
-	.open = msm_otg_5v_output_open,
-	.read = seq_read,
-	.write = msm_otg_5v_output_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-//ASUS_BSP--- BennyCheng "add otg 5v output debug file"
 
 const struct file_operations msm_otg_mode_fops = {
 	.open = msm_otg_mode_open,
@@ -5018,6 +4756,486 @@ const struct file_operations msm_otg_bus_fops = {
 
 static struct dentry *msm_otg_dbg_root;
 
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+static int asus_otg_mode_show(struct seq_file *s, void *unused)
+{
+	struct msm_otg *motg = s->private;
+
+	if (USB_AUTO == motg->otg_mode) {
+		if(!test_bit(ID, &motg->inputs)) {
+			seq_printf(s, "host (auto)\n");
+		} else {
+			seq_printf(s, "peripheral (auto)\n");
+		}
+	} else {
+		if(!test_bit(ID, &motg->inputs)) {
+			seq_printf(s, "host\n");
+		} else {
+			seq_printf(s, "peripheral\n");
+		}
+	}
+
+	return 0;
+}
+
+static int asus_otg_mode_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_mode_show, inode->i_private);
+}
+
+static ssize_t asus_otg_mode_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct msm_otg *motg = s->private;
+	char buf[16];
+	int status = count;
+	enum usb_mode_type req_mode;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "host", 4)) {
+		req_mode = USB_HOST;
+		asus_otg_vbus_out_enable(true, 0);
+	} else if (!strncmp(buf, "peripheral", 10)) {
+		req_mode = USB_PERIPHERAL;
+		asus_otg_vbus_out_enable(false, 0);
+	} else if (!strncmp(buf, "none", 4)) {
+		req_mode = USB_NONE;
+	} else if (!strncmp(buf, "auto", 4)) {
+		asus_otg_vbus_out_enable(false, 0);
+		req_mode = USB_AUTO;
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+
+	motg->otg_mode = req_mode;
+	asus_otg_mode_switch(req_mode);
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_mode_fops = {
+	.open = asus_otg_mode_open,
+	.read = seq_read,
+	.write = asus_otg_mode_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_5v_output_show(struct seq_file *s, void *unused)
+{
+	if (g_otg_5v_output) {
+		seq_printf(s, "enable\n");
+	} else {
+		seq_printf(s, "disable\n");
+	}
+
+	return 0;
+}
+
+static int asus_otg_5v_output_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_5v_output_show, inode->i_private);
+}
+
+static ssize_t asus_otg_5v_output_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "enable", 6)) {
+		asus_otg_vbus_out_enable(true, 1);
+	} else if (!strncmp(buf, "disable", 7)) {
+		asus_otg_vbus_out_enable(false, 1);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_5v_output_fops = {
+	.open = asus_otg_5v_output_open,
+	.read = seq_read,
+	.write = asus_otg_5v_output_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+//ASUS_BSP+++ BennyCheng "add microp related debug files"
+static int asus_otg_pad_hub_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_otg_get_pad_hub_power();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_otg_pad_hub_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_pad_hub_show, inode->i_private);
+}
+static ssize_t asus_otg_pad_hub_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_otg_set_pad_hub_power(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_otg_set_pad_hub_power(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_pad_hub_fops = {
+	.open = asus_otg_pad_hub_open,
+	.read = seq_read,
+	.write = asus_otg_pad_hub_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_pad_camera_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_otg_get_pad_camera_power();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_otg_pad_camera_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_pad_camera_show, inode->i_private);
+}
+
+static ssize_t asus_otg_pad_camera_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_otg_set_pad_camera_power(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_otg_set_pad_camera_power(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_pad_camera_fops = {
+	.open = asus_otg_pad_camera_open,
+	.read = seq_read,
+	.write = asus_otg_pad_camera_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_pad_cbus_show(struct seq_file *s, void *unused)
+{
+	int pin_level = -1;
+
+	pin_level = asus_otg_get_pad_cbus_en();
+
+	if (pin_level >= 0) {
+		if (pin_level) {
+			seq_printf(s, "on\n");
+		} else {
+			seq_printf(s, "off\n");
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_otg_pad_cbus_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_pad_cbus_show, inode->i_private);
+}
+
+static ssize_t asus_otg_pad_cbus_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_otg_set_pad_cbus_en(1);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_otg_set_pad_cbus_en(0);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_pad_cbus_fops = {
+	.open = asus_otg_pad_cbus_open,
+	.read = seq_read,
+	.write = asus_otg_pad_cbus_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_pad_microp_state_show(struct seq_file *s, void *unused)
+{
+	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = &motg->phy;
+	int microp_state = -1;
+
+	microp_state = asus_otg_get_microp_mode();
+	if (microp_state >= 0) {
+		switch (microp_state) {
+		case st_MICROP_Off:
+			seq_printf(s, "off\n");
+			break;
+		case st_MICROP_Sleep:
+			seq_printf(s, "sleep\n");
+			break;
+		case st_MICROP_Active:
+			seq_printf(s, "active\n");
+			break;
+		case st_MICROP_Unknown:
+			seq_printf(s, "unknown\n");
+		default:
+			dev_err(phy->dev, "unknown microp mode! (%d)\n", microp_state);
+			break;
+		}
+	} else {
+		seq_printf(s, "err\n");
+	}
+
+	return 0;
+}
+
+static int asus_otg_pad_microp_state_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_pad_microp_state_show, inode->i_private);
+}
+
+static ssize_t asus_otg_pad_microp_state_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	if (!strncmp(buf, "on", 2)) {
+		asus_otg_set_microp_mode(MICROP_ACTIVE);
+	} else if (!strncmp(buf, "off", 3)) {
+		asus_otg_set_microp_mode(MICROP_SLEEP);
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_pad_microp_state_fops = {
+	.open = asus_otg_pad_microp_state_open,
+	.read = seq_read,
+	.write = asus_otg_pad_microp_state_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add microp related debug files"
+
+//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
+static int asus_otg_phy_parameter_b_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "reg: 0x81, value: 0x%X\n", g_phy_parameter_b);
+	return 0;
+}
+
+static int asus_otg_phy_parameter_b_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_phy_parameter_b_show, inode->i_private);
+}
+
+static ssize_t asus_otg_phy_parameter_b_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	g_phy_parameter_b = myxtoi(buf);
+
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_phy_parameter_b_fops = {
+	.open = asus_otg_phy_parameter_b_open,
+	.read = seq_read,
+	.write = asus_otg_phy_parameter_b_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_phy_parameter_c_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "reg: 0x82, value: 0x%X\n", g_phy_parameter_c);
+	return 0;
+}
+
+static int asus_otg_phy_parameter_c_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_phy_parameter_c_show, inode->i_private);
+}
+
+static ssize_t asus_otg_phy_parameter_c_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	g_phy_parameter_c = myxtoi(buf);
+
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_phy_parameter_c_fops = {
+	.open = asus_otg_phy_parameter_c_open,
+	.read = seq_read,
+	.write = asus_otg_phy_parameter_c_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int asus_otg_phy_parameter_d_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "reg: 0x83, value: 0x%X\n", g_phy_parameter_d);
+	return 0;
+}
+
+static int asus_otg_phy_parameter_d_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_phy_parameter_d_show, inode->i_private);
+}
+
+static ssize_t asus_otg_phy_parameter_d_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[16];
+	int status = count;
+
+	memset(buf, 0x00, sizeof(buf));
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
+		status = -EFAULT;
+		goto out;
+	}
+
+	g_phy_parameter_d = myxtoi(buf);
+
+out:
+	return status;
+}
+
+const struct file_operations asus_otg_phy_parameter_d_fops = {
+	.open = asus_otg_phy_parameter_d_open,
+	.read = seq_read,
+	.write = asus_otg_phy_parameter_d_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
+
 static int msm_otg_debugfs_init(struct msm_otg *motg)
 {
 	struct dentry *msm_otg_dentry;
@@ -5027,9 +5245,8 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 	if (!msm_otg_dbg_root || IS_ERR(msm_otg_dbg_root))
 		return -ENODEV;
 
-	//ASUS_BSP+++ BennyCheng "enable otg debugfs"
-	if (motg->pdata->mode == USB_OTG) {
-	//ASUS_BSP--- BennyCheng "enable otg debugfs"
+	if (motg->pdata->mode == USB_OTG &&
+		motg->pdata->otg_control == OTG_USER_CONTROL) {
 
 		msm_otg_dentry = debugfs_create_file("mode", S_IRUGO |
 			S_IWUSR, msm_otg_dbg_root, motg,
@@ -5077,48 +5294,73 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 		return -ENODEV;
 	}
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	msm_otg_dentry = debugfs_create_file("hub", S_IRUGO |
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	msm_otg_dentry = debugfs_create_file("otg_mode", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_pad_hub_fops);
+		&msm_otg_mode_fops);
+
+	if (!msm_otg_dentry) {
+		debugfs_remove(msm_otg_dbg_root);
+		msm_otg_dbg_root = NULL;
+		return -ENODEV;
+	}
+
+	msm_otg_dentry = debugfs_create_file("otg_5v_output", S_IRUGO |
+		S_IWUSR, msm_otg_dbg_root, motg,
+		&asus_otg_5v_output_fops);
 
 	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
+		return -ENODEV;
+	}
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+
+	//ASUS_BSP+++ BennyCheng "add microp related debug files"
+	msm_otg_dentry = debugfs_create_file("hub", S_IRUGO |
+		S_IWUSR, msm_otg_dbg_root, motg,
+		&asus_otg_pad_hub_fops);
+
+	if (!msm_otg_dentry) {
+		debugfs_remove(msm_otg_dbg_root);
+		msm_otg_dbg_root = NULL;
 		return -ENODEV;
 	}
 
 	msm_otg_dentry = debugfs_create_file("camera", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_pad_camera_fops);
+		&asus_otg_pad_camera_fops);
 
 	if (!msm_otg_dentry) {
-		debugfs_remove_recursive(msm_otg_dbg_root);
+		debugfs_remove(msm_otg_dbg_root);
+		msm_otg_dbg_root = NULL;
 		return -ENODEV;
 	}
 
-	msm_otg_dentry = debugfs_create_file("gpio_apq_mdm_sw", S_IRUGO |
+	msm_otg_dentry = debugfs_create_file("cbus", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_gpio_apq_mdm_sw_fops);
+		&asus_otg_pad_cbus_fops);
 
 	if (!msm_otg_dentry) {
-		debugfs_remove_recursive(msm_otg_dbg_root);
+		debugfs_remove(msm_otg_dbg_root);
+		msm_otg_dbg_root = NULL;
 		return -ENODEV;
 	}
 
-	msm_otg_dentry = debugfs_create_file("gpio_usb_mhl_sw", S_IRUGO |
+	msm_otg_dentry = debugfs_create_file("microp_state", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_gpio_usb_mhl_sw_fops);
+		&asus_otg_pad_microp_state_fops);
 
 	if (!msm_otg_dentry) {
-		debugfs_remove_recursive(msm_otg_dbg_root);
+		debugfs_remove(msm_otg_dbg_root);
+		msm_otg_dbg_root = NULL;
 		return -ENODEV;
 	}
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP--- BennyCheng "add microp related debug files"
 
 	//ASUS_BSP+++ BennyCheng "add dynamic setting support for phy parameters"
 	msm_otg_dentry = debugfs_create_file("phy_parameter_b", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_phy_parameter_b_fops);
+		&asus_otg_phy_parameter_b_fops);
 
 	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
@@ -5127,7 +5369,7 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 
 	msm_otg_dentry = debugfs_create_file("phy_parameter_c", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_phy_parameter_c_fops);
+		&asus_otg_phy_parameter_c_fops);
 
 	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
@@ -5136,24 +5378,13 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 
 	msm_otg_dentry = debugfs_create_file("phy_parameter_d", S_IRUGO |
 		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_phy_parameter_d_fops);
+		&asus_otg_phy_parameter_d_fops);
 
 	if (!msm_otg_dentry) {
 		debugfs_remove_recursive(msm_otg_dbg_root);
 		return -ENODEV;
 	}
 	//ASUS_BSP--- BennyCheng "add dynamic setting support for phy parameters"
-
-	//ASUS_BSP+++ BennyCheng "add otg 5v output debug file"
-	msm_otg_dentry = debugfs_create_file("otg_5v_output", S_IRUGO |
-		S_IWUSR, msm_otg_dbg_root, motg,
-		&msm_otg_5v_output_fops);
-
-	if (!msm_otg_dentry) {
-		debugfs_remove_recursive(msm_otg_dbg_root);
-		return -ENODEV;
-	}
-	//ASUS_BSP--- BennyCheng "add otg 5v output debug file"
 
 	return 0;
 }
@@ -5163,27 +5394,14 @@ static void msm_otg_debugfs_cleanup(void)
 	debugfs_remove_recursive(msm_otg_dbg_root);
 }
 
-//ASUS_BSP+++ BennyCheng "add proc debug files"
-static int msm_otg_proc_mode_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_mode_show, PDE(inode)->data);
-}
-
-const struct file_operations msm_otg_proc_mode_fops = {
-	.open = msm_otg_proc_mode_open,
-	.read = seq_read,
-	.write = msm_otg_mode_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int msm_otg_proc_apq_mdm_sw_show(struct seq_file *s, void *unused)
+//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
+static int asus_otg_proc_apq_mdm_sw_show(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
 	int apq_mdm_sw_gpio_value = 0;
 	int usb_mhl_sw_gpio_value = 0;
 
-	if (g_A68_hwID == A68_EVB || g_A68_hwID == A68_UNKNOWN) {
+	if (g_A68_hwID == A68_UNKNOWN) {
 		dev_err(motg->phy.dev, "not support for the HW!(%d)\n", g_A68_hwID);
 		return -EPERM;
 	}
@@ -5213,12 +5431,12 @@ static int msm_otg_proc_apq_mdm_sw_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-static int msm_otg_proc_apq_mdm_sw_open(struct inode *inode, struct file *file)
+static int asus_otg_proc_apq_mdm_sw_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, msm_otg_proc_apq_mdm_sw_show, PDE(inode)->data);
+	return single_open(file, asus_otg_proc_apq_mdm_sw_show, PDE(inode)->data);
 }
 
-static ssize_t msm_otg_proc_apq_mdm_sw_write(struct file *file, const char __user *ubuf,
+static ssize_t asus_otg_proc_apq_mdm_sw_write(struct file *file, const char __user *ubuf,
 				size_t count, loff_t *ppos)
 {
 	struct seq_file *s = file->private_data;
@@ -5226,7 +5444,7 @@ static ssize_t msm_otg_proc_apq_mdm_sw_write(struct file *file, const char __use
 	char buf[16];
 	int status = count;
 
-	if (g_A68_hwID == A68_EVB || g_A68_hwID == A68_UNKNOWN) {
+	if (g_A68_hwID == A68_UNKNOWN) {
 		dev_err(motg->phy.dev, "not support for the HW!(%d)\n", g_A68_hwID);
 		return -EPERM;
 	}
@@ -5239,11 +5457,11 @@ static ssize_t msm_otg_proc_apq_mdm_sw_write(struct file *file, const char __use
 	}
 
 	if (!strncmp(buf, "apq", 3)) {
-		msm_otg_apq_mdm_switch(USB_APQ);
-		msm_otg_usb_mhl_switch(MHL_PORT);
+		asus_otg_apq_mdm_switch(USB_APQ);
+		asus_otg_usb_mhl_switch(MHL_PORT);
 	} else if (!strncmp(buf, "mdm", 3)) {
-		msm_otg_apq_mdm_switch(USB_MDM);
-		msm_otg_usb_mhl_switch(USB_PORT);
+		asus_otg_apq_mdm_switch(USB_MDM);
+		asus_otg_usb_mhl_switch(USB_PORT);
 	} else {
 		status = -EINVAL;
 		goto out;
@@ -5253,77 +5471,93 @@ out:
 }
 
 const struct file_operations msm_otg_proc_apq_mdm_sw_fops = {
-	.open = msm_otg_proc_apq_mdm_sw_open,
+	.open = asus_otg_proc_apq_mdm_sw_open,
 	.read = seq_read,
-	.write = msm_otg_proc_apq_mdm_sw_write,
+	.write = asus_otg_proc_apq_mdm_sw_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+
+//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+static int asus_otg_proc_mode_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, asus_otg_mode_show, PDE(inode)->data);
+}
+
+const struct file_operations asus_otg_proc_mode_fops = {
+	.open = asus_otg_proc_mode_open,
+	.read = seq_read,
+	.write = asus_otg_mode_write,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
 
-//ASUS_BSP+++ Eric5_Ou "add proc files for otg_boot_check"
-static ssize_t msm_otg_proc_otg_boot_check_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
+//ASUS_BSP+++ BennyCheng "add otg check at boot"
+static ssize_t asus_otg_proc_otg_boot_check_write(struct file *file, const char __user *ubuf,
+size_t count, loff_t *ppos)
 {
 	queue_work(system_nrt_wq, &check_at_boot);
 	return 0;
 }
 
-
-const struct file_operations msm_otg_proc_otg_boot_check_fops = {
-	.write = msm_otg_proc_otg_boot_check_write,
+const struct file_operations asus_otg_proc_otg_boot_check_fops = {
+	.write = asus_otg_proc_otg_boot_check_write,
 };
-//ASUS_BSP--- Eric5_Ou "add proc files for otg_boot_check"
+//ASUS_BSP--- BennyCheng "add otg check at boot"
 
-static struct proc_dir_entry *msm_otg_proc_root;
-
-static int msm_otg_proc_init(struct msm_otg *motg)
+static struct proc_dir_entry *asus_otg_proc_root;
+static int asus_otg_proc_init(struct msm_otg *motg)
 {
 	struct proc_dir_entry *proc_entry;
 
-	msm_otg_proc_root = proc_mkdir("msm_otg", NULL);
-	if (!msm_otg_proc_root) {
+	asus_otg_proc_root = proc_mkdir("msm_otg", NULL);
+	if (!asus_otg_proc_root) {
 		return -ENODEV;
 	}
 
-	proc_entry = proc_create_data("mode", S_IRUGO |S_IWUSR, msm_otg_proc_root,
-			&msm_otg_proc_mode_fops, motg);
+	proc_entry = proc_create_data("mode", S_IRUGO |S_IWUSR, asus_otg_proc_root,
+			&asus_otg_proc_mode_fops, motg);
 	if (!proc_entry) {
-		remove_proc_entry("mode", msm_otg_proc_root);
-		msm_otg_proc_root = NULL;
+		remove_proc_entry("mode", asus_otg_proc_root);
+		asus_otg_proc_root = NULL;
 		return -ENODEV;
 	}
 
-	proc_entry = proc_create_data("apq_mdm_sw", S_IRUGO |S_IWUSR, msm_otg_proc_root,
+	//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
+	proc_entry = proc_create_data("apq_mdm_sw", S_IRUGO |S_IWUSR, asus_otg_proc_root,
 			&msm_otg_proc_apq_mdm_sw_fops, motg);
 	if (!proc_entry) {
-		remove_proc_entry("apq_mdm_sw", msm_otg_proc_root);
-		msm_otg_proc_root = NULL;
+		remove_proc_entry("apq_mdm_sw", asus_otg_proc_root);
+		asus_otg_proc_root = NULL;
 		return -ENODEV;
 	}
-	
-	//ASUS_BSP+++ Eric5_Ou "add proc files for otg_boot_check"
-	proc_entry = proc_create_data("otg_boot_check", S_IRUGO |S_IWUSR, msm_otg_proc_root,
-			&msm_otg_proc_otg_boot_check_fops, motg);
+	//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
+	proc_entry = proc_create_data("otg_boot_check", S_IRUGO |S_IWUSR, asus_otg_proc_root,
+			&asus_otg_proc_otg_boot_check_fops, motg);
 	if (!proc_entry) {
-		remove_proc_entry("otg_boot_check", msm_otg_proc_root);
-		msm_otg_proc_root = NULL;
+		remove_proc_entry("otg_boot_check", asus_otg_proc_root);
+		asus_otg_proc_root = NULL;
 		return -ENODEV;
 	}
-	//ASUS_BSP--- Eric5_Ou "add proc files for otg_boot_check"
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
 
 	return 0;
 }
 
-static void msm_otg_proc_cleanup(void)
+static void asus_otg_proc_cleanup(void)
 {
-	remove_proc_entry("mode", msm_otg_proc_root);
-	remove_proc_entry("apq_mdm_sw", msm_otg_proc_root);
-	
-	//ASUS_BSP+++ Eric5_Ou "add proc files for otg_boot_check"
-	remove_proc_entry("otg_boot_check", msm_otg_proc_root);
-	//ASUS_BSP--- Eric5_Ou "add proc files for otg_boot_check"
+	remove_proc_entry("mode", asus_otg_proc_root);
+	//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
+	remove_proc_entry("apq_mdm_sw", asus_otg_proc_root);
+	//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
+	remove_proc_entry("otg_boot_check", asus_otg_proc_root);
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
 }
-//ASUS_BSP--- BennyCheng "add proc debug files"
+//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
 static u64 msm_otg_dma_mask = DMA_BIT_MASK(64);
 static struct platform_device *msm_otg_add_pdev(
@@ -5457,11 +5691,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		pdata = msm_otg_dt_to_pdata(pdev);
 		if (!pdata)
 			return -ENOMEM;
-
-		pdata->bus_scale_table = msm_bus_cl_get_pdata(pdev);
-		if (!pdata->bus_scale_table)
-			dev_dbg(&pdev->dev, "bus scaling is disabled\n");
-
 		ret = msm_otg_setup_devices(pdev, pdata->mode, true);
 		if (ret) {
 			dev_err(&pdev->dev, "devices setup failed\n");
@@ -5649,37 +5878,22 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->pmic_id_status_work, msm_pmic_id_status_w);
+	INIT_DELAYED_WORK(&motg->check_ta_work, msm_ta_detect_work);
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	if (!early_suspend_delay_wq)
-		early_suspend_delay_wq = create_singlethread_workqueue("msm_otg_early_suspend_delay_wq");
-
-	if (!microp_cb_delay_wq)
-		microp_cb_delay_wq = create_singlethread_workqueue("msm_otg_microp_cb_delay_wq");
-
-	INIT_DELAYED_WORK_DEFERRABLE(&early_suspend_delay_work, msm_otg_early_suspend_delay_work);
-	INIT_DELAYED_WORK_DEFERRABLE(&microp_cb_delay_work, msm_otg_microp_cb_delay_work);
-	INIT_WORK(&late_resume_work, msm_otg_late_resume_work);
-	
-	//ASUS_BSP+++ Eric5_Ou "add work queue for otg_boot_check"
-	INIT_WORK(&check_at_boot, msm_otg_check_at_boot);
-	//ASUS_BSP--- Eric5_Ou "add work queue for otg_boot_check"
-	
-	wake_lock_init(&early_suspend_wlock, WAKE_LOCK_SUSPEND, "msm_otg_early_suspend_wlock");
-
-	mutex_init(&msm_otg_mutex);
-
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
 	motg->otg_mode = USB_AUTO;
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
-	register_microp_notifier(&usb_otg_microp_notifier);
-	notify_register_microp_notifier(&usb_otg_microp_notifier, "msm_otg"); //ASUS_BSP Lenter+
-	register_early_suspend(&usb_pad_hub_early_suspend_handler);
-
+	//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
 	if (g_A68_hwID <= A80_SR2) {
 		gpio_request(GPIO_APQ_MDM_SW_SEL, "APQ_MDM_SW_SEL");
 	}
 	gpio_request(GPIO_USB_MHL_SW_SEL, "USB_SW_SEL");
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_init(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
 
 	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	#ifdef CONFIG_CHARGER_ASUS
@@ -5687,6 +5901,33 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&asus_chg_work, asus_chg_detect_work);
 	#endif
 	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+
+	//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+	if (!microp_cb_delay_wq)
+		microp_cb_delay_wq = create_singlethread_workqueue("asus_otg_microp_cb_delay_wq");
+	INIT_DELAYED_WORK_DEFERRABLE(&microp_cb_delay_work, asus_otg_microp_cb_delay_work);
+	register_microp_notifier(&asus_otg_microp_notifier);
+	//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	wake_lock_init(&early_suspend_wlock, WAKE_LOCK_SUSPEND, "asus_otg_early_suspend_wlock");
+	if (!early_suspend_delay_wq)
+		early_suspend_delay_wq = create_singlethread_workqueue("asus_otg_early_suspend_delay_wq");
+	INIT_DELAYED_WORK_DEFERRABLE(&early_suspend_delay_work, asus_otg_early_suspend_delay_work);
+	INIT_WORK(&late_resume_work, asus_otg_late_resume_work);
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	register_early_suspend(&asus_otg_early_suspend_handler);
+#elif defined(CONFIG_FB)
+	fb_notif.notifier_call = asus_otg_fb_notifier_callback;
+	ret = fb_register_client(&fb_notif);
+	if (ret)
+		dev_err(&pdev->dev, "Unable to register fb_notifier: %d\n", ret);
+#endif
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
+
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
+	INIT_WORK(&check_at_boot, asus_otg_check_at_boot);
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
 
 	setup_timer(&motg->id_timer, msm_otg_id_timer_func,
 				(unsigned long) motg);
@@ -5760,25 +6001,25 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "mode debugfs file is"
 			"not available\n");
 
-	//ASUS_BSP+++ BennyCheng "add proc debug files"
-	ret = msm_otg_proc_init(motg);
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	ret = asus_otg_proc_init(motg);
 	if (ret) {
 		dev_err(&pdev->dev, "proc file init fail (%d)\n", ret);
 	}
-	//ASUS_BSP--- BennyCheng "add proc debug files"
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
 
+	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	if (motg->pdata->otg_control == OTG_PMIC_CONTROL){
-//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
-#ifdef CONFIG_CHARGER_ASUS
+	#ifdef CONFIG_CHARGER_ASUS
 		registerChargerInOutNotificaition(&msm_otg_set_vbus_state);
 		//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-		registerChargerI2CReadyNotificaition(&msm_otg_charger_ready);
+		registerChargerI2CReadyNotificaition(&asus_otg_charger_ready);
 		//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-#else
+	#else
 		pm8921_charger_register_vbus_sn(&msm_otg_set_vbus_state);
-#endif
-//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+	#endif
 	}
+	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 
 	if (motg->pdata->phy_type == SNPS_28NM_INTEGRATED_PHY) {
 		//ASUS_BSP+++ BennyCheng "not use qc PMIC to get usb interrupts"
@@ -5793,8 +6034,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 
 	if (motg->pdata->enable_lpm_on_dev_suspend)
 		motg->caps |= ALLOW_LPM_ON_DEV_SUSPEND;
-	else
-		motg->caps &= ~ALLOW_LPM_ON_DEV_SUSPEND;
 
 	wake_lock(&motg->wlock);
 	pm_runtime_set_active(&pdev->dev);
@@ -5812,11 +6051,12 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 
 	//ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
 	CarKitNotifyInitialize();
-if(g_A68_hwID<A80_SR3)
-	mhl_registerCarkitInOutNotificaition(&msm_otg_set_id_state);
-else
-	dp_registerCarkitInOutNotificaition(&msm_otg_set_id_state);
+	dp_registerCarkitInOutNotificaition(&asus_otg_set_id_state);
 	//ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
+
+	/* ASUS_BSP+++ BennyCheng "support mydp ac charger" */
+	dp_registerChargerInOutNotification(&asus_otg_mydp_ac_state);
+	/* ASUS_BSP--- BennyCheng "support mydp ac charger" */
 
 	return 0;
 
@@ -5877,47 +6117,47 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 		pm8921_charger_unregister_vbus_sn(0);
 	msm_otg_mhl_register_callback(motg, NULL);
 	msm_otg_debugfs_cleanup();
-	//ASUS_BSP+++ BennyCheng "add proc debug files"
-	msm_otg_proc_cleanup();
-	//ASUS_BSP--- BennyCheng "add proc debug files"
-
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	cancel_delayed_work_sync(&early_suspend_delay_work);
-	cancel_delayed_work_sync(&microp_cb_delay_work);
-	cancel_work_sync(&late_resume_work);
-
-	destroy_workqueue(early_suspend_delay_wq);
-	destroy_workqueue(microp_cb_delay_wq);
-
-	unregister_microp_notifier(&usb_otg_microp_notifier);
-	notify_unregister_microp_notifier(&usb_otg_microp_notifier, "msm_otg"); //ASUS_BSP Lenter+
-	unregister_early_suspend(&usb_pad_hub_early_suspend_handler);
-
-	wake_lock_destroy(&early_suspend_wlock);
-
-	mutex_destroy(&msm_otg_mutex);
-
+	//ASUS_BSP+++ BennyCheng "add host/client mode switch support"
+	asus_otg_proc_cleanup();
+	//ASUS_BSP--- BennyCheng "add host/client mode switch support"
+	//ASUS_BSP+++ BennyCheng "add apq mdm usb switch support"
 	if (g_A68_hwID <= A80_SR2) {
 		gpio_free(GPIO_APQ_MDM_SW_SEL);
 	}
 	gpio_free(GPIO_USB_MHL_SW_SEL);
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
-
+	//ASUS_BSP--- BennyCheng "add apq mdm usb switch support"
+	//ASUS_BSP+++ BennyCheng "add mutex to protect suspend/resume function"
+	mutex_destroy(&asus_otg_mutex);
+	//ASUS_BSP--- BennyCheng "add mutex to protect suspend/resume function"
+	//ASUS_BSP+++ BennyCheng "register microp event for pad mode switch"
+	cancel_delayed_work_sync(&microp_cb_delay_work);
+	destroy_workqueue(microp_cb_delay_wq);
+	unregister_microp_notifier(&asus_otg_microp_notifier);
+	//ASUS_BSP--- BennyCheng "register microp event for pad mode switch"
+	//ASUS_BSP+++ BennyCheng "register early suspend notification for none mode switch"
+	cancel_delayed_work_sync(&early_suspend_delay_work);
+	cancel_work_sync(&late_resume_work);
+	destroy_workqueue(early_suspend_delay_wq);
+	wake_lock_destroy(&early_suspend_wlock);
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	unregister_early_suspend(&asus_otg_early_suspend_handler);
+#elif defined(CONFIG_FB)
+	fb_unregister_client(&fb_notif);
+#endif
+	//ASUS_BSP--- BennyCheng "register early suspend notification for none mode switch"
 	cancel_delayed_work_sync(&motg->chg_work);
 	cancel_delayed_work_sync(&motg->pmic_id_status_work);
-
+	cancel_delayed_work_sync(&motg->check_ta_work);
 	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	#ifdef CONFIG_CHARGER_ASUS
 	cancel_delayed_work_sync(&asus_chg_work);
 	#endif
 	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
-
-	cancel_work_sync(&motg->sm_work);
-	
-	//ASUS_BSP+++ Eric5_Ou "add work queue for otg_boot_check"
+	//ASUS_BSP+++ BennyCheng "add otg check at boot"
 	cancel_work_sync(&check_at_boot);
-	//ASUS_BSP--- Eric5_Ou "add work queue for otg_boot_check"
-	
+	//ASUS_BSP--- BennyCheng "add otg check at boot"
+	cancel_work_sync(&motg->sm_work);
+
 	pm_runtime_resume(&pdev->dev);
 
 	device_init_wakeup(&pdev->dev, 0);

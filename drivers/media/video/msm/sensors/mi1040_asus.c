@@ -221,6 +221,7 @@ static struct msm_camera_i2c_conf_array imx091_confs[] = {
 #endif //LiJen: ISP dosen't  need
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
 
+#ifdef ASUS_A80_PROJECT
 static struct msm_sensor_output_info_t mi1040_dimensions[] = {
 //ASUS_BSP +++ LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
 	{	//Capture
@@ -232,7 +233,7 @@ static struct msm_sensor_output_info_t mi1040_dimensions[] = {
 		.op_pixel_clk = 320000000,	//ASUS_BSP LiJen: ISP MIPI speed is 576Mbits/Lane, 4x576/8=288M
 		.binning_factor = 1,
 	},
-	{	//Preview
+	{	//Preview ASUS_BSP JohnsonLin "[A80]Modify cam1 resolution for taking picture while recording "
 		.x_output = 1920,
 		.y_output = 1088,
 		.line_length_pclk = 0x85c,
@@ -241,9 +242,9 @@ static struct msm_sensor_output_info_t mi1040_dimensions[] = {
 		.op_pixel_clk = 320000000,	//ASUS_BSP LiJen: ISP MIPI speed is 576Mbits/Lane, 4x576/8=288M
 		.binning_factor = 1,
 	},
-			{ //video
-				.x_output = 1920,
-				.y_output = 1088,
+			{ //video  ASUS_BSP JohnsonLin "[A80]Modify cam1 resolution for taking picture while recording "
+				.x_output = 1280,
+				.y_output = 960,
 				.line_length_pclk = 0x85c,
 				.frame_length_lines = 0x460,
 				.vt_pixel_clk = 216000000,	//ASUS_BSP LiJen: This condifuration only for 3A, YUV sensor didn't need
@@ -253,6 +254,41 @@ static struct msm_sensor_output_info_t mi1040_dimensions[] = {
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
 };
 
+#endif 
+
+#ifdef ASUS_A68_PROJECT
+static struct msm_sensor_output_info_t mi1040_dimensions[] = {
+//ASUS_BSP +++ LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
+	{	//Capture
+		.x_output = 1280,
+		.y_output = 960,
+		.line_length_pclk = 0x85c,
+		.frame_length_lines = 0x460,
+		.vt_pixel_clk = 216000000,	//ASUS_BSP LiJen: This condifuration only for 3A, YUV sensor didn't need
+		.op_pixel_clk = 320000000,	//ASUS_BSP LiJen: ISP MIPI speed is 576Mbits/Lane, 4x576/8=288M
+		.binning_factor = 1,
+	},
+	{	//Preview
+		.x_output = 1280,
+		.y_output = 960,
+		.line_length_pclk = 0x85c,
+		.frame_length_lines = 0x460,
+		.vt_pixel_clk = 216000000,	//ASUS_BSP LiJen: This condifuration only for 3A, YUV sensor didn't need
+		.op_pixel_clk = 320000000,	//ASUS_BSP LiJen: ISP MIPI speed is 576Mbits/Lane, 4x576/8=288M
+		.binning_factor = 1,
+	},
+			{ //video
+				.x_output = 1280,
+				.y_output = 960,
+				.line_length_pclk = 0x85c,
+				.frame_length_lines = 0x460,
+				.vt_pixel_clk = 216000000,	//ASUS_BSP LiJen: This condifuration only for 3A, YUV sensor didn't need
+				.op_pixel_clk = 320000000,	//ASUS_BSP LiJen: ISP MIPI speed is 576Mbits/Lane, 4x576/8=288M
+				.binning_factor = 1,
+			},
+//ASUS_BSP --- LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
+};
+#endif 
 #if 0
 static struct msm_camera_csid_vc_cfg mi1040_cid_cfg[] = {
 	{0, 0x1E, CSI_DECODE_8BIT}, //ASUS_BSP LiJen "[A68][13M][NA][Others]Full porting for 13M camera with ISP"
@@ -412,8 +448,14 @@ void mi1040_sensor_start_stream(struct msm_sensor_ctrl_t *s_ctrl)
     }else{
        if(true == iCatch_first_open){    //ASUS_BSP Stimber
            pr_info("%s first open camera \n",__func__);
+#ifdef ASUS_A68_PROJECT		   
+           sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x7106, 0x00);//preview mode
+#endif 
+#ifdef ASUS_A80_PROJECT		   
            sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x7106, 0x0d);//preview mode
+#endif 
            sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x7120, 0x00);  
+	     sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x7121, 0x01);	 //ASUS_BSP LiJen "[A86][Camera][NA][Others]Camera mini porting"
            wait_for_AWB_ready();
        }
     }
@@ -485,7 +527,9 @@ static int32_t mi1040_sensor_setting(struct msm_sensor_ctrl_t *s_ctrl,
               iCatch_first_open = true; //LiJen: Ignore wiat staus when ISP first open
 
 		//ASUS_BSP +++ Peter_Lu For i2c bus for protect loading ISP code
+#ifdef ASUS_A80_PROJECT		
 		sw_i2c_bus_lock( imx091_s_ctrl.sensor_i2c_client->client->adapter, true, 80, I2C_BUS_LOCK_TYPE2 );
+#endif		
               //ISP load code - switch to front camera
               sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x1011, 0x01);//cpu reset
               sensor_write_reg(imx091_s_ctrl.sensor_i2c_client->client, 0x001C, 0x08);
@@ -498,8 +542,9 @@ static int32_t mi1040_sensor_setting(struct msm_sensor_ctrl_t *s_ctrl,
 
               iCatch_enable_exif(true, false);
 		//ASUS_BSP +++ Peter_Lu Lock i2c bus for protect runing ISP code
+#ifdef ASUS_A80_PROJECT		
 		sw_i2c_bus_lock( imx091_s_ctrl.sensor_i2c_client->client->adapter, true, 70, I2C_BUS_LOCK_TYPE1 );
-
+#endif
               g_front_calibrating = false;	//ASUS_BSP Stimber "Implement for calibration"
 	} else if (update_type == MSM_SENSOR_UPDATE_PERIODIC) {
             v4l2_subdev_notify(&s_ctrl->sensor_v4l2_subdev,
@@ -873,6 +918,9 @@ static int mi1040_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *a
 	return rc;
 }
 
+
+#ifdef ASUS_A80_PROJECT
+
 static int mi1040_power_down(const struct msm_camera_sensor_info *data)
 {
        int rc=0;
@@ -919,6 +967,7 @@ static int mi1040_power_down(const struct msm_camera_sensor_info *data)
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
+		case A68_PR2:
 		case A68_MP:
 		default:
 		//mutex_lock(imx091_s_ctrl.msm_sensor_mutex);    //ASUS_BSP Stimber "Fix the issue which fail to re-open camera"
@@ -1125,7 +1174,8 @@ static int mi1040_power_up(const struct msm_camera_sensor_info *data)
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
-		//case A68_MP:
+		case A68_PR2:			
+		case A68_MP:
 		default:
 		// ISP power on +++
 
@@ -1224,6 +1274,374 @@ static int mi1040_power_up(const struct msm_camera_sensor_info *data)
 	pr_info("%s ---\n",__func__);
 	return 0;	
 }
+
+
+
+#endif
+#ifdef ASUS_A68_PROJECT
+
+static int mi1040_power_down(const struct msm_camera_sensor_info *data)
+{
+       int rc=0;
+    	static struct pm_gpio pm_isp_gpio_low = {
+		.direction        = PM_GPIO_DIR_OUT,
+		.output_buffer    = PM_GPIO_OUT_BUF_CMOS,
+		.output_value     = 0,
+		.pull             = PM_GPIO_PULL_NO,
+		.vin_sel          = PM_GPIO_VIN_S4,
+		.out_strength     = PM_GPIO_STRENGTH_HIGH,
+		.function         = PM_GPIO_FUNC_PAIRED,
+		.inv_int_pol      = 0,
+		.disable_pin      = 0,
+	};
+        
+	pr_info("%s +++\n",__func__);
+
+       if(g_mi1040_power == false){
+            pr_info("%s --- power has disabled\n", __func__);
+            return -1;
+       }
+       
+	if(!data)
+	{
+		pr_info("data is NULL, return\n");
+		pr_info("%s ---\n",__func__);
+		return -1;
+	}
+
+	if(!imx091_s_ctrl.sensordata)
+	{
+		pr_info("imx091_s_ctrl.sensordata is NULL, return\n");
+		pr_info("%s ---\n",__func__);
+		return -1;
+	}
+
+	switch (g_A68_hwID)
+	{
+		case A68_EVB:
+		case A68_SR1_1:
+		case A68_SR1_2:
+		case A68_SR2:
+		case A68_ER1:
+		case A68_ER2:
+		case A68_ER3:
+		case A68_PR:
+		case A68_PR2:			
+		case A68_MP:
+		default:
+		//mutex_lock(imx091_s_ctrl.msm_sensor_mutex);    //ASUS_BSP Stimber "Fix the issue which fail to re-open camera"
+		// Switch CLK to 8M
+			gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 0);
+
+	    //ISP_RST reset low
+	       //gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset, 0);
+	       rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset), &pm_isp_gpio_low);
+	       if (rc != 0){
+				pr_err("%s: sensor_reset failed\n", __func__);
+	       }       
+	    
+	    //disable MCLK
+	       msm_sensor_power_down(&imx091_s_ctrl);
+
+	    //PMIC regulator - ISP 2.8V OFF
+		   mi1040_regulator_init(false);
+
+	    //ISP 1.8V OFF
+			//gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en, 0);
+		   rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en), &pm_isp_gpio_low);
+	       if (rc != 0){
+				pr_err("%s: isp_1p8_en failed\n", __func__);
+	       }    
+	       		   
+	    //ISP 1.2V OFF
+	       //gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en, 0);
+	       rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en), &pm_isp_gpio_low);
+	       if (rc != 0){
+				pr_err("%s: isp_1p2_en failed\n", __func__);
+	       }     
+
+		   //gpio_set_value_cansleep(imx091_s_ctrl.sensordata->sensor_reset, 0);
+		   gpio_set_value_cansleep(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_reset), 0);
+		   
+		   gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, 0);   	
+
+		   msleep(20);
+		   gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset));
+		   gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en));
+		   gpio_free(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en);
+		   gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en));	
+	     gpio_free(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend);
+		   break;
+	}
+
+       g_mi1040_power = false;
+
+       g_front_calibrating = false;	//ASUS_BSP Stimber "Implement for calibration"
+	pr_info("%s ---\n",__func__);
+	return 0;
+}
+
+static int mi1040_gpio_request(void)
+{
+	int32_t rc = 0;
+    
+    pr_info("%s +++\n",__func__);
+    printk("%s +++ g_A68_hwID=%d\n",__func__,g_A68_hwID);
+	switch (g_A68_hwID)
+	{
+		case A68_EVB:
+	        // Power on ISP module:
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio isp_1p2_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en, rc);
+	        	goto init_probe_fail0;
+	        }
+
+	        // Power on 8M camera OV8830 module:
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio isp_1p8_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en, rc);
+	        	goto init_probe_fail1;
+	        }
+
+	        rc = gpio_request(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio vga_mclk_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, rc);
+	        	goto init_probe_fail2;
+	        }
+
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio sensor_reset %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset, rc);
+	        	goto init_probe_fail3;
+	        }
+
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio 8M_WP %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, rc);
+	        	goto init_probe_fail4;
+	        }
+			break;
+			
+		case A68_SR1_1:
+		case A68_SR1_2:
+		case A68_SR2:
+		case A68_ER1:
+		case A68_ER2:
+		case A68_ER3:
+		case A68_PR:
+             case A68_PR2:
+		case A68_MP:
+		default:
+			// Power on ISP module:
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio isp_1p2_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en, rc);
+	        	goto init_probe_fail0;
+	        }
+
+	        // Power on 8M camera OV8830 module:
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio isp_1p8_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en, rc);
+	        	goto init_probe_fail1;
+	        }
+
+	        rc = gpio_request(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio vga_mclk_en %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, rc);
+	        	goto init_probe_fail2;
+	        }
+
+	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset), "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio sensor_reset %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset, rc);
+	        	goto init_probe_fail3;
+	        }
+
+	        rc = gpio_request(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, "mi1040");
+	        if (rc) {
+	        	pr_err("%s: gpio 8M_WP %d, rc(%d)fail\n",__func__, imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, rc);
+	        	goto init_probe_fail4;
+	        }
+
+			break;
+	}
+        
+	pr_info("%s ---\n",__func__);
+	return rc;
+
+
+init_probe_fail4:
+	gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset));
+
+init_probe_fail3:
+	gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en));
+
+init_probe_fail2:
+	gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en));
+
+init_probe_fail1:
+	gpio_free(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en));
+
+init_probe_fail0:    
+	pr_info("%s ---\n",__func__);
+	return rc;
+}
+
+
+
+static int mi1040_power_up(const struct msm_camera_sensor_info *data)
+{
+	int ret = -1, rc=0;
+        
+	pr_info("%s +++\n",__func__);
+
+       if(g_mi1040_power == true){
+            pr_info("%s --- power has enabled\n", __func__);
+            return -1;	            
+       }
+       
+	if(!data)
+	{
+		pr_err("data is NULL, return\n");
+		pr_err("%s ---\n",__func__);
+		return -1;
+	}
+
+	if(!imx091_s_ctrl.sensordata)
+	{
+		pr_err("imx091_s_ctrl.sensordata is NULL, return\n");
+		pr_info("%s ---\n",__func__);
+		return -1;
+	}
+
+       iCatch_init();
+       
+	ret = mi1040_gpio_request();
+	if(ret < 0)
+	{
+		pr_err("8M Camera GPIO request fail!!\n");
+		pr_info("%s ---\n",__func__);
+		return -1;
+	}
+
+	switch (g_A68_hwID)
+	{
+		case A68_EVB:
+		case A68_SR1_1:
+		case A68_SR1_2:
+		case A68_SR2:
+		case A68_ER1:
+		case A68_ER2:
+		case A68_ER3:
+		case A68_PR:
+		case A68_PR2:			
+		case A68_MP:
+		default:
+		// ISP power on +++
+
+		//ASUS_BSP +++ Peter_Lu Lock i2c bus for protect camera ISP
+//		sw_i2c_bus_lock( imx091_s_ctrl.sensor_i2c_client->client->adapter, true, 200, I2C_BUS_LOCK_TYPE1 );
+
+		//ISP_RST reset low
+			//gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset, 0);
+		    rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset), &pm_isp_gpio_low);
+		    if (rc != 0){
+				pr_err("%s: sensor_reset low failed\n", __func__);
+		    }	
+		    //msleep(25); 
+
+		// ISP 1.2V ON
+			//gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en, 1);
+		    rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en), &pm_isp_gpio_high);
+		    if (rc != 0){
+				pr_err("%s: isp_1p2_en high failed\n", __func__);
+		    }	
+		    //msleep(0); //t2 
+		    
+		// ISP 1.8V on
+			//gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en, 1);
+		    rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en), &pm_isp_gpio_high);
+		    if (rc != 0){
+				pr_err("%s: isp_1p8_en high failed\n", __func__);
+		    }
+		    msleep(1);   //t1
+
+		//PMIC regulator - ISP 2.8V ON    
+		    mi1040_regulator_init(true);
+		    
+		// enable MCLK
+		    msm_sensor_power_up(&imx091_s_ctrl);
+		    //t3
+
+		//ISP SUSPEND high
+			rc = gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, 1);
+		    if (rc != 0){
+				pr_err("%s: isp_suspend high failed\n", __func__);
+		    }
+		          
+		//ISP_RST reset high
+			//gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset, 1);
+		    rc = pm8xxx_gpio_config(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset), &pm_isp_gpio_high);
+		    if (rc != 0){
+				pr_err("%s: sensor_reset high failed\n", __func__);
+		    }	
+		    msleep(6);
+
+		//ISP SUSPEND low
+			//gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, 0);
+		    gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend, 0);
+	
+		// ISP power on ---
+
+		//ASUS_BSP +++ Peter_Lu Lock i2c bus for protect camera ISP
+//		sw_i2c_bus_lock( imx091_s_ctrl.sensor_i2c_client->client->adapter, true, 70, I2C_BUS_LOCK_TYPE1 );
+
+		// Sensor power on +++
+		// vga_mclk_en switch to 8M, ensure initial state
+			gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 1);
+
+		// Switch CLK to 8M
+		if (!is_front_camera) {
+			// vga_mclk_en switch to VGA, ensure initial state
+				gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 0);
+		// Switch CLK to 8M
+					gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 1);
+		// Sensor power on ---
+			} else {
+				// vga_mclk_en switch to VGA, ensure initial state
+					gpio_direction_output(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 1);
+			// Switch CLK to 8M
+						gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en, 0);
+			}
+		// Sensor power on ---
+
+                do_gettimeofday(&g_mi1040_power_tv);
+		
+		// Wait for I2C ready
+		//ASUS_BSP +++ Peter_Lu Already lock i2c bus 70ms 
+		//  msleep(10); //LiJen: tmp
+
+			pr_info("gpio sensor_reset(%d)\n",gpio_get_value(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->sensor_reset)));
+			pr_info("gpio isp_1p2_en(%d)\n",gpio_get_value(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en)));
+			pr_info("gpio vga_mclk_en(%d)\n",gpio_get_value(imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en));
+			pr_info("gpio isp_1p8_en(%d)\n",gpio_get_value(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en)));
+			pr_info("gpio ISP_SUSPEND(%d)\n",gpio_get_value(imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend));
+			pr_info("gpio GPIO5(%d)\n",gpio_get_value(5));
+			break;
+	}
+
+       g_mi1040_power = true;
+	pr_info("%s ---\n",__func__);
+	return 0;	
+}
+
+
+#endif 
+
+
+
 
 //ASUS_BSP +++ LiJen [A68][13M][NA][Others]modify camera power error handling
 int32_t mi1040_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
@@ -1402,6 +1820,7 @@ int32_t mi1040_sensor_i2c_probe(struct i2c_client *client,
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
+		case A68_PR2:
 		case A68_MP:
 			imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en = 87;
 			imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en = 10; 	  //PM(10)
@@ -1467,7 +1886,7 @@ power_down:
 }
 
 static int32_t mi1040_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
-		uint16_t gain, uint32_t line)
+			uint16_t gain, uint32_t line, int32_t luma_avg, uint16_t fgain)		
 {
 	uint32_t fl_lines, offset;
 	uint8_t int_time[3];

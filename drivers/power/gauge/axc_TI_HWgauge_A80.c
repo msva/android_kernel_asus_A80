@@ -325,7 +325,7 @@ int get_Cntl_from_TIgauge(int TIcntl)
 
 	TIvalue=TIgauge_read_table(TIcntl);
 	
-	printk("[BAT][TIgauge][CNTL:%d]:%d\n",TIcntl,TIvalue);
+	pr_debug("[BAT][TIgauge][CNTL:%d]:%d\n",TIcntl,TIvalue);
 
 	if(TI_GAUGE_Error==TIvalue)
 		return TI_GAUGE_Error;

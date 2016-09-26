@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,7 @@ int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 		pr_err("%s: csiphybase NULL\n", __func__);
 		return -EINVAL;
 	}
-       pr_info("%s +\n",__func__);
+
 	csiphy_dev->lane_mask[csiphy_dev->pdev->id] |= csiphy_params->lane_mask;
 	lane_mask = csiphy_dev->lane_mask[csiphy_dev->pdev->id];
 	lane_cnt = csiphy_params->lane_cnt;
@@ -97,7 +97,6 @@ int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 		lane_mask >>= 1;
 	}
 	msleep(20);
-       pr_info("%s -\n",__func__);
 	return rc;
 }
 
@@ -106,7 +105,8 @@ static irqreturn_t msm_csiphy_irq(int irq_num, void *data)
 	uint32_t irq;
 	int i;
 	struct csiphy_device *csiphy_dev = data;
-
+	if(!csiphy_dev || !csiphy_dev->base)
+		return IRQ_HANDLED;
 	for (i = 0; i < 8; i++) {
 		irq = msm_camera_io_r(
 			csiphy_dev->base +
@@ -157,7 +157,6 @@ static struct msm_cam_clk_info csiphy_8974_clk_info[] = {
 static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 {
 	int rc = 0;
-       pr_info("%s +\n",__func__);
 	if (csiphy_dev == NULL) {
 		pr_err("%s: csiphy_dev NULL\n", __func__);
 		rc = -ENOMEM;
@@ -212,7 +211,6 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 		msm_camera_io_r(csiphy_dev->base + MIPI_CSIPHY_HW_VERSION_ADDR);
 
 	csiphy_dev->csiphy_state = CSIPHY_POWER_UP;
-       pr_info("%s -\n",__func__);
 	return 0;
 }
 
@@ -433,7 +431,7 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 csiphy_no_resource:
 	mutex_destroy(&new_csiphy_dev->mutex);
 	kfree(new_csiphy_dev);
-	return 0;
+	return rc;
 }
 
 static const struct of_device_id msm_csiphy_dt_match[] = {

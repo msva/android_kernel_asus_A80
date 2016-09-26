@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,8 @@
 #include <mach/peripheral-loader.h>
 
 #include "peripheral-loader.h"
+
+extern int g_A68_cpuID;
 
 /**
  * proxy_timeout - Override for proxy vote timeouts
@@ -162,7 +164,12 @@ static int load_segment(const struct elf32_phdr *phdr, unsigned num,
 	}
 
 	if (phdr->p_filesz) {
-		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
+		if ( !strcmp(pil->desc->name, "wcnss") || !strcmp(pil->desc->name, "q6") ) {
+			snprintf(fw_name, ARRAY_SIZE(fw_name), "%s_%d.b%02d", pil->desc->name, g_A68_cpuID, num);
+			dev_info(&pil->dev, "%s\n", fw_name);
+		} 
+		else 
+			snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
 				pil->desc->name, num);
 		ret = request_firmware(&fw, fw_name, &pil->dev);
 		if (ret) {
@@ -258,7 +265,12 @@ static int load_image(struct pil_device *pil)
 	unsigned long proxy_timeout = pil->desc->proxy_timeout;
 
 	down_read(&pil_pm_rwsem);
-	snprintf(fw_name, sizeof(fw_name), "%s.mdt", pil->desc->name);
+	if( !strcmp(pil->desc->name, "wcnss") || !strcmp(pil->desc->name, "q6") ) {
+		snprintf(fw_name, sizeof(fw_name), "%s_%d.mdt", pil->desc->name, g_A68_cpuID);
+		dev_info(&pil->dev, "%s\n", fw_name);
+	} 
+	else 
+		snprintf(fw_name, sizeof(fw_name), "%s.mdt", pil->desc->name);
 	ret = request_firmware(&fw, fw_name, &pil->dev);
 	if (ret) {
 		dev_err(&pil->dev, "%s: Failed to locate %s\n",
@@ -575,8 +587,8 @@ static void msm_pil_debugfs_remove(struct pil_device *pil)
 	debugfs_remove(pil->dentry);
 }
 #else
-static int __init msm_pil_debugfs_init(void) { return 0; };
-static void __exit msm_pil_debugfs_exit(void) { return; };	//ASUS_BSP: fix for miniporting++
+static int __init msm_pil_debugfs_init(void) { return 0; }
+static void __exit msm_pil_debugfs_exit(void) { }
 static int msm_pil_debugfs_add(struct pil_device *pil) { return 0; }
 static void msm_pil_debugfs_remove(struct pil_device *pil) { }
 #endif

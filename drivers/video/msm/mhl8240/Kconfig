@@ -1,7 +1,7 @@
 config FB_MSM_HDMI_MHL_8240
 	depends on FB_MSM_HDMI_MSM_PANEL
 	bool 'SI_MHL 8334 support '
-	default y
+	default n
 	---help---
 	  Support the HDMI to MHL conversion.
 	  MHL (Mobile High-Definition Link) technology
@@ -39,7 +39,7 @@ config SII8240_VER68
 
 config SII8240_PM_SUPPORT
         bool "SII8240_PM_SUPPORT"
-        default n
+        default y
         help
             Allows SII8240_PM support
  

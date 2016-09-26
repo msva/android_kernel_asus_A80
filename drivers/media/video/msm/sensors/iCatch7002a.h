@@ -33,6 +33,7 @@ void iCatch_set_acelock_mode(int16_t mode); //ASUS_BSP LiJen "[A68][13M][NA][Oth
 void iCatch_set_awblock_mode(int16_t mode);  //ASUS_BSP LiJen "[A68][13M][NA][Others]implement AWBLOCK mode"
 void iCatch_set_caf_mode(bool continuous);  //ASUS_BSP LiJen "[A68][13M][NA][Others]implement CAF mode"
 void iCatch_set_scene_mode(camera_bestshot_mode_type mode); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement SCENE mode"
+void iCatch_set_ultrapixel(int16_t mode);
 void iCatch_set_effect_mode(int16_t mode); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement EFFECT mode"
 void iCatch_set_aura_value(int16_t mode); //ASUS_BSP LiJen "[A68][13M][NA][Others]implement AURA mode"
 void iCatch_checkAFMode(void);
@@ -40,5 +41,8 @@ void iCatch_get_exif(struct exif_cfg *exif);	//ASUS_BSP Stimber "Implement EXIF 
 bool iCatch_exif_flow_control(void);	//ASUS_BSP Stimber "Add for preview info control"
 void iCatch_set_general_cmd(struct general_cmd_cfg *cmd);
 void iCatch_get_general_cmd(struct general_cmd_cfg *cmd);
+void create_iCatch_switch_file(void);
+void remove_iCatch_switch_file(void);
+void iCatch_enable_autonight(bool enable);
 
 #endif //___ICATCH7002A_H__

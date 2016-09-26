@@ -42,14 +42,15 @@
 #include <asm/uaccess.h>
 
 #include "i2c-core.h"
-//ASUS_BSP +++ Peter_Lu For camera ISP Power on error issue
+
+//ASUS_BSP +++ Maggie_Lee For camera ISP Power on error issue
 #include <linux/delay.h>
 #define GSBI4_QUP_I2C_BUS_ID 4
 static long lock_orig_jiffies = 0;
 static long old_jiffies = 0;
 static int i2c_lock_type = 0;
 
-//ASUS BSP Larry Lai for i2c debug +++
+//ASUS_BSP +++ Maggie_Lee i2c debug
 /* Debug levels */
 #define NO_DEBUG       0
 #define DEBUG_ERROR       0
@@ -62,9 +63,7 @@ static int i2c_lock_type = 0;
 static int debug = NO_DEBUG;
 
 module_param(debug, int, 0644);
-
 MODULE_PARM_DESC(debug, "Activate i2c debug output");
-
 
 #define i2c_debug(level, nr, fmt, ...) \
 	if (debug >= (level)) { \
@@ -84,7 +83,7 @@ MODULE_PARM_DESC(debug, "Activate i2c debug output");
 				break; \
 			} \
 	}
-//ASUS BSP Larry Lai for i2c debug ---
+//ASUS_BSP --- Maggie_Lee i2c debug
 
 /* core_lock protects i2c_adapter_idr, and guarantees
    that device detection, deletion of detected devices, and attach_adapter
@@ -679,8 +678,7 @@ static void i2c_adapter_dev_release(struct device *dev)
 }
 
 
-// ASUS_BSP +++
-//SinaChou @20111201:Add test entry point for stress test
+//ASUS_BSP +++ Maggie_Lee I2C Stress Test Porting
 #ifdef CONFIG_I2C_STRESS_TEST
 
 #include <linux/ctype.h>
@@ -689,37 +687,17 @@ static void i2c_adapter_dev_release(struct device *dev)
 static ssize_t
 show_test(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	//struct i2c_adapter *adap = to_i2c_adapter(dev);
 	return i2c_stresstest_print_status(buf);
 }
 static ssize_t
 store_test(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count)
-{
-	//ssize_t ret = -EINVAL, size;
-	/*
-	int contrast;
-	char *endp;
-
-	contrast = simple_strtol(buf, &endp, 0);
-	size = endp - buf;
-
-	if (*endp && isspace(*endp))
-		size++;
-
-	if (size != count)
-		return ret;
-
-	printk("ID = %d\n",contrast);
-
-	ret = count;
-	*/
-		
+{		
 	return i2c_stresstest_command_parser(buf, count);
-
 }
+static DEVICE_ATTR(test, 0755 , show_test, store_test);
 #endif
-// ASUS_BSP +++
+//ASUS_BSP +++ Maggie_Lee I2C Stress Test Porting
 
 /*
  * Let users instantiate I2C devices through sysfs. This can be used when
@@ -835,21 +813,15 @@ i2c_sysfs_delete_device(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR(new_device, S_IWUSR, NULL, i2c_sysfs_new_device);
 static DEVICE_ATTR(delete_device, S_IWUSR, NULL, i2c_sysfs_delete_device);
 
-// ASUS_BSP +++
-#ifdef CONFIG_I2C_STRESS_TEST
-//static DEVICE_ATTR(test, 664, show_test, store_test);
-static DEVICE_ATTR(test, 0755 , show_test, store_test);
-#endif
-// ASUS_BSP ---
 static struct attribute *i2c_adapter_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_new_device.attr,
 	&dev_attr_delete_device.attr,
-// ASUS_BSP +++
+//ASUS_BSP +++ Maggie Lee I2C Stresstest Porting
 #ifdef CONFIG_I2C_STRESS_TEST
 	&dev_attr_test.attr,
 #endif 
-// ASUS_BSP ---
+//ASUS_BSP --- Maggie Lee
 	NULL
 };
 
@@ -1404,9 +1376,11 @@ module_exit(i2c_exit);
  */
 int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
+//ASUS_BSP +++ Maggie Lee For camera power up i2c connection error issue
 	unsigned long orig_jiffies;
-	long delay_jiffies = 0;
+	int delay_jiffies = 0;
 	int ret, try;
+//ASUS_BSP ---
 
 	/* REVISIT the fault reporting model here is weak:
 	 *
@@ -1426,7 +1400,6 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	 */
 
 	if (adap->algo->master_xfer) {
-	
 #ifdef DEBUG
 		for (ret = 0; ret < num; ret++) {
 			dev_dbg(&adap->dev, "master_xfer[%d] %c, addr=0x%02x, "
@@ -1459,18 +1432,22 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		/* Retry automatically on arbitration loss */
 		orig_jiffies = jiffies;
 
-		//ASUS_BSP +++ Peter_Lu For camera power up i2c connection error issue
+		//ASUS_BSP +++ Maggie_Lee For camera power up i2c connection error issue
 		try = 0;
 		old_jiffies = lock_orig_jiffies;
 		if ( (int)jiffies < (int)lock_orig_jiffies && adap->nr == GSBI4_QUP_I2C_BUS_ID ){
-			//printk("[i2c][sw_i2c_bus_lock] Delay time(Now:%d, Set:%d )\n", (int)jiffies, (int)lock_orig_jiffies );
+			printk("[i2c][sw_i2c_bus_lock] Lock i2c bus4, addr=0x%02x\n", msgs[0].addr);
+			printk("[i2c][sw_i2c_bus_lock] Delay operation begin(Now:%d, Set:%d )\n", (int)jiffies, (int)lock_orig_jiffies );
 			do {
-				delay_jiffies = lock_orig_jiffies - jiffies;
+				delay_jiffies = (int)lock_orig_jiffies - (int)jiffies;
+				//printk("[i2c][sw_i2c_bus_lock] Delay %d ms\n", jiffies_to_msecs((unsigned long)delay_jiffies));
 								
 				if ( delay_jiffies > 0 && i2c_lock_type == I2C_BUS_LOCK_TYPE1 )	{
 					if ( try == 0 )
-						printk("[i2c][sw_i2c_bus_lock] Type %d. Delay time : %d ms\n", i2c_lock_type, jiffies_to_msecs(delay_jiffies) );
+						printk("[i2c][sw_i2c_bus_lock] Type %d. Delay time : %d ms\n", i2c_lock_type, jiffies_to_msecs((unsigned long)delay_jiffies) );
+					i2c_unlock_adapter(adap);
 					msleep(10);
+					i2c_lock_adapter(adap);
 				}
 				else if ( delay_jiffies > 0 && i2c_lock_type == I2C_BUS_LOCK_TYPE2 )	{
 					if ( msgs[0].addr == 0x3c )	{
@@ -1479,7 +1456,7 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 						break;
 					}
 					else	{
-						printk("[i2c][sw_i2c_bus_lock] abandon I2C command ( 0x%02x )\n", msgs[0].addr );
+						printk("[i2c.2][sw_i2c_bus_lock] abandon I2C command ( 0x%02x )\n", msgs[0].addr );
 						i2c_unlock_adapter(adap);
 						return -EAGAIN;
 					}
@@ -1487,22 +1464,23 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 				else	{
 					lock_orig_jiffies = jiffies;
 					old_jiffies = lock_orig_jiffies;
+					printk("[i2c][sw_i2c_bus_lock] Other(jiffies:%d), Type %d\n", (int)lock_orig_jiffies, i2c_lock_type);
 					break;
 				}
 				if ( old_jiffies != lock_orig_jiffies )	{
-					printk("[i2c][sw_i2c_bus_lock] Set new delay time(Old:%d, New:%d )\n", (int)old_jiffies, (int)lock_orig_jiffies );
+					printk("[i2c][sw_i2c_bus_lock] Set new delay time in operation(Old:%d, New:%d )\n", (int)old_jiffies, (int)lock_orig_jiffies );
 					old_jiffies = lock_orig_jiffies;
 					try = 0;
 				}
 				try++;
-				printk("try : %d, delay_jiffies : %d\n", try, (int)delay_jiffies );
+				printk("retry : %d, delay_jiffies : %d\n", try, (int)delay_jiffies );
 			}while( try < 20 );
 			if ( i2c_lock_type == I2C_BUS_LOCK_TYPE1 )
 				printk("[i2c][sw_i2c_bus_lock] Finish Delay\n" );
 			try = 0;
-			i2c_lock_type = 0;
+			printk("[i2c.2][sw_i2c_bus_lock] Finish Lock i2c bus4, addr=0x%02x\n", msgs[0].addr);
 		}
-		//ASUS_BSP --- Peter_Lu
+		//ASUS_BSP --- Maggie_Lee
 		
 		for (ret = 0, try = 0; try <= adap->retries; try++) {
 			ret = adap->algo->master_xfer(adap, msgs, num);
@@ -1513,16 +1491,16 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		}
 		i2c_unlock_adapter(adap);
 		adap->mutex_i2c_addr = 0;  // clear the mutex debug i2c addr;
-		if (ret < 0)
-		{
+		if (ret < 0) {
 			i2c_debug(DEBUG_ERROR , adap->nr, "[bus=%d] [i2c Error] i2c_transfer (%c) addr=0x%02x, reg=0x%02x, ret=%d\n", adap->nr, (msgs[0].flags & I2C_M_RD) ? 'R' : 'W', msgs[0].addr, (msgs[0].buf) ? msgs[0].buf[0] : 0, ret);
 		}
-		else
-		{
+		else {
 			i2c_debug(DEBUG_TRACE , adap->nr, "[bus=%d] --i2c_transfer (%c) I2C mutex_unlock addr=0x%02x, ret=%d\n", adap->nr, (msgs[0].flags & I2C_M_RD) ? 'R' : 'W', msgs[0].addr, ret);
 		}
+
 		return ret;
-	} else {
+	}
+	else {
 		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
 		return -EOPNOTSUPP;
 	}
@@ -2264,9 +2242,11 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 		   char read_write, u8 command, int protocol,
 		   union i2c_smbus_data *data)
 {
+//ASUS_BSP +++ Maggie_Lee For camera power up i2c connection error issue
 	unsigned long orig_jiffies;
-	long delay_jiffies = 0;
+	int delay_jiffies = 0;
 	int try;
+//ASUS_BSP --- 
 	s32 res;
 
 	flags &= I2C_M_TEN | I2C_CLIENT_PEC;
@@ -2277,18 +2257,22 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 		/* Retry automatically on arbitration loss */
 		orig_jiffies = jiffies;
 
-		//ASUS_BSP +++ Peter_Lu For camera power up i2c connection error issue
+		//ASUS_BSP +++ Maggie_Lee For camera power up i2c connection error issue
 		try = 0;
 		old_jiffies = lock_orig_jiffies;
 		if ( (int)jiffies < (int)lock_orig_jiffies && adapter->nr == GSBI4_QUP_I2C_BUS_ID ){
-			//printk("[i2c][sw_i2c_bus_lock] Delay time(Now:%d, Set:%d )\n", (int)jiffies, (int)lock_orig_jiffies );
+			printk("[i2c][sw_i2c_bus_lock] Lock i2c bus4, addr=0x%02x\n", addr);
+			printk("[i2c][sw_i2c_bus_lock] Delay operation begin(Now:%d, Set:%d )\n", (int)jiffies, (int)lock_orig_jiffies );
 			do {
-				delay_jiffies = lock_orig_jiffies - jiffies;
+				delay_jiffies = (int)lock_orig_jiffies - (int)jiffies;
+				//printk("[i2c][sw_i2c_bus_lock] Delay %d ms\n", jiffies_to_msecs((unsigned long)delay_jiffies));
 				
 				if ( delay_jiffies > 0 && i2c_lock_type == I2C_BUS_LOCK_TYPE1 )	{
 					if ( try == 0 )
-						printk("[i2c][sw_i2c_bus_lock] Type %d. Delay time : %d ms\n", i2c_lock_type, jiffies_to_msecs(delay_jiffies) );
+						printk("[i2c][sw_i2c_bus_lock] Type %d. Delay time : %d ms\n", i2c_lock_type, jiffies_to_msecs((unsigned long)delay_jiffies) );
+					i2c_unlock_adapter(adapter);
 					msleep(10);
+					i2c_lock_adapter(adapter);
 				}
 				else if ( delay_jiffies > 0 && i2c_lock_type == I2C_BUS_LOCK_TYPE2 )	{
 					if ( addr == 0x3c )	{
@@ -2297,7 +2281,7 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 						break;
 					}
 					else	{
-						printk("[i2c][sw_i2c_bus_lock] abandon I2C command ( 0x%02x )\n", addr );
+						printk("[i2c.2][sw_i2c_bus_lock] abandon I2C command ( 0x%02x )\n", addr );
 						i2c_unlock_adapter(adapter);
 						return -EAGAIN;
 					}
@@ -2305,22 +2289,23 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 				else	{
 					lock_orig_jiffies = jiffies;
 					old_jiffies = lock_orig_jiffies;
+					printk("[i2c][sw_i2c_bus_lock] Other(jiffies:%d), Type %d\n", (int)lock_orig_jiffies, i2c_lock_type);
 					break;
 				}
 				if ( old_jiffies != lock_orig_jiffies )	{
-					printk("[i2c][sw_i2c_bus_lock] Set new delay time(Old:%d, New:%d )\n", (int)old_jiffies, (int)lock_orig_jiffies );
+					printk("[i2c][sw_i2c_bus_lock] Set new delay time in operatio(Old:%d, New:%d )\n", (int)old_jiffies, (int)lock_orig_jiffies );
 					old_jiffies = lock_orig_jiffies;
 					try = 0;
 				}
 				try++;
-				printk("try : %d, delay_jiffies : %d\n", try, (int)delay_jiffies );
+				printk("retry : %d, delay_jiffies : %d\n", try, (int)delay_jiffies );
 			}while( try < 20 );
 			if ( i2c_lock_type == I2C_BUS_LOCK_TYPE1 )
 				printk("[i2c][sw_i2c_bus_lock] Finish Delay\n" );
 			try = 0;
-			i2c_lock_type = 0;
+			printk("[i2c.2][sw_i2c_bus_lock] Finish Lock i2c bus4, addr=0x%02x\n", addr);
 		}
-		//ASUS_BSP --- Peter_Lu
+		//ASUS_BSP --- Maggie_Lee
 	
 		for (res = 0, try = 0; try <= adapter->retries; try++) {
 			res = adapter->algo->smbus_xfer(adapter, addr, flags,
@@ -2341,35 +2326,56 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr, unsigned short flags,
 }
 EXPORT_SYMBOL(i2c_smbus_xfer);
 
-//ASUS_BSP +++ Peter_Lu For camera ISP Power on error issue
+//ASUS_BSP +++ Maggie_Lee For camera ISP Power on error issue
 void sw_i2c_bus_lock( struct i2c_adapter *adapter, int state, int delaytime, int type )
 {
+	int i = 0, err = 0;
 	if ( state == true && delaytime > 0 )	{
-		struct i2c_adapter *parent = i2c_parent_is_i2c_adapter( adapter );
-		if ( parent != NULL )	{
-			i2c_lock_adapter( parent );
-			printk("[i2c] Sw_i2c_bus_lock : %d, type : %d\n", (int)jiffies, type );
-			lock_orig_jiffies = jiffies + msecs_to_jiffies( delaytime );
-			printk("[i2c][sw_i2c_bus_lock] Set delay time : %d\n", (int)jiffies_to_msecs(lock_orig_jiffies) );
-			i2c_unlock_adapter( parent );
+
+		if (in_atomic() || irqs_disabled()) {
+			do {
+				err = i2c_trylock_adapter(adapter);
+				if (!err){		// try to lock i2c_adapter, retry 5 times
+					printk("[i2c] Sw_i2c_bus_lock : trylock adapter : %d\n", i);
+					i2c_lock_type = type;
+					printk("[i2c] Sw_i2c_bus_lock : %d, type : %d\n", (int)jiffies, i2c_lock_type );
+					lock_orig_jiffies = jiffies + msecs_to_jiffies( delaytime );
+					printk("[i2c][sw_i2c_bus_lock] Set delay time : %d\n", (int)lock_orig_jiffies);
+					msleep(5);
+					i++;
+				}	else	{
+					printk("[i2c] Sw_i2c_bus_lock : trylock adapter successful\n");
+					i2c_lock_type = type;
+					printk("[i2c] Sw_i2c_bus_lock begin : %d, type : %d\n", (int)jiffies, i2c_lock_type );
+					lock_orig_jiffies = jiffies + msecs_to_jiffies( delaytime );
+					printk("[i2c][sw_i2c_bus_lock] Set delay time : %d\n", (int)lock_orig_jiffies);
+					i2c_unlock_adapter(adapter);	
+					break;
+					
+				}
+			}while( i < 5 );
 		}
-		else	{
-			printk("[i2c][sw_i2c_bus_lock] I2c bus already locked : %d, type : %d\n", (int)jiffies, type );
+		else	{	// Normal operation
+			i2c_lock_adapter(adapter);
+			i2c_lock_type = type;
+			printk("[i2c] Sw_i2c_bus_lock begin : %d, type : %d\n", (int)jiffies, i2c_lock_type );
 			lock_orig_jiffies = jiffies + msecs_to_jiffies( delaytime );
-			printk("[i2c][sw_i2c_bus_lock] Set new delay time : %d\n", (int)jiffies_to_msecs(lock_orig_jiffies) );
+			printk("[i2c][sw_i2c_bus_lock] Set delay time : %d\n", (int)lock_orig_jiffies );
+			i2c_unlock_adapter(adapter);
 		}
-		i2c_lock_type = type;
 	}	
 	else	{
-		i2c_lock_type = 0;
+		i2c_lock_type = type;
 		lock_orig_jiffies = jiffies;
 		old_jiffies = lock_orig_jiffies;
 		printk("[i2c] Sw_i2c_bus_unlock : %d\n", (int)lock_orig_jiffies );
 	}
+	return;
 		
 }
 EXPORT_SYMBOL(sw_i2c_bus_lock);
-//ASUS_BSP --- Peter_Lu
+//ASUS_BSP --- Maggie_Lee
+
 MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
 MODULE_DESCRIPTION("I2C-Bus main module");
 MODULE_LICENSE("GPL");

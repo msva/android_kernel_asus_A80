@@ -76,9 +76,6 @@ static signed char *Phone_Gyro_Orient;
 static signed char *Phone_Accel_Orient;
 static signed char *Phone_Mag_Orient;
 
-//A68_EVB
-static signed char Phone_gyro_orientation_evb [9] = { 0, -1, 0, -1, 0, 0, 0, 0, -1 };
-static signed char Phone_mag_orientation_evb [9] = { 0, -1, 0, 1, 0, 0, 0, 0, 1 };
 //A80_SR1
 static signed char Phone_gyro_orientation_A80SR1 [9] = { -1, 0, 0, 0, 1, 0, 0, 0, -1 };
 static signed char Phone_accel_orientation_A80SR1 [9] = { -1, 0, 0, 0, 1, 0, 0, 0, -1 };
@@ -138,6 +135,7 @@ struct mpu_private_data_6050 {
 };
 extern int asus_get_gsensor_status(void);
 
+#ifdef ASUS_A80_PROJECT
 //ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Others] check phone/pad e-compass status"
 extern int ami306_phone_compass_status(void);
 extern int ami306_pad_compass_status(void);
@@ -146,6 +144,7 @@ extern int ami306_pad_compass_status(void);
 //ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation
 extern int asus_switch_compass_orientation_file_6050(void);
 //ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation
+#endif
 
 //ASUS_BSP +++ Jason Chang "ATD Interface of 9-axis sensor"
 static ssize_t read_gyro_status(struct device *dev, struct device_attribute *devattr, char *buf)
@@ -214,121 +213,21 @@ static ssize_t read_accel_raw(struct device *dev, struct device_attribute *devat
 
 static ssize_t read_gdir(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    int gdir = 0;
-#if 1
-    switch(g_A68_hwID)
-    {
-        case A68_EVB:
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-            gdir = 2;
-            break;
-        case A68_UNKNOWN:
-            gdir = 0;
-            printk("Warning: unknown HWID, can't read Gdir.\n");
-            break;
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:
-        case A80_ER:
-        case A80_PR:
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
-        default:
-            gdir = 10;
-            break;
-    }
-    printk("[sensor] read_gdir %d\n", gdir);
-#else
-gdir = 2;
-#endif
+	int gdir = 10;
+
+	printk("[sensor] read_gdir %d\n", gdir);
 	return sprintf(buf, "%d", gdir);
 }
 
 static ssize_t read_mdir(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    int mdir = 0;
-#if 1
-    switch(g_A68_hwID)
-    {
-        case A68_EVB:
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-            mdir = 30;
-            break;
-        case A68_UNKNOWN:
-            mdir = 0;
-            printk("Warning: unknown HWID, can't set Mdir.\n");
-            break;
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:
-        case A80_ER:
-        case A80_PR:
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
-        default:
-			mdir = 20;
-            break;
-    }
-    printk("[sensor] read_mdir %d\n", mdir);
-#else
-mdir = 30;
-#endif
+	int mdir = 20;
+	printk("[sensor] read_mdir %d\n", mdir);
 	return sprintf(buf, "%d", mdir);
 }
 static ssize_t read_pad_gdir(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    int gdir_pad = 0;
-
-    switch(g_A68_hwID)
-    {
-        case A68_EVB:
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-        case A68_UNKNOWN:
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:
-        case A80_ER:
-        case A80_PR:
-        default:
-            gdir_pad = 2;   //default use the mdir of P05
-            break;
-    }
+    int gdir_pad = 2;
     printk("[sensor] read_pad_gdir %d\n", gdir_pad);
 
     return sprintf(buf, "%d", gdir_pad);
@@ -336,34 +235,7 @@ static ssize_t read_pad_gdir(struct device *dev, struct device_attribute *devatt
 
 static ssize_t read_pad_mdir(struct device *dev, struct device_attribute *devattr, char *buf)
 {
-    int mdir_pad = 0;
-
-    switch(g_A68_hwID)
-    {
-        case A68_EVB:
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-        case A68_UNKNOWN:
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:
-        case A80_ER:
-        case A80_PR:
-        default:
-            mdir_pad = 30; //default use the mdir of P05
-            break;
-    }
+    int mdir_pad = 30;
     printk("[sensor] read_pad_mdir %d\n", mdir_pad);
 
     return sprintf(buf, "%d", mdir_pad);
@@ -632,20 +504,6 @@ int asus_switch_compass_calibration_file_6050(int current_status)
 void mpu_change_rotation_axes_6050(int value) {
 
     switch(g_A68_hwID){
-        case A68_EVB:
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-        case A68_UNKNOWN:
-            //A68 dosen't need to change orientation
-            break;
         case A80_EVB:
         case A80_SR1:
         case A80_SR2:
@@ -695,24 +553,8 @@ void mpu_change_rotation_axes_6050(int value) {
 
 void mpu_get_orientation_6050(void)
 {
-        switch (g_A68_hwID)
+        switch (g_A68_hwID) 
         {
-
-            case A68_EVB:
-            case A68_SR1_1:
-            case A68_SR1_2:
-            case A68_SR2:
-            case A68_ER1:
-            case A68_ER2:
-            case A68_ER3:
-            case A68_PR:
-            case A68_MP:
-            case A68_PR2:
-            case A68_CD:
-            case A68_UNKNOWN:                
-                Phone_Gyro_Orient = Phone_gyro_orientation_evb;
-                Phone_Mag_Orient = Phone_mag_orientation_evb;
-                break;
             case A80_EVB:
             case A80_SR1:
             case A80_SR2:
@@ -734,42 +576,49 @@ void mpu_get_orientation_6050(void)
                 Phone_Accel_Orient = Phone_accel_orientation_A80SR1;
                 Phone_Mag_Orient = Phone_mag_orientation_A80SR1;
 // ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Others] support SR4
-                break;
+             break;
         }
-
     return;
 }
 //ASUS_BSP+++ Jason Chang "change oritation for pad"
+#ifdef CONFIG_EEPROM_NUVOTON
 static int mp_sensor_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
         switch (event) {
         case P01_ADD:
                 printk("[mpu] PAD ADD \r\n");
-                mpu_change_rotation_axes_6050(MPU_EVENT_NOTIFY_PAD);
+		#ifdef ASUS_A80_PROJECT
+		mpu_change_rotation_axes_6050(MPU_EVENT_NOTIFY_PAD);
+		#endif
                 //ASUS_BSP +++ Jason Chang "replace compass calibration by workqueue"
                 cancel_delayed_work_sync(&pad_plugout_work_6050);
                 queue_delayed_work(pad_plug_wq_6050, &pad_plugin_work_6050, 0);
                 //ASUS_BSP --- Jason Chang "replace compass calibration by workqueue"
-                return NOTIFY_DONE;
+                break;
                 
         case P01_REMOVE:
                 printk("[mpu] PAD REMOVE \r\n");
-                mpu_change_rotation_axes_6050(MPU_EVENT_NOTIFY_PHONE);             
+		#ifdef ASUS_A80_PROJECT
+		mpu_change_rotation_axes_6050(MPU_EVENT_NOTIFY_PHONE);
+		#endif       
                 //ASUS_BSP +++ Jason Chang "replace compass calibration by workqueue"
                 cancel_delayed_work_sync(&pad_plugin_work_6050);
                 queue_delayed_work(pad_plug_wq_6050, &pad_plugout_work_6050, 0);
                 //ASUS_BSP --- Jason Chang "replace compass calibration by workqueue"
-                return NOTIFY_DONE;
-
+                break;
         default:
-                return NOTIFY_DONE;
+                break;
         }
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 
 static struct notifier_block mpu_hs_notifier = {
         .notifier_call = mp_sensor_event,
         .priority = NINE_AXIS_SENSOR_MP_NOTIFY,
 };
+#endif
 //ASUS_BSP--- Jason Chang "change oritation for pad"
 //ASUS_BSP --- Jason Chang "dynamic change orientation"
 
@@ -1320,7 +1169,9 @@ static long mpu_dev_ioctl(struct file *file,
         int count = 0;
         char temp_string[64];
 //ASUS_BSP --- Jason Chang "Recover compass calibration file when file crashed"
+#ifdef ASUS_A80_PROJECT
 	static int e_compass_one = 0;
+#endif
 
 // Tingyi
     	retval = mutex_lock_interruptible(&mpu->mutex);
@@ -1361,13 +1212,14 @@ static long mpu_dev_ioctl(struct file *file,
 			(struct ext_slave_platform_data __user *)arg);
 		break;
 	case MPU_GET_MPU_PLATFORM_DATA:
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation		
+#ifdef ASUS_A80_PROJECT
+//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation	
 		if(e_compass_one == 0){
 			asus_switch_compass_orientation_file_6050();
 			e_compass_one = 1;
 		}
 //ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Others] dynamic change e-compass orientation
-
+#endif
         //ASUS_BSP +++ Jason Chang "switch compass calibration data when plug in/out PAD"
             if(one_time && retry < 5)
             {

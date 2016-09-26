@@ -30,13 +30,15 @@
 #include <linux/of_gpio.h>
 #include <linux/spinlock.h>
 #include <linux/kernel.h>
-
 #include <linux/wakelock.h>
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
+
 #include <linux/microp_api.h>
 #include <linux/microp_pin_def.h>
 #include <asm/uaccess.h>
+#include <linux/reboot.h>
+#include <asm/cacheflush.h>
+#include <linux/asus_global.h>
 
 #define PAD_KEY_VOLUP   417
 #define PAD_KEY_VOLDOWN 416
@@ -50,19 +52,27 @@ static int pad_pwr_key_press_state = 0;
 static int pwk_state = 0;
 static int pwk_wake = 0;
 
-//extern int g_flag_csvoice_fe_connected; austin mark temp
+extern int g_flag_csvoice_fe_connected;
 extern int FMStatus;
-//austin++
+
+//ASUS_BSP ++
+struct kobject *kobj;//ASUS_BSP + [thomas]Send uevent to userspace
 static int vol_up_gpio;
 static int vol_down_gpio;
 static int pwr_gpio;
-//austin--
-struct kobject *kobj;//ASUS_BSP + [thomas]Send uevent to userspace
+//ASUS_BSP --
+
+extern struct _asus_global asus_global;
+extern void resetdevice(void);
+extern void set_dload_mode(int on);
+// extern void set_vib_enable(int value);
+//ASUS_BSP++ for pad key porting 
 struct pad_buttons_code {
     int vol_up;
     int vol_down;
     int power_key;
 };
+//ASUS_BSP-- for pad key porting
 
 enum {
 	DEBUG_REPORT_EVENT = 1U << 0,
@@ -77,10 +87,9 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 		if ((mask) & debug_mask) \
 			printk(message, ## __VA_ARGS__); \
 	} while (0)
-//ASUS BSP HANS--
 
 struct gpio_button_data {
-	struct gpio_keys_button *button;
+	struct gpio_keys_button *button;  
 	struct input_dev *input;
 	struct timer_list timer;
 	struct work_struct work;
@@ -101,90 +110,102 @@ struct gpio_keys_drvdata {
 	struct gpio_button_data data[0];
 };
 
+//jorney_dong +++ add for charging mode
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
 extern char g_CHG_mode;
+static struct wake_lock pwr_key_wake_lock;
 static int pwr_key_extra_debounce = 1000; //power key 1 second debounce in charging mode
 static bool pwr_key_reboot = true;
 #endif
+//jorney_dong ---
 
+//check power 6sec enter sw reset
+static  struct work_struct __wait_for_power_key_6s_work;
+void wait_for_power_key_6s_work(struct work_struct *work)
+{
+	static int power_key_6s_running = 0;
+	int i, power_key;
+	power_key = 26;
+    if(!power_key_6s_running)
+	{ 
+		if (gpio_get_value_cansleep(power_key) != 0)
+		{
+			return;
+		}
+		power_key_6s_running = 1;
+		for(i = 0; i < 60; i++)
+		{
+			if (gpio_get_value_cansleep(power_key) == 0)
+			{
+				msleep(100);
+			}
+			else
+			{
+				break;
+			}
+		}	
+		if(i == 60)
+		{
+			printk("reset device after power press 6 sec\r\n");
+//			set_vib_enable(200);
+			msleep(200); 
+			
+			set_dload_mode(0);
+			asus_global.ramdump_enable_magic = 0;
+			printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
+			flush_cache_all();				
+			resetdevice();
+		}
+		
+		power_key_6s_running = 0;
+	}
+}
+//
+
+
+//ASUS_BSP ++
 //jack for debug slow
 //#include "../../../sound/soc/codecs/wcd9310.h"
-static  struct work_struct __wait_for_two_keys_work;
+//static  struct work_struct __wait_for_two_keys_work;
 static  struct work_struct __wait_for_slowlog_work;
 
 void wait_for_slowlog_work(struct work_struct *work)
 {
-    static int one_instance_running = 0;
-    int i, j, volume_up_key, power_key;	
-    
-    volume_up_key = vol_up_gpio;
+    static int one_instance_slowlog_running = 0;
+    int i, j, power_key;	
     power_key = pwr_gpio;
-    j = 0;
-    if(!one_instance_running)
+    j = 30;
+    if(!one_instance_slowlog_running)
     { 
         if(gpio_get_value_cansleep(power_key) != 0)
         {
             return;
         }
-        else
-        {
-			if (gpio_get_value_cansleep(volume_up_key) == 0 && gpio_get_value_cansleep(power_key) == 0)
-				j = 10;
-			if (gpio_get_value_cansleep(power_key) == 0)
-				j = 20;
+        one_instance_slowlog_running = 1;
+		for(i = 0; i < j; i++)
+		{
+			if( gpio_get_value_cansleep(power_key) == 0)   
+			{
+				msleep(100);
+			}         
+			else
+				break;
 		}
-        one_instance_running = 1;
-        if (j == 10)
-        {
-			for(i = 0; i < j; i++)
-			{
-				if( gpio_get_value_cansleep(power_key) == 0 && gpio_get_value_cansleep(volume_up_key) == 0)   
-				{
-					msleep(100);
-				}         
-				else
-					break;
-			}
-			if(i == j)
-			{
-				printk("start to gi chk\n");
-				save_all_thread_info();
-				
-				msleep(3 * 1000);
-				
-				printk("start to gi delta\n");
-				delta_all_thread_info();
-				save_phone_hang_log();
-				//Dump_wcd9310_reg();     //Bruno++    
-				//printk_lcd("slow log captured\n");
-			}			
-		}
-        else if (j == 20)
-        {
-			for(i = 0; i < j; i++)
-			{
-				if( gpio_get_value_cansleep(power_key) == 0)   
-				{
-					msleep(100);
-				}         
-				else
-					break;
-			}
-			if(i == j)
-			{
-				printk("start to gi chk\n");
-				save_all_thread_info();
-				
-				msleep(3 * 1000);
-				
-				printk("start to gi delta\n");
-				delta_all_thread_info();
-				save_phone_hang_log();
-				//Dump_wcd9310_reg();     //Bruno++    
-				//printk_lcd("slow log captured\n");
-			}			
-		}
-		one_instance_running = 0;
+		if(i == j)
+		{
+			printk("%s(), start to gi chk, line:%d\n", __func__, __LINE__);
+			ASUSEvtlog("[UTS][DEBUG] force save slow log");
+			save_all_thread_info();
+			
+			msleep(1 * 1000);
+			
+			printk("%s(), start to gi delta, line:%d\n", __func__, __LINE__);
+			delta_all_thread_info();
+			save_phone_hang_log();
+			//Dump_wcd9310_reg();     //Bruno++    
+			//printk_lcd("slow log captured\n");
+		}			
+		one_instance_slowlog_running = 0;
 	}
 	       
 }
@@ -219,12 +240,12 @@ void wait_for_two_keys_work(struct work_struct *work)
         }
         if(i == 20)
         {
-            printk("start to gi chk\n");
+            printk("%s(), start to gi chk, line:%d\n", __func__, __LINE__);
             save_all_thread_info();
             
             msleep(5 * 1000);
             
-            printk("start to gi delta\n");
+            printk("%s(), start to gi delta, line:%d\n", __func__, __LINE__);
             delta_all_thread_info();
             save_phone_hang_log();
             //Dump_wcd9310_reg();     //Bruno++    
@@ -242,6 +263,7 @@ void wait_for_two_keys_work(struct work_struct *work)
             
     
 }
+//ASUS_BSP --
 /*
  * SYSFS interface for enabling/disabling keys and switches:
  *
@@ -514,6 +536,7 @@ static struct attribute *gpio_keys_attrs[] = {
 static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
+//ASUS_BSP ++
 static unsigned int count_start = 0;  
 static unsigned int count = 0;  
 extern void set_dload_mode(int on);
@@ -524,26 +547,40 @@ extern void resetdevice(void);
 extern struct _asus_global asus_global;
 int volumedownkeystatus;//ASUS_BSP + [thomas] Add more check about volume down key
 
+//ASUS_BSP+++ [thomas]Send uevent to userspace
+void send_top_by_uevent(void)
+{
+	char *envp[3];
+	envp[0] = "top_event";
+	envp[1] = NULL;
+	kobject_uevent_env(kobj,KOBJ_ONLINE,envp);
+}
+//ASUS_BSP--- [thomas]Send uevent to userspace
+
 int bootupcount = 0;
+//ASUS_BSP --
+
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
-   	int volume_up_key, volume_down_key;
+   	int volume_up_key, volume_down_key, power_key;
    	int volume_down_key_status_change_from_press = 0;//ASUS_BSP + [thomas] Add more check about volume down key
-	char *envp[3];//ASUS_BSP + [thomas]Send uevent to userspace
 	volume_up_key = vol_up_gpio;
 	volume_down_key = vol_down_gpio;
+	power_key = pwr_gpio;
 
 	GPIO_KEYS_PRINTK(DEBUG_REPORT_EVENT,"key code=%d  state=%s \n",
 			button->code,state ? "press" : "release");  //ASUS BSP HANS+
+	if (gpio_get_value_cansleep(power_key) == 0)
+	{
+		schedule_work(&__wait_for_power_key_6s_work);
+	}
 	//ASUS_BSP +++ [thomas]Send uevent to userspace
-	envp[0] = "top_event";
-	envp[1] = NULL;
 	if (bootupcount == 10 && (gpio_get_value_cansleep(volume_down_key) == 0) && (gpio_get_value_cansleep(volume_up_key) == 0))
-		kobject_uevent_env(kobj,KOBJ_ONLINE,envp);
+		send_top_by_uevent();
 	if (bootupcount < 10)
 		bootupcount++;
 	//ASUS_BSP --- [thomas]Send uevent to userspace
@@ -578,6 +615,8 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			if (count == 10)
 			{
 				printk("Kernel alive...\r\n");
+				ASUSEvtlog("[UTS][DEBUG] force reset device");
+				msleep(3 * 1000);
 				
 				set_dload_mode(0);
 				asus_global.ramdump_enable_magic = 0;
@@ -592,24 +631,13 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	{
 		count = 0;
 	}
+//ASUS_BSP --
+
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
-		
-		#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
-		if (g_CHG_mode && pwr_key_reboot)
-		{ 
-			if(KEY_POWER == button->code &&	state) {
-				if (pwr_key_reboot && gpio_get_value(29)) { // bat_low:0  not_bat_low:1
-					printk(KERN_INFO " Long press A68 power key in charging mode. reboot now ...\r\n");
-					pwr_key_reboot = false;
-					kernel_restart(NULL);
-				}
-			}
-		}
-		#endif
-		
+
 		//ASUS BSP HANS++
 		if(button->code == KEY_POWER){
 			if(state){
@@ -643,33 +671,47 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		}
 		//ASUS BSP HANS--
 //Ledger ++
-                if (state){     //press
-                        if (button->code == KEY_POWER) {
-//                                printk("[PM]%s- pwr key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
-                                if (g_bResume) {
-                                        wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
-                                        g_bpwr_key_lock_sts=1;
-                                        g_bResume=0;
-                                        printk(KERN_INFO "[PM]Wakelock 3 sec for PWR key on A6x\r\n");
-                                }
-                                else if(g_bpwr_key_lock_sts) {
-                                        wake_unlock(&pwr_key_wake_lock);
-                                        g_bpwr_key_lock_sts=0;
-                                        printk(KERN_INFO "[PM]Unlock 3 sec for PWR key on A6x\r\n");
-                                }
-                        }
-                        else if ( ((button->code == KEY_VOLUMEUP) || (button->code == KEY_VOLUMEDOWN))
-                                && (FMStatus) ) {
-                                //&& (g_flag_csvoice_fe_connected || FMStatus) ) { //austin mark temp
-//                                printk("[PM]%s- vol key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
-                                if (g_bResume) {
-                                        wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
-                                        g_bpwr_key_lock_sts=1;
-                                        g_bResume=0;
-                                        printk(KERN_INFO "[PM]Wakelock 3 sec for VOL key on A6x\r\n");
-                                }
-                        }
-                }
+		if (state){     //press
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+			if (g_CHG_mode && pwr_key_reboot)
+			{ 
+				if(KEY_POWER == button->code &&	state) {
+					if (pwr_key_reboot ) { //&& gpio_get_value(35) bat_low:0  not_bat_low:1
+						printk(KERN_INFO " Long press  power key in charging mode. reboot now ...\r\n");
+						pwr_key_reboot = false;
+						kernel_restart(NULL);
+					}
+				}
+			}
+#endif
+
+			if (button->code == KEY_POWER) {
+//				printk("[PM]%s- pwr key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
+				if (g_bResume) {
+					wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
+					g_bpwr_key_lock_sts=1;
+					g_bResume=0;
+					printk(KERN_INFO "[PM]Wakelock 3 sec for PWR key on A6x\r\n");
+				}
+				else if(g_bpwr_key_lock_sts) {
+					wake_unlock(&pwr_key_wake_lock);
+					g_bpwr_key_lock_sts=0;
+					printk(KERN_INFO "[PM]Unlock 3 sec for PWR key on A6x\r\n");
+				}
+			}
+#if 0
+			else if ( ((button->code == KEY_VOLUMEUP) || (button->code == KEY_VOLUMEDOWN))
+				&& (g_flag_csvoice_fe_connected || FMStatus)) {
+//				printk("[PM]%s- vol key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,state,g_bResume,g_bpwr_key_lock_sts);
+				if (g_bResume) {
+					wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
+					g_bpwr_key_lock_sts=1;
+					g_bResume=0;
+					printk(KERN_INFO "[PM]Wakelock 3 sec for VOL key on A6x\r\n");
+				}
+			}
+#endif
+		}
 //Ledger ++
 		input_event(input, type, button->code, !!state);
 	}
@@ -681,7 +723,7 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 	struct gpio_button_data *bdata =
 		container_of(work, struct gpio_button_data, work);
     //added by jack for slow log
-    schedule_work(&__wait_for_two_keys_work);
+    //schedule_work(&__wait_for_two_keys_work);
     schedule_work(&__wait_for_slowlog_work);
 	gpio_keys_gpio_report_event(bdata);
 }
@@ -1148,23 +1190,26 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 
 	BUG_ON(irq != bdata->irq);
 
-	if (bdata->timer_debounce) {
-//+++ ASUS_BSP Enter_Zhang: Send P03 power key event for charger mode
-#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+	if (bdata->timer_debounce){
+	//+++ ASUS_BSP jorney_dong: Send P03 power key event for charger mode
+#if (defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD))
 		if (g_CHG_mode && pwr_key_reboot) {
 			wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
+			printk(KERN_INFO "%s power key pressed ...\r\n",__func__);
 			mod_timer(&bdata->timer,
 				jiffies + msecs_to_jiffies(bdata->timer_debounce + pwr_key_extra_debounce));
-		} else {
+				
+		}
+		else {
 			mod_timer(&bdata->timer,
 				jiffies + msecs_to_jiffies(bdata->timer_debounce));
 		}
 #else
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
-#endif
+
+#endif //jorney_dong---
 	}
-//+++ ASUS_BSP Enter_Zhang: Send P03 power key event for charger mode
 	else
 		schedule_work(&bdata->work);
 
@@ -1243,13 +1288,15 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 		}
 
 //ASUS BSP austin+++
-// 	error = gpio_direction_input(button->gpio);
-// 	if (error < 0) {
-// 		dev_err(dev, "failed to configure"
-// 			" direction for GPIO %d, error %d\n",
-// 			button->gpio, error);
-// 		goto fail3;
-// 	}
+#if 0
+		error = gpio_direction_input(button->gpio);
+		if (error < 0) {
+			dev_err(dev,
+				"Failed to configure direction for GPIO %d, error %d\n",
+				button->gpio, error);
+			goto fail;
+		}
+#endif
 //ASUS BSP austin---
 
 		if (button->debounce_interval) {
@@ -1426,10 +1473,12 @@ static void remove_debug_key_proc_file(void)
     remove_proc_entry(debug_GPIO_KEY_PROC_FILE, &proc_root);
 }
 
-//ASUS BSP Enter_Zhang++
+//jorney_dong +++ add for charging mode
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+//#if defined(ASUS_A11_PROJECT) || defined(ASUS_ME175KG_PROJECT)
 #define CHARGER_POWER_KEY_PROC_FILE  "driver/charger_power_key"
 static struct proc_dir_entry *charger_power_key_proc_file;
+
 
 static ssize_t charger_power_key_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
 {
@@ -1477,11 +1526,11 @@ static void remove_charger_power_key_proc_file(void)
     printk("[KeyPad] remove_charger_power_key_proc_file\n");   
     remove_proc_entry(CHARGER_POWER_KEY_PROC_FILE, &proc_root);
 }
+//#endif
 #endif
-//ASUS BSP Enter_Zhang--
+//ASUS BSP jorney_dong--
 
-
-#endif
+#endif /* CONFIG_PROC_FS */
 //ASUS BSP austin--
 
 static int gpio_keys_open(struct input_dev *input)
@@ -1617,17 +1666,19 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	struct input_dev *input;
 	int i, error;
 	int wakeup = 0;
+//ASUS_BSP ++
 	int volume_down_key = vol_down_gpio;//ASUS_BSP + [thomas] Add more check about volume down key
     //jack for debug slow
-    INIT_WORK(&__wait_for_two_keys_work, wait_for_two_keys_work);
-    INIT_WORK(&__wait_for_slowlog_work, wait_for_slowlog_work);
-
+	//INIT_WORK(&__wait_for_two_keys_work, wait_for_two_keys_work);
+	INIT_WORK(&__wait_for_slowlog_work, wait_for_slowlog_work);
+	INIT_WORK(&__wait_for_power_key_6s_work, wait_for_power_key_6s_work);
 //Ledger ++
         wake_lock_init(&pwr_key_wake_lock, WAKE_LOCK_SUSPEND, "pwr_key_lock");
         printk(KERN_INFO "[PM]Initialize a wakelock of PWR key\r\n");
 //Ledger --
 
 	volumedownkeystatus = gpio_get_value_cansleep(volume_down_key);//0>press 1>release//ASUS_BSP + [thomas] Add more check about volume down key
+//ASUS_BSP --
 
 	if (!pdata) {
 		error = gpio_keys_get_devtree_pdata(dev, &alt_pdata);
@@ -1730,12 +1781,11 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	input_set_capability(input, EV_KEY, KEY_BACK);
 	input_set_capability(input, EV_KEY, POWER_KEY_TEST);
 
-// Enter_Zhang+++
+//jorney_dong +++ add for charging mode
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
 	create_charger_power_key_proc_file();
 #endif
-// Enter_Zhang---
-
+// jorney_dong---
 #endif
 //ASUS austin--
 	kobj = &pdev->dev.kobj;//ASUS_BSP + [thomas]Send uevent to userspace
@@ -1793,11 +1843,11 @@ static int __devexit gpio_keys_remove(struct platform_device *pdev)
 #ifdef  CONFIG_PROC_FS
 	remove_debug_key_proc_file();
 
-// Enter_Zhang+++
+//jorney_dong +++ add for charging mode
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
 	remove_charger_power_key_proc_file();
-// Enter_Zhang---
 #endif
+// jorney_dong---
 
 #endif
 //ASUS BSP austin--
@@ -1833,16 +1883,15 @@ static int gpio_keys_suspend(struct device *dev)
 		}
 	}
 
+#if 0
 	//ASUS BSP austin++
-
-	//if ((g_flag_csvoice_fe_connected || FMStatus) && !phone_in_pad){ austin mark temp
-	if ((FMStatus) && !phone_in_pad){	
+	if ((g_flag_csvoice_fe_connected || FMStatus) && !phone_in_pad){	
         enable_irq_wake(gpio_to_irq(vol_up_gpio));
 		enable_irq_wake(gpio_to_irq(vol_down_gpio));
 		a68_wake = 1;
 	}
 	//ASUS BSP austin--
-
+#endif
     return 0;
 }
 
@@ -1874,7 +1923,6 @@ static int gpio_keys_resume(struct device *dev)
 }
 	return 0;
 }
-
 #endif
 
 //Ledger ++
@@ -1918,21 +1966,17 @@ static struct platform_driver gpio_keys_device_driver = {
 	}
 };
 
-//ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-extern void msm_otg_host_power_on_wq(void);
-//ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
+
+
+
 static void Pad_keys_report_event(int button_code, int press)
 {
-
-	GPIO_KEYS_PRINTK(DEBUG_REPORT_EVENT,"PAD key code=%d  state=%s\n",
+	printk("PAD key keycode=%d  state=%s\n",
 				button_code, press ? "press" : "release");
-
 //Ledger ++
         if (button_code==PAD_KEY_POWER && press){     //press
                 printk("[PM]%s- p03 pwr key:%x,pm sts:%x,keylock sts:%x\r\n",__func__,press,g_bResume,g_bpwr_key_lock_sts);
-                //ASUS_BSP+++ BennyCheng "speed up resume time by active microp earlier"
-                msm_otg_host_power_on_wq();
-                //ASUS_BSP--- BennyCheng "speed up resume time by active microp earlier"
+
                 if (g_bResume) {
                         wake_lock_timeout(&pwr_key_wake_lock, 3 * HZ);
                         g_bpwr_key_lock_sts=1;
@@ -1946,7 +1990,7 @@ static void Pad_keys_report_event(int button_code, int press)
                 }
         }
 //Ledger --
-
+    
     input_event(g_input_dev, EV_KEY, button_code, press);
     input_sync(g_input_dev);
 }
@@ -1955,171 +1999,138 @@ static void Pad_keys_report_event(int button_code, int press)
 static int mp_event_report(struct notifier_block *this, unsigned long event, void *ptr)
 {
         struct gpio_keys_drvdata *ddata = input_get_drvdata(g_input_dev);
-
-        switch (event) {
-
-	case P01_ADD:
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
+	switch (event) 
 	{
-		int i;
+		case P01_ADD:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD ADD.\r\n");
 
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD ADD.\r\n");
+			phone_in_pad = 1;
 
-		phone_in_pad = 1;
-    if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD )
-    { // A68
-		mutex_lock(&ddata->disable_lock);
-		for (i = 0; i < ddata->n_buttons; i++) {
-			struct gpio_button_data *bdata = &ddata->data[i];
-			gpio_keys_disable_button(bdata);
-		}
-		mutex_unlock(&ddata->disable_lock);
-
-		for (i = 0; i < ddata->n_buttons; i++) {
-			struct gpio_button_data *bdata = &ddata->data[i];
-			gpio_free(bdata->button->gpio);
-		}
-    }
- 	input_event(g_input_dev, EV_KEY, 115, 0);
- 	input_event(g_input_dev, EV_KEY, 114, 0);
- 	input_sync(g_input_dev);
+			input_event(g_input_dev, EV_KEY, 115, 0);
+			input_event(g_input_dev, EV_KEY, 114, 0);
+			input_sync(g_input_dev);
     
-		return NOTIFY_DONE;
-	}
-
-	case P01_REMOVE:
-	{
-		int i;
-		int error;
-
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD REMOVE.\r\n");
-
-		phone_in_pad = 0;
-    if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ) // A68
-    {
-		for (i = 0; i < ddata->n_buttons; i++) {
-			struct gpio_button_data *bdata = &ddata->data[i];
-			const char *desc = bdata->button->desc ? bdata->button->desc : "gpio_keys";
-			error = gpio_request(bdata->button->gpio, desc);
-			if(error < 0){
-				printk("failed to request GPIO %d, error %d\n",
-					bdata->button->gpio, error);
-			}
+			break;
 		}
 
-		mutex_lock(&ddata->disable_lock);
-		for (i = 0; i < ddata->n_buttons; i++) {
-			struct gpio_button_data *bdata = &ddata->data[i];
-			gpio_keys_enable_button(bdata);
+		case P01_REMOVE:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD REMOVE.\r\n");
+
+			phone_in_pad = 0;
+
+			break;
 		}
-		mutex_unlock(&ddata->disable_lock);
-    }
-		return NOTIFY_DONE;
-	}
 
-        case P01_VOLUP_KEY_PRESSED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEUP PRESS.\r\n");
+		case P01_VOLUP_KEY_PRESSED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEUP PRESS.\r\n");
 
-	#ifdef  CONFIG_PROC_FS
-                Pad_keys_report_event(ddata->pad_button_code.vol_up, 1);
-	#else
-                Pad_keys_report_event(PAD_KEY_VOLUP, 1);
-	#endif
-                return NOTIFY_DONE;
-	}
-
-        case P01_VOLUP_KEY_RELEASED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEUP RELEASE.\r\n");
-	
-	#ifdef  CONFIG_PROC_FS
-                Pad_keys_report_event(ddata->pad_button_code.vol_up, 0);
-	#else
-                Pad_keys_report_event(PAD_KEY_VOLUP, 0);
-	#endif
-                return NOTIFY_DONE;
-	}
-
-        case P01_VOLDN_KEY_PRESSED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEDOWN PRESS.\r\n");
-	
-	#ifdef  CONFIG_PROC_FS
-                Pad_keys_report_event(ddata->pad_button_code.vol_down, 1);
-	#else
-                Pad_keys_report_event(PAD_KEY_VOLDOWN, 1);
-	#endif
-                return NOTIFY_DONE;
-	}
-
-        case P01_VOLDN_KEY_RELEASED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEDOWN RELEASE.\r\n");
-
-	#ifdef  CONFIG_PROC_FS
-                Pad_keys_report_event(ddata->pad_button_code.vol_down, 0);
-	#else
-                Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);
-	#endif
-                return NOTIFY_DONE;
-	}
-
-        case P01_PWR_KEY_PRESSED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD POWERKEY PRESS.\r\n");
-
-//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
-#ifdef CONFIG_FASTBOOT
-		if(isPowerKeyHandled(true))
-			return NOTIFY_DONE;
-#endif //#ifdef CONFIG_FASTBOOT
-//ASUS_BSP ---
-
-//+++ ASUS_BSP Enter_Zhang: Send P03 power key event for charger mode
-#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
-		if (g_CHG_mode && pwr_key_reboot) {
-			if (pwr_key_reboot && gpio_get_value(29)) { // bat_low:0  not_bat_low:1
-				printk(KERN_INFO " Long press P03 power key in charging mode. reboot now ...\r\n");
-				pwr_key_reboot = false;
-				kernel_restart(NULL);
-			}
-		}
+#ifdef  CONFIG_PROC_FS
+			Pad_keys_report_event(ddata->pad_button_code.vol_up, 1);
+#else
+			Pad_keys_report_event(PAD_KEY_VOLUP, 1);
 #endif
-//--- ASUS_BSP Enter_Zhang: Send P03 power key event for charger mode
+			break;
+		}
 
-		Pad_keys_report_event(ddata->pad_button_code.power_key, 1);
-		pad_pwr_key_press_state=1;
+		case P01_VOLUP_KEY_RELEASED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEUP RELEASE.\r\n");
+	
+#ifdef  CONFIG_PROC_FS
+			Pad_keys_report_event(ddata->pad_button_code.vol_up, 0);
+#else
+			Pad_keys_report_event(PAD_KEY_VOLUP, 0);
+#endif
+			break;
+		}
 
-		return NOTIFY_DONE;
-	}
+		case P01_VOLDN_KEY_PRESSED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEDOWN PRESS.\r\n");
+	
+#ifdef  CONFIG_PROC_FS
+			Pad_keys_report_event(ddata->pad_button_code.vol_down, 1);
+#else
+			Pad_keys_report_event(PAD_KEY_VOLDOWN, 1);
+#endif
+			break;
+		}
 
-        case P01_PWR_KEY_RELEASED:
-	{
-		GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD POWERKEY RELEASE.\r\n");
+		case P01_VOLDN_KEY_RELEASED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD VOLUMEDOWN RELEASE.\r\n");
+
+#ifdef  CONFIG_PROC_FS
+			Pad_keys_report_event(ddata->pad_button_code.vol_down, 0);
+#else
+			Pad_keys_report_event(PAD_KEY_VOLDOWN, 0);
+#endif
+			break;
+		}
+
+		case P01_PWR_KEY_PRESSED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD POWERKEY PRESS.\r\n");
 
 //ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
 #ifdef CONFIG_FASTBOOT
-                if(isPowerKeyHandled(false))
+		if(isPowerKeyHandled(true)){
+			printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
 			return NOTIFY_DONE;
+		}
+#endif //#ifdef CONFIG_FASTBOOT
+//ASUS_BSP ---
+
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+			if (g_CHG_mode && pwr_key_reboot) {
+				if (pwr_key_reboot ) { //&& gpio_get_value(29) bat_low:0  not_bat_low:1
+					printk(KERN_INFO " Long press P03 power key in charging mode. reboot now ...\r\n");
+					pwr_key_reboot = false;
+					kernel_restart(NULL);
+				}
+			}
+#endif
+		
+			Pad_keys_report_event(ddata->pad_button_code.power_key, 1);
+			pad_pwr_key_press_state=1;
+
+			break;
+		}
+
+		case P01_PWR_KEY_RELEASED:
+		{
+			GPIO_KEYS_PRINTK(DEBUG_PAD_EVENT,"[PAD_KEY] PAD POWERKEY RELEASE.\r\n");
+
+//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
+#ifdef CONFIG_FASTBOOT
+			if(isPowerKeyHandled(false)){
+				printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+				return NOTIFY_DONE;
+			}
 
 #endif //#ifdef CONFIG_FASTBOOT
 //ASUS_BSP ---
 
-                if (pad_pwr_key_press_state == 0)  // only get release key, but no press key
-                {
-			printk("compensate PAD power key press event\n");
-			Pad_keys_report_event(ddata->pad_button_code.power_key, 1);
-                }
-                Pad_keys_report_event(ddata->pad_button_code.power_key, 0);
-                pad_pwr_key_press_state=0;
+			if (pad_pwr_key_press_state == 0)  // only get release key, but no press key
+			{
+				printk("compensate PAD power key press event\n");
+				Pad_keys_report_event(ddata->pad_button_code.power_key, 1);
+			}
+			Pad_keys_report_event(ddata->pad_button_code.power_key, 0);
+			pad_pwr_key_press_state=0;
 
-		return NOTIFY_DONE;
+			break;
+		}
+
+		default:
+			break;
 	}
-
-        default:
-                return NOTIFY_DONE;
-
-        }
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 
 //ASUS BSP HANS++
@@ -2131,27 +2142,27 @@ static struct notifier_block mp_notifier = {
 
 static int __init gpio_keys_init(void)
 {
+
+#ifdef CONFIG_EEPROM_NUVOTON
 	register_microp_notifier(&mp_notifier);  //ASUS BSP HANS+
+#endif /* CONFIG_EEPROM_NUVOTON */
+#ifdef CONFIG_MICROP_NOTIFIER_CONTROLLER
 	notify_register_microp_notifier(&mp_notifier, "gpio_key"); //ASUS_BSP Lenter+
+#endif /* CONFIG_MICROP_NOTIFIER_CONTROLLER */
 
-
-	if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR )
-	{
+//ASUS BSP +++
+	if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR ) {  //A80 gpio keys setting
 		vol_up_gpio = 32;
 		vol_down_gpio = 34;
 		pwr_gpio = 26;	
-	}
-	else if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ) // A68
-	{
+	} else if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD ) {  //A68 gpio keys setting
 		vol_up_gpio = 53;
 		vol_down_gpio = 54;
 		pwr_gpio = 26;
-	}
-	else
-	{
+	} else {
 		printk("%s:unknown hwID,failed to set A68/A80 gpio_keys pin num",__func__);
 	}
-
+//ASUS BSP ---
 	return platform_driver_register(&gpio_keys_device_driver);
 }
 

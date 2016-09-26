@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,11 +18,13 @@
 #include <linux/termios.h>
 #include <linux/debugfs.h>
 #include <linux/smux.h>
+#include <linux/completion.h>
 
 #include <mach/usb_gadget_xport.h>
 
 #define CH_OPENED 0
 #define CH_READY 1
+#define CH_CONNECTED 2
 
 static unsigned int num_ctrl_ports;
 
@@ -37,6 +39,7 @@ struct ghsuart_ctrl_port {
 	enum gadget_type gtype;
 	spinlock_t port_lock;
 	void *port_usb;
+	struct completion close_complete;
 	/* work queue*/
 	struct workqueue_struct	*wq;
 	struct work_struct connect_w;
@@ -74,6 +77,10 @@ static void smux_control_event(void *priv, int event_type, const void *metadata)
 	size_t			len;
 
 	switch (event_type) {
+	case SMUX_LOCAL_CLOSED:
+		clear_bit(CH_OPENED, &port->channel_sts);
+		complete(&port->close_complete);
+		break;
 	case SMUX_CONNECTED:
 		spin_lock_irqsave(&port->port_lock, flags);
 		if (!port->port_usb) {
@@ -81,7 +88,7 @@ static void smux_control_event(void *priv, int event_type, const void *metadata)
 			return;
 		}
 		spin_unlock_irqrestore(&port->port_lock, flags);
-		set_bit(CH_OPENED, &port->channel_sts);
+		set_bit(CH_CONNECTED, &port->channel_sts);
 		if (port->gtype == USB_GADGET_RMNET) {
 			gr = port->port_usb;
 			if (gr && gr->connect)
@@ -89,7 +96,7 @@ static void smux_control_event(void *priv, int event_type, const void *metadata)
 		}
 		break;
 	case SMUX_DISCONNECTED:
-		clear_bit(CH_OPENED, &port->channel_sts);
+		clear_bit(CH_CONNECTED, &port->channel_sts);
 		break;
 	case SMUX_READ_DONE:
 		len = ((struct smux_meta_read *)metadata)->len;
@@ -163,7 +170,7 @@ ghsuart_send_cpkt_tomodem(u8 portno, void *buf, size_t len)
 		return -ENODEV;
 	}
 	/* drop cpkt if ch is not open */
-	if (!test_bit(CH_OPENED, &port->channel_sts)) {
+	if (!test_bit(CH_CONNECTED, &port->channel_sts)) {
 		port->drp_cpkt_cnt++;
 		return 0;
 	}
@@ -209,7 +216,7 @@ ghsuart_send_cbits_tomodem(void *gptr, u8 portno, int cbits)
 
 	port->cbits_tomodem = cbits;
 
-	if (!test_bit(CH_OPENED, &port->channel_sts))
+	if (!test_bit(CH_CONNECTED, &port->channel_sts))
 		return;
 
 	pr_debug("%s: ctrl_tomodem:%d\n", __func__, cbits);
@@ -228,12 +235,21 @@ static void ghsuart_ctrl_connect_w(struct work_struct *w)
 
 	pr_debug("%s: port:%p\n", __func__, port);
 
+	if (test_bit(CH_OPENED, &port->channel_sts)) {
+		retval = wait_for_completion_timeout(
+				&port->close_complete, 3 * HZ);
+		if (retval == 0) {
+			pr_err("%s: smux close timedout\n", __func__);
+			return;
+		}
+	}
 	retval = msm_smux_open(port->ch_id, port->ctxt, smux_control_event,
 				rx_control_buffer);
 	if (retval < 0) {
 		pr_err(" %s smux_open failed\n", __func__);
 		return;
 	}
+	set_bit(CH_OPENED, &port->channel_sts);
 
 }
 
@@ -283,8 +299,9 @@ static void ghsuart_ctrl_disconnect_w(struct work_struct *w)
 	if (!test_bit(CH_OPENED, &port->channel_sts))
 		return;
 
+	INIT_COMPLETION(port->close_complete);
 	msm_smux_close(port->ch_id);
-	clear_bit(CH_OPENED, &port->channel_sts);
+	clear_bit(CH_CONNECTED, &port->channel_sts);
 }
 
 void ghsuart_ctrl_disconnect(void *gptr, int port_num)
@@ -363,6 +380,7 @@ static int ghsuart_ctrl_remove(struct platform_device *pdev)
 		gr->disconnect(gr);
 
 	clear_bit(CH_OPENED, &port->channel_sts);
+	clear_bit(CH_CONNECTED, &port->channel_sts);
 not_ready:
 	clear_bit(CH_READY, &port->channel_sts);
 
@@ -403,6 +421,7 @@ static int ghsuart_ctrl_port_alloc(int portno, enum gadget_type gtype)
 
 	spin_lock_init(&port->port_lock);
 
+	init_completion(&port->close_complete);
 	INIT_WORK(&port->connect_w, ghsuart_ctrl_connect_w);
 	INIT_WORK(&port->disconnect_w, ghsuart_ctrl_disconnect_w);
 
@@ -459,7 +478,7 @@ free_ports:
 		num_ctrl_ports = first_port_id;
 	return ret;
 }
-#if defined(CONFIG_DEBUG_FS)	//ASUS_BSP: fix for miniporting +++
+
 #define DEBUG_BUF_SIZE	1024
 static ssize_t ghsuart_ctrl_read_stats(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
@@ -528,9 +547,13 @@ static const struct file_operations ghsuart_ctrl_stats_ops = {
 	.write = ghsuart_ctrl_reset_stats,
 };
 
+#ifdef CONFIG_DEBUG_FS
 static struct dentry	*ghsuart_ctrl_dent;
+#endif
+
 static int ghsuart_ctrl_debugfs_init(void)
 {
+	#ifdef CONFIG_DEBUG_FS
 	struct dentry	*ghsuart_ctrl_dfile;
 
 	ghsuart_ctrl_dent = debugfs_create_dir("ghsuart_ctrl_xport", 0);
@@ -545,12 +568,15 @@ static int ghsuart_ctrl_debugfs_init(void)
 		ghsuart_ctrl_dent = NULL;
 		return -ENODEV;
 	}
+	#endif
 	return 0;
 }
 
 static void ghsuart_ctrl_debugfs_exit(void)
 {
+	#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(ghsuart_ctrl_dent);
+	#endif
 }
 
 static int __init ghsuart_ctrl_init(void)
@@ -571,6 +597,6 @@ static void __exit ghsuart_ctrl_exit(void)
 	ghsuart_ctrl_debugfs_exit();
 }
 module_exit(ghsuart_ctrl_exit);
-#endif				//ASUS_BSP: fix for miniporting ---
+
 MODULE_DESCRIPTION("HSUART control xport for RmNet");
 MODULE_LICENSE("GPL v2");

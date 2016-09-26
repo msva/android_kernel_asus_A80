@@ -1182,18 +1182,13 @@ EXPORT_SYMBOL_GPL(gpiochip_find);
  * on each other, and help provide better diagnostics in debugfs.
  * They're called even less than the "set direction" calls.
  */
- void dump_stack(void);
 int gpio_request(unsigned gpio, const char *label)
 {
 	struct gpio_desc	*desc;
 	struct gpio_chip	*chip;
 	int			status = -EINVAL;
 	unsigned long		flags;
-    if(gpio == 38)
-    {
-        printk("gpio_request 38\n");
-        dump_stack();
-    }
+
 	spin_lock_irqsave(&gpio_lock, flags);
 
 	if (!gpio_is_valid(gpio))

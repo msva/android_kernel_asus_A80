@@ -140,11 +140,10 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_USB_DCP,	/* Dedicated Charging Port */
 	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
-	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
 //ASUS_BSP +++ Josh_Liao "add asus battery driver"
 	POWER_SUPPLY_TYPE_PAD_BAT,
-	POWER_SUPPLY_TYPE_DOCK_BAT,	
-	POWER_SUPPLY_TYPE_PAD_AC, 
+	POWER_SUPPLY_TYPE_DOCK_BAT,
+	POWER_SUPPLY_TYPE_PAD_AC,
 	POWER_SUPPLY_TYPE_DOCK_AC,
 //ASUS_BSP --- Josh_Liao "add asus battery driver"
 };

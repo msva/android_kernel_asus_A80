@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,17 +25,25 @@
 #include <linux/mfd/pm8xxx/misc.h>
 #include <linux/msm_ssbi.h>
 #include <linux/spi/spi.h>
+#include <linux/dma-contiguous.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_data/qcom_crypto_device.h>
 #include <linux/msm_ion.h>
 #include <linux/memory.h>
 #include <linux/memblock.h>
 #include <linux/msm_thermal.h>
-//Desmond++
-#include <linux/i2c/atmel_mxt_pad_ts.h>
+#include <linux/i2c/atmel_mxt_ts.h>
+//ASUS_BSP +++ Jessy :add for pad touch
 #include <linux/sis_i2c.h>
-//Desmond--
-//#include <linux/i2c/atmel_mxt_ts.h>
+//ASUS_BSP --- Jessy :add for pad touch
+//ASUS_BSP +++ Jessy :Add support for synaptics touchscreen
+#ifdef ASUS_A68_PROJECT	
+#ifdef CONFIG_RMI4_I2C
+#include <linux/interrupt.h>
+#include <linux/rmi.h>
+#endif
+#endif
+//ASUS_BSP --- Jessy :Add support for synaptics touchscreen
 #include <linux/cyttsp-qc.h>
 #include <linux/i2c/isa1200.h>
 #include <linux/gpio_keys.h>
@@ -83,23 +91,18 @@
 #include <linux/memory.h>
 #include <linux/memblock.h>
 //ASUS_BSP --- [thomas] add for asusdebug
-//ASUS_BSP simpson: Add support for synaptics touchscreen +++
-#ifdef CONFIG_RMI4_I2C
-#include <linux/interrupt.h>
-#include <linux/rmi.h>
-#endif
-//ASUS_BSP simpson: Add support for synaptics touchscreen ---
+#include <mach/msm_serial_hs.h>
 
 //ASUS_BSP Sina_Chou ++
 #include <linux/microp.h>
 //ASUS_BSP Sina_Chou --
-
 //+++Porting NFC's kernel+++
 #include <linux/nfc/pn544.h>
 //---Porting NFC's kernel---
 
 #include "msm_watchdog.h"
 #include "board-8064.h"
+#include "clock.h"
 #include "spm.h"
 #include <mach/mpm.h>
 #include "rpm_resources.h"
@@ -107,9 +110,7 @@
 #include "pm-boot.h"
 #include "devices-msm8x60.h"
 #include "smd_private.h"
-
-#define MHL_GPIO_INT           30
-#define MHL_GPIO_RESET         35
+#include "sysmon.h"
 
 //ASUS BSP Eason_Chang smb346 +++
 struct smb346_platform_data{
@@ -133,12 +134,13 @@ struct TIgauge_platform_data{
 
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 #define HOLE_SIZE		0x20000
+#define MSM_ION_MFC_META_SIZE  0x40000 /* 256 Kbytes */
 #define MSM_CONTIG_MEM_SIZE  0x65000
 #ifdef CONFIG_MSM_IOMMU
-#define MSM_ION_MM_SIZE		0xA000000 // CC: change from 0x3800000(56MB) to 160MB
+#define MSM_ION_MM_SIZE		0x4800000
 #define MSM_ION_SF_SIZE		0
 #define MSM_ION_QSECOM_SIZE	0x780000 /* (7.5MB) */
-#define MSM_ION_HEAP_NUM	7
+#define MSM_ION_HEAP_NUM	8
 #else
 #define MSM_ION_MM_SIZE		MSM_PMEM_ADSP_SIZE
 #define MSM_ION_SF_SIZE		MSM_PMEM_SIZE
@@ -146,7 +148,7 @@ struct TIgauge_platform_data{
 #define MSM_ION_HEAP_NUM	8
 #endif
 #define MSM_ION_MM_FW_SIZE	(0x200000 - HOLE_SIZE) /* (2MB - 128KB) */
-#define MSM_ION_MFC_SIZE	SZ_8K
+#define MSM_ION_MFC_SIZE	(SZ_8K + MSM_ION_MFC_META_SIZE)
 #define MSM_ION_AUDIO_SIZE	MSM_PMEM_AUDIO_SIZE
 #else
 #define MSM_CONTIG_MEM_SIZE  0x110C000
@@ -158,6 +160,7 @@ struct TIgauge_platform_data{
 #define MAX_FIXED_AREA_SIZE	0x10000000
 #define MSM_MM_FW_SIZE		(0x200000 - HOLE_SIZE)
 #define APQ8064_FW_START	APQ8064_FIXED_AREA_START
+#define MSM_ION_ADSP_SIZE	SZ_8M
 
 #define QFPROM_RAW_FEAT_CONFIG_ROW0_MSB     (MSM_QFPROM_BASE + 0x23c)
 #define QFPROM_RAW_OEM_CONFIG_ROW0_LSB      (MSM_QFPROM_BASE + 0x220)
@@ -171,18 +174,12 @@ struct TIgauge_platform_data{
 #define PCIE_PWR_EN_PMIC_GPIO 13
 #define PCIE_RST_N_PMIC_MPP 1
 
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
+//ASUS_BSP +++ Maggie Lee "9-axis sensor porting"
 #ifdef CONFIG_MPU_SENSORS_MPU6050B1
 #include <linux/mpu_6050.h>
 
-#define A68_ECOM_GPIO_IRQ_AMI306_EVB PM8921_GPIO_PM_TO_SYS(14)      //for EVB
-#define A68_GYRO_GPIO_IRQ_MPU6050_EVB 28
-#define A68_ECOM_GPIO_IRQ_AMI306_SR1_1 33
-#define A68_GYRO_GPIO_IRQ_MPU6050_SR1_1 28
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
 #define A80_ECOM_GPIO_IRQ_AMI306_SR1_1 33
 #define A80_GYRO_GPIO_IRQ_MPU6050_SR1_1 28
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
 
 static struct regulator *pm8921_l9;
 static struct regulator *pm8921_lvs4;
@@ -194,17 +191,17 @@ static struct ext_slave_platform_data inv_mpu_ami306_data = {
         .orientation = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, 
 };
 
+#ifdef ASUS_A80_PROJECT
 struct NT71890_platform_data {
 	int   (*init_platform_hw)(struct i2c_client *client);	//for platform init
 	int   (*exit_platform_hw)(struct i2c_client *client);	//for platform exit
 };
+#endif
 
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 static struct ext_slave_platform_data inv_mpu_p05_ami306_data = {
         .bus = EXT_SLAVE_BUS_PRIMARY,
         .orientation = { 1, 0, 0, 0, 1, 0, 0, 0, 1 },
 };
-//ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 
 #define SENSOR_MPU_6050_NAME "mpu6050"
 static struct mpu_platform_data mpu_6050_data = {
@@ -213,33 +210,57 @@ static struct mpu_platform_data mpu_6050_data = {
         .level_shifter = 0,
 };
 static struct i2c_board_info __initdata mpu_i2c_boardinfo[] = {
-        {   //MPU6050 Chip
+        {
                 I2C_BOARD_INFO(SENSOR_MPU_6050_NAME, 0x68),
-                .irq = MSM_GPIO_TO_INT(A68_GYRO_GPIO_IRQ_MPU6050_SR1_1),
+                .irq = MSM_GPIO_TO_INT(A80_GYRO_GPIO_IRQ_MPU6050_SR1_1),
                 .platform_data = &mpu_6050_data,
         },
 };
 static struct i2c_board_info __initdata ami306_i2c_boardinfo[] = {
         {
                 I2C_BOARD_INFO("ami306", 0x0E),
-                //.irq = MSM_GPIO_TO_INT(68), // use timerirq
                 .platform_data = &inv_mpu_ami306_data,
         },
 };
 
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 static struct i2c_board_info __initdata p05_ami306_i2c_boardinfo[] = {
         {
                 I2C_BOARD_INFO("p05_ami306", 0x0F),
-                //.irq = MSM_GPIO_TO_INT(68), // use timerirq
                 .platform_data = &inv_mpu_p05_ami306_data,
         },
 };
-//ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
 #endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
+//ASUS_BSP --- Maggie Lee "9-axis sensor porting"
 
-//ASUS_BSP +++ Louis "Add NT71890 driver on P05"
+//ASUS_BSP +++ Maggie_Lee "Lightsensor Cm36283 driver"
+#ifdef CONFIG_SENSORS_CM36283
+#define GPIO_PROXIMITY_INT          38
+static struct platform_device cm36283_device = {
+    .name       = "cm36283",
+    .id             = 0,
+};
+
+static struct i2c_board_info __initdata cm36283_i2c_info[] = {
+    {
+        I2C_BOARD_INFO("cm36283", 0x60),
+        .irq = MSM_GPIO_TO_INT(GPIO_PROXIMITY_INT),
+    },
+};
+#endif
+//ASUS_BSP --- Maggie Lee
+
+//ASUS_BSP +++ Maggie Lee "Lightsensor Al3010 driver on Pad"
+#ifdef CONFIG_SENSORS_AL3010
+static struct i2c_board_info __initdata al3010_Pad_i2c_info[] = {
+    {
+        I2C_BOARD_INFO("al3010", 0x1C),
+    },
+};
+#endif
+//ASUS_BSP --- Maggie Lee
+
+//ASUS_BSP +++ Jason Chang "Add NT71890 driver on P05"
+#ifdef ASUS_A80_PROJECT
 static int NT71890_P05_platform_init(struct i2c_client *client)
 {
 	printk("[BL]NT71890_P05_platform_init\n");
@@ -263,7 +284,8 @@ static struct i2c_board_info __initdata NT71890_P05_i2c_info[] = {
         .platform_data = &NT71890_P05_pdata,
     },
 };
-//ASUS_BSP --- Louis "Add NT71890 driver on P05"
+#endif
+//ASUS_BSP --- Jason Chang "Add NT71890 driver on P05"
 
 //ASUS_BSP +++ [thomas]Add for asusdebug
 static void __init reserve_printk_buffer(void)
@@ -360,27 +382,64 @@ static struct platform_device apq8064_android_pmem_audio_device = {
 static struct platform_device battery_bcl_device = {
 	.name = "battery_current_limit",
 	.id = -1,
-};
+	};
 #endif
 
-// +++ ASUS_BSP: Louis
-#define LPM_CHANNEL0 2
-static int a68_backlight_gpio[] = {LPM_CHANNEL0};
-static struct a68_backlight_data a68_backlight_pdata = {
-    .max_backlight_level = 255,
-    .min_backlight_level = 1,
-    .gpio = a68_backlight_gpio,
+//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+#ifdef CONFIG_ASUS_BACKLIGHT
+static struct asus_backlight_data bl_data = {
+	#ifdef ASUS_A80_PROJECT
+	.max_value = 255,
+	.min_value = 12,
+	.phone = {
+		.resolution = 1023,
+		.max_index = 882,
+		.min_index = 68,
+		.default_index = 352,				//default brightness is 40% of max brightness
+		.shift = 50,						//the amount of shift required to compensate for calc resolution
+		.max = 400,
+		.min_value = 20,
+	},
+	.pad = {
+		.resolution = 255,
+		.max_index = 132,
+		.min_index = 9,
+		.default_index = 52,
+		.shift = 7,
+		.max = 650,
+		.min_value = 17,
+	},
+	#else
+	.max_value = 255,
+	.min_value = 8,
+	.phone = {
+		.resolution = 255,
+		.max_index = 255,
+		.min_index = 11,
+		.default_index = 102,
+		.shift = 6,
+		.max = 550,
+	},
+	.pad = {
+		.resolution = 255,
+		.max_index = 255,
+		.min_index = 18,
+		.default_index = 102,
+		.shift = 13,
+		.max = 350,
+	},
+	#endif
 };
 
-static struct platform_device a68_led_device = {
-    .name           = "a68_backlight",
-    .id             = 0,
-    .dev            = {
-        .platform_data = &a68_backlight_pdata,
-    },
-
+static struct platform_device asus_led_device = {
+	.name = "asus_backlight",
+	.id = 0,
+	.dev = {
+		.platform_data = &bl_data,
+	},
 };
-//--- ASUS_BSP: Louis
+#endif
+//ASUS_BSP --- Maggie Lee "Backlight Porting"
 
 struct fmem_platform_data apq8064_fmem_pdata = {
 };
@@ -410,141 +469,12 @@ static struct i2c_board_info __initdata enterprise_nuvoton_microp[] = {
 };
 //ASUS_BSP Sina_Chou --
 
-//ASUS BSP Lenter+++
-static struct i2c_board_info p03_scaler_info[] __initdata = {
-    {
-        I2C_BOARD_INFO("p03_scaler_info", 0x37),
-    },
-};
-//ASUS BSP Lenter---
-
-//ASUS BSP Lenter+++
-static struct i2c_board_info p03_scaler_update_info[] __initdata = {
-	{
-		I2C_BOARD_INFO("p03_scaler_update", 0x4A),
-	},
-};
-//ASUS BSP Lenter---
-
-//ASUS_BSP +++ Maggie_Lee "Lightsensor Cm36283 driver"
-#define GPIO_PROXIMITY_PWR_EN       3
-#define GPIO_PROXIMITY_INT          38
-
-struct cm36283_platform_data {
-    int   (*init_platform_hw)(void);
-    int   (*exit_platform_hw)(void);
-    u8    (*read_int_pin_state)(void);
-};
-
-static int cm36283_platform_init(void)
-{
-    int rc = -EINVAL;
-
-    printk("[cm36283][board]cm36283_platform_init++\n");
-
-    /* configure Phone Lightsensor interrupt gpio */
-    rc = gpio_request(GPIO_PROXIMITY_INT, "cm36283-irq");
-    if (rc) {
-        pr_err("%s: unable to request gpio %d (cm36283-irq)\n",
-            __func__, GPIO_PROXIMITY_INT);
-        goto err;
-    }
-
-    //rc = gpio_direction_output(GPIO_PROXIMITY_INT, 1);
-    //gpio_set_value(GPIO_PROXIMITY_INT, 1);
-
-    rc = gpio_direction_input(GPIO_PROXIMITY_INT);
-    if (rc < 0) {
-        pr_err("%s: unable to set the direction of gpio %d\n",
-            __func__, GPIO_PROXIMITY_INT);
-        goto err;
-    }
-
-    /* configure Phone Lightsensor power_enable gpio */
-    rc = gpio_request(GPIO_PROXIMITY_PWR_EN, "proxm_pwr_en");
-    if (rc) {
-        pr_err("%s: unable to request gpio %d (proxm_pwr_en)\n",
-            __func__, GPIO_PROXIMITY_PWR_EN);
-        goto err;
-    }   
-
-    rc = gpio_direction_output(GPIO_PROXIMITY_PWR_EN, 1);
-    if (rc < 0) {
-        pr_err("%s: unable to set the direction of gpio %d\n",
-            __func__, GPIO_PROXIMITY_PWR_EN);
-        goto err;
-    }
-
-    /* Power on cm36283 */
-    gpio_set_value(GPIO_PROXIMITY_PWR_EN, 1);
-
-    printk("[cm36283][board]cm36283_platform_init--\n");
-
-    return 0;
-
-err:
-    gpio_free(GPIO_PROXIMITY_PWR_EN);
-    return rc;
-}
-
-static int cm36283_platform_exit(void)
-{
-    return 0;
-}
-
-static u8 cm36283_read_int_pin_state(void)
-{
-    return gpio_get_value(GPIO_PROXIMITY_INT);
-}
-
-static struct cm36283_platform_data cm36283_pdata = {
-    .init_platform_hw = cm36283_platform_init,
-    .exit_platform_hw = cm36283_platform_exit,
-    .read_int_pin_state = cm36283_read_int_pin_state,
-};
-
-static struct platform_device cm36283_device = {
-    .name           = "cm36283",
-    .id             = -1,
-    .dev.platform_data = &cm36283_pdata,
-};
-
-static struct i2c_board_info __initdata cm36283_i2c_info[] = {
-    {
-        I2C_BOARD_INFO("cm36283", 0x60),
-        .irq = MSM_GPIO_TO_INT(GPIO_PROXIMITY_INT),
-    },
-};
-//ASUS_BSP --- Maggie Lee
-
-//ASUS_BSP +++ Maggie Lee "Lightsensor Al3010 driver on Pad"
-static int al3010_Pad_platform_init(void)
-{
-    return 0;
-}
-
-static int al3010_Pad_platform_exit(void)
-{
-    return 0;
-}
-
-static struct cm36283_platform_data al3010_Pad_pdata = {
-    .init_platform_hw = al3010_Pad_platform_init,
-    .exit_platform_hw = al3010_Pad_platform_exit,
-};
-
-static struct i2c_board_info __initdata al3010_Pad_i2c_info[] = {
-    {
-        I2C_BOARD_INFO("al3010", 0x1C),
-        .platform_data = &al3010_Pad_pdata,
-    },
-};
-//ASUS_BSP --- Maggie Lee
-
 static void __init reserve_rtb_memory(void)
 {
 #if defined(CONFIG_MSM_RTB)
 	apq8064_reserve_table[MEMTYPE_EBI1].size += apq8064_rtb_pdata.size;
+	pr_info("mem_map: rtb reserved with size 0x%x in pool\n",
+			apq8064_rtb_pdata.size);
 #endif
 }
 
@@ -578,6 +508,8 @@ static void __init reserve_pmem_memory(void)
 	reserve_memory_for(&android_pmem_audio_pdata);
 #endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
 	apq8064_reserve_table[MEMTYPE_EBI1].size += msm_contig_mem_size;
+	pr_info("mem_map: contig_mem reserved with size 0x%x in pool\n",
+			msm_contig_mem_size);
 #endif /*CONFIG_ANDROID_PMEM*/
 }
 
@@ -596,6 +528,8 @@ static struct ion_cp_heap_pdata cp_mm_apq8064_ion_pdata = {
 	.reusable = FMEM_ENABLED,
 	.mem_is_fmem = FMEM_ENABLED,
 	.fixed_position = FIXED_MIDDLE,
+	.is_cma = 1,
+	.no_nonsecure_alloc = 1,
 };
 
 static struct ion_cp_heap_pdata cp_mfc_apq8064_ion_pdata = {
@@ -604,6 +538,7 @@ static struct ion_cp_heap_pdata cp_mfc_apq8064_ion_pdata = {
 	.reusable = 0,
 	.mem_is_fmem = FMEM_ENABLED,
 	.fixed_position = FIXED_HIGH,
+	.no_nonsecure_alloc = 1,
 };
 
 static struct ion_co_heap_pdata co_apq8064_ion_pdata = {
@@ -620,6 +555,25 @@ static struct ion_co_heap_pdata fw_co_apq8064_ion_pdata = {
 };
 #endif
 
+static u64 msm_dmamask = DMA_BIT_MASK(32);
+
+static struct platform_device ion_mm_heap_device = {
+	.name = "ion-mm-heap-device",
+	.id = -1,
+	.dev = {
+		.dma_mask = &msm_dmamask,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+	}
+};
+
+static struct platform_device ion_adsp_heap_device = {
+	.name = "ion-adsp-heap-device",
+	.id = -1,
+	.dev = {
+		.dma_mask = &msm_dmamask,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+	}
+};
 /**
  * These heaps are listed in the order they will be allocated. Due to
  * video hardware restrictions and content protection the FW heap has to
@@ -631,9 +585,7 @@ static struct ion_co_heap_pdata fw_co_apq8064_ion_pdata = {
  * to each other.
  * Don't swap the order unless you know what you are doing!
  */
-static struct ion_platform_data apq8064_ion_pdata = {
-	.nr = MSM_ION_HEAP_NUM,
-	.heaps = {
+struct ion_platform_heap apq8064_heaps[] = {
 		{
 			.id	= ION_SYSTEM_HEAP_ID,
 			.type	= ION_HEAP_TYPE_SYSTEM,
@@ -647,6 +599,7 @@ static struct ion_platform_data apq8064_ion_pdata = {
 			.size	= MSM_ION_MM_SIZE,
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = (void *) &cp_mm_apq8064_ion_pdata,
+			.priv	= &ion_mm_heap_device.dev
 		},
 		{
 			.id	= ION_MM_FIRMWARE_HEAP_ID,
@@ -695,8 +648,21 @@ static struct ion_platform_data apq8064_ion_pdata = {
 			.memory_type = ION_EBI_TYPE,
 			.extra_data = (void *) &co_apq8064_ion_pdata,
 		},
+		{
+			.id     = ION_ADSP_HEAP_ID,
+			.type   = ION_HEAP_TYPE_DMA,
+			.name   = ION_ADSP_HEAP_NAME,
+			.size   = MSM_ION_ADSP_SIZE,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *) &co_apq8064_ion_pdata,
+			.priv = &ion_adsp_heap_device.dev,
+		},
 #endif
-	}
+};
+
+static struct ion_platform_data apq8064_ion_pdata = {
+	.nr = MSM_ION_HEAP_NUM,
+	.heaps = apq8064_heaps,
 };
 
 static struct platform_device apq8064_ion_dev = {
@@ -732,6 +698,9 @@ static void __init apq8064_reserve_fixed_area(unsigned long fixed_area_size)
 
 	ret = memblock_remove(reserve_info->fixed_area_start,
 		reserve_info->fixed_area_size);
+	pr_info("mem_map: fixed_area reserved at 0x%lx with size 0x%lx\n",
+			reserve_info->fixed_area_start,
+			reserve_info->fixed_area_size);
 	BUG_ON(ret);
 #endif
 }
@@ -752,58 +721,46 @@ static void __init reserve_ion_memory(void)
 {
 #if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
 	unsigned int i;
-	unsigned int reusable_count = 0;
+	unsigned int ret;
 	unsigned int fixed_size = 0;
 	unsigned int fixed_low_size, fixed_middle_size, fixed_high_size;
 	unsigned long fixed_low_start, fixed_middle_start, fixed_high_start;
+	unsigned long cma_alignment;
+	unsigned int low_use_cma = 0;
+	unsigned int middle_use_cma = 0;
+	unsigned int high_use_cma = 0;
 
-	apq8064_fmem_pdata.size = 0;
-	apq8064_fmem_pdata.reserved_size_low = 0;
-	apq8064_fmem_pdata.reserved_size_high = 0;
-	apq8064_fmem_pdata.align = PAGE_SIZE;
+
 	fixed_low_size = 0;
 	fixed_middle_size = 0;
 	fixed_high_size = 0;
 
-	/* We only support 1 reusable heap. Check if more than one heap
-	 * is specified as reusable and set as non-reusable if found.
-	 */
-	for (i = 0; i < apq8064_ion_pdata.nr; ++i) {
-		const struct ion_platform_heap *heap =
-			&(apq8064_ion_pdata.heaps[i]);
-
-		if (heap->type == ION_HEAP_TYPE_CP && heap->extra_data) {
-			struct ion_cp_heap_pdata *data = heap->extra_data;
-
-			reusable_count += (data->reusable) ? 1 : 0;
-
-			if (data->reusable && reusable_count > 1) {
-				pr_err("%s: Too many heaps specified as "
-					"reusable. Heap %s was not configured "
-					"as reusable.\n", __func__, heap->name);
-				data->reusable = 0;
-			}
-		}
-	}
+	cma_alignment = PAGE_SIZE << max(MAX_ORDER, pageblock_order);
 
 	for (i = 0; i < apq8064_ion_pdata.nr; ++i) {
-		const struct ion_platform_heap *heap =
+		struct ion_platform_heap *heap =
 			&(apq8064_ion_pdata.heaps[i]);
+		int use_cma = 0;
+
 
 		if (heap->extra_data) {
 			int fixed_position = NOT_FIXED;
-			int mem_is_fmem = 0;
 
-			switch (heap->type) {
+			switch ((int)heap->type) {
 			case ION_HEAP_TYPE_CP:
-				mem_is_fmem = ((struct ion_cp_heap_pdata *)
-					heap->extra_data)->mem_is_fmem;
+				if (((struct ion_cp_heap_pdata *)
+					heap->extra_data)->is_cma) {
+					heap->size = ALIGN(heap->size,
+						cma_alignment);
+					use_cma = 1;
+				}
 				fixed_position = ((struct ion_cp_heap_pdata *)
 					heap->extra_data)->fixed_position;
 				break;
+			case ION_HEAP_TYPE_DMA:
+				use_cma = 1;
+				/* Purposely fall through here */
 			case ION_HEAP_TYPE_CARVEOUT:
-				mem_is_fmem = ((struct ion_co_heap_pdata *)
-					heap->extra_data)->mem_is_fmem;
 				fixed_position = ((struct ion_co_heap_pdata *)
 					heap->extra_data)->fixed_position;
 				break;
@@ -813,40 +770,82 @@ static void __init reserve_ion_memory(void)
 
 			if (fixed_position != NOT_FIXED)
 				fixed_size += heap->size;
-			else
+			else if (!use_cma)
 				reserve_mem_for_ion(MEMTYPE_EBI1, heap->size);
 
-			if (fixed_position == FIXED_LOW)
+			if (fixed_position == FIXED_LOW) {
 				fixed_low_size += heap->size;
-			else if (fixed_position == FIXED_MIDDLE)
+				low_use_cma = use_cma;
+			} else if (fixed_position == FIXED_MIDDLE) {
 				fixed_middle_size += heap->size;
-			else if (fixed_position == FIXED_HIGH)
+				middle_use_cma = use_cma;
+			} else if (fixed_position == FIXED_HIGH) {
 				fixed_high_size += heap->size;
+				high_use_cma = use_cma;
+			} else if (use_cma) {
+				/*
+				 * Heaps that use CMA but are not part of the
+				 * fixed set. Create wherever.
+				 */
+				dma_declare_contiguous(
+					heap->priv,
+					heap->size,
+					0,
+					0xb0000000);
 
-			if (mem_is_fmem)
-				apq8064_fmem_pdata.size += heap->size;
+			}
 		}
 	}
 
 	if (!fixed_size)
 		return;
 
-	if (apq8064_fmem_pdata.size) {
-		apq8064_fmem_pdata.reserved_size_low = fixed_low_size +
-								HOLE_SIZE;
-		apq8064_fmem_pdata.reserved_size_high = fixed_high_size;
-	}
-
-	/* Since the fixed area may be carved out of lowmem,
-	 * make sure the length is a multiple of 1M.
+	/*
+	 * Given the setup for the fixed area, we can't round up all sizes.
+	 * Some sizes must be set up exactly and aligned correctly. Incorrect
+	 * alignments are considered a configuration issue
 	 */
-	fixed_size = (fixed_size + HOLE_SIZE + SECTION_SIZE - 1)
-		& SECTION_MASK;
-	apq8064_reserve_fixed_area(fixed_size);
 
 	fixed_low_start = APQ8064_FIXED_AREA_START;
+	if (low_use_cma) {
+		BUG_ON(!IS_ALIGNED(fixed_low_size + HOLE_SIZE, cma_alignment));
+		BUG_ON(!IS_ALIGNED(fixed_low_start, cma_alignment));
+	} else {
+		BUG_ON(!IS_ALIGNED(fixed_low_size + HOLE_SIZE, SECTION_SIZE));
+		ret = memblock_remove(fixed_low_start,
+				      fixed_low_size + HOLE_SIZE);
+		pr_info("mem_map: fixed_low_area reserved at 0x%lx with size \
+				0x%x\n", fixed_low_start,
+				fixed_low_size + HOLE_SIZE);
+		BUG_ON(ret);
+	}
+
 	fixed_middle_start = fixed_low_start + fixed_low_size + HOLE_SIZE;
+	if (middle_use_cma) {
+		BUG_ON(!IS_ALIGNED(fixed_middle_start, cma_alignment));
+		BUG_ON(!IS_ALIGNED(fixed_middle_size, cma_alignment));
+	} else {
+		BUG_ON(!IS_ALIGNED(fixed_middle_size, SECTION_SIZE));
+		ret = memblock_remove(fixed_middle_start, fixed_middle_size);
+		pr_info("mem_map: fixed_middle_area reserved at 0x%lx with \
+				size 0x%x\n", fixed_middle_start,
+				fixed_middle_size);
+		BUG_ON(ret);
+	}
+
 	fixed_high_start = fixed_middle_start + fixed_middle_size;
+	if (high_use_cma) {
+		fixed_high_size = ALIGN(fixed_high_size, cma_alignment);
+		BUG_ON(!IS_ALIGNED(fixed_high_start, cma_alignment));
+	} else {
+		/* This is the end of the fixed area so it's okay to round up */
+		fixed_high_size = ALIGN(fixed_high_size, SECTION_SIZE);
+		ret = memblock_remove(fixed_high_start, fixed_high_size);
+		pr_info("mem_map: fixed_high_area reserved at 0x%lx with size \
+				0x%x\n", fixed_high_start,
+				fixed_high_size);
+		BUG_ON(ret);
+	}
 
 	for (i = 0; i < apq8064_ion_pdata.nr; ++i) {
 		struct ion_platform_heap *heap = &(apq8064_ion_pdata.heaps[i]);
@@ -855,13 +854,14 @@ static void __init reserve_ion_memory(void)
 			int fixed_position = NOT_FIXED;
 			struct ion_cp_heap_pdata *pdata = NULL;
 
-			switch (heap->type) {
+			switch ((int) heap->type) {
 			case ION_HEAP_TYPE_CP:
 				pdata =
 				(struct ion_cp_heap_pdata *)heap->extra_data;
 				fixed_position = pdata->fixed_position;
 				break;
 			case ION_HEAP_TYPE_CARVEOUT:
+			case ION_HEAP_TYPE_DMA:
 				fixed_position = ((struct ion_co_heap_pdata *)
 					heap->extra_data)->fixed_position;
 				break;
@@ -875,6 +875,14 @@ static void __init reserve_ion_memory(void)
 				break;
 			case FIXED_MIDDLE:
 				heap->base = fixed_middle_start;
+				if (middle_use_cma) {
+					ret = dma_declare_contiguous(
+						heap->priv,
+						heap->size,
+						fixed_middle_start,
+						0xa0000000);
+					WARN_ON(ret);
+				}
 				pdata->secure_base = fixed_middle_start
 								- HOLE_SIZE;
 				pdata->secure_size = HOLE_SIZE + heap->size;
@@ -903,7 +911,14 @@ static void __init reserve_cache_dump_memory(void)
 	total = apq8064_cache_dump_pdata.l1_size +
 		apq8064_cache_dump_pdata.l2_size;
 	apq8064_reserve_table[MEMTYPE_EBI1].size += total;
+	pr_info("mem_map: cache_dump reserved with size 0x%x in pool\n",
+			total);
 #endif
+}
+
+static void __init reserve_mpdcvs_memory(void)
+{
+	apq8064_reserve_table[MEMTYPE_EBI1].size += SZ_32K;
 }
 
 static void __init apq8064_calculate_reserve_sizes(void)
@@ -914,6 +929,7 @@ static void __init apq8064_calculate_reserve_sizes(void)
 	reserve_mdp_memory();
 	reserve_rtb_memory();
 	reserve_cache_dump_memory();
+	reserve_mpdcvs_memory();
 }
 
 static struct reserve_info apq8064_reserve_info __initdata = {
@@ -922,58 +938,6 @@ static struct reserve_info apq8064_reserve_info __initdata = {
 	.reserve_fixed_area = apq8064_reserve_fixed_area,
 	.paddr_to_memtype = apq8064_paddr_to_memtype,
 };
-
-static int apq8064_memory_bank_size(void)
-{
-	return 1<<29;
-}
-
-static void __init locate_unstable_memory(void)
-{
-	struct membank *mb = &meminfo.bank[meminfo.nr_banks - 1];
-	unsigned long bank_size;
-	unsigned long low, high;
-
-	bank_size = apq8064_memory_bank_size();
-	low = meminfo.bank[0].start;
-	high = mb->start + mb->size;
-
-	/* Check if 32 bit overflow occured */
-	if (high < mb->start)
-		high = -PAGE_SIZE;
-
-	low &= ~(bank_size - 1);
-
-	if (high - low <= bank_size)
-		goto no_dmm;
-
-#ifdef CONFIG_ENABLE_DMM
-	apq8064_reserve_info.low_unstable_address = mb->start -
-					MIN_MEMORY_BLOCK_SIZE + mb->size;
-	apq8064_reserve_info.max_unstable_size = MIN_MEMORY_BLOCK_SIZE;
-
-	apq8064_reserve_info.bank_size = bank_size;
-	pr_info("low unstable address %lx max size %lx bank size %lx\n",
-		apq8064_reserve_info.low_unstable_address,
-		apq8064_reserve_info.max_unstable_size,
-		apq8064_reserve_info.bank_size);
-	return;
-#endif
-no_dmm:
-	apq8064_reserve_info.low_unstable_address = high;
-	apq8064_reserve_info.max_unstable_size = 0;
-}
-
-//+++ ASUS_BSP : add for miniporting
-#if 0
-static int apq8064_change_memory_power(u64 start, u64 size,
-	int change_type)
-{
-	return soc_change_memory_power(start, size, change_type);
-}
-#endif
-//--- ASUS_BSP :  add for miniporting
-
 
 static char prim_panel_name[PANEL_NAME_MAX_LEN];
 static char ext_panel_name[PANEL_NAME_MAX_LEN];
@@ -1009,38 +973,12 @@ static void __init apq8064_reserve(void)
 	apq8064_set_display_params(prim_panel_name, ext_panel_name,
 		ext_resolution);
 	msm_reserve();
-	reserve_printk_buffer();//ASUS_BSP + [thomas]Add for asusdebug
-	if (apq8064_fmem_pdata.size) {
-#if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
-		if (reserve_info->fixed_area_size) {
-			apq8064_fmem_pdata.phys =
-				reserve_info->fixed_area_start + MSM_MM_FW_SIZE;
-			pr_info("mm fw at %lx (fixed) size %x\n",
-				reserve_info->fixed_area_start, MSM_MM_FW_SIZE);
-			pr_info("fmem start %lx (fixed) size %lx\n",
-				apq8064_fmem_pdata.phys,
-				apq8064_fmem_pdata.size);
-		}
-#endif
-	}
-}
-
-static void __init place_movable_zone(void)
-{
-#ifdef CONFIG_ENABLE_DMM
-	movable_reserved_start = apq8064_reserve_info.low_unstable_address;
-	movable_reserved_size = apq8064_reserve_info.max_unstable_size;
-	pr_info("movable zone start %lx size %lx\n",
-		movable_reserved_start, movable_reserved_size);
-#endif
+	reserve_printk_buffer();//ASUS_BSP ++ [thomas]Add for asusdebug
 }
 
 static void __init apq8064_early_reserve(void)
 {
 	reserve_info = &apq8064_reserve_info;
-	locate_unstable_memory();
-	place_movable_zone();
-
 }
 #ifdef CONFIG_USB_EHCI_MSM_HSIC
 /* Bandwidth requests (zero) if no vote placed */
@@ -1191,12 +1129,8 @@ static struct msm_bus_scale_pdata usb_bus_scale_pdata = {
 };
 
 static int phy_init_seq[] = {
-	//ASUS_BSP+++ BennyCheng "modify phy default settings for eye diagram"
-	//0x68, 0x81, /* update DC voltage level */
-	//0x24, 0x82, /* set pre-emphasis and rise/fall time */
-	0x6c, 0x81, /* update DC voltage level */
-	0x34, 0x82, /* set pre-emphasis and rise/fall time */
-	//ASUS_BSP--- BennyCheng "modify phy default settings for eye diagram"
+	0x38, 0x81, /* update DC voltage level */
+	0x24, 0x82, /* set pre-emphasis and rise/fall time */
 	-1
 };
 
@@ -1219,7 +1153,6 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.bus_scale_table	= &usb_bus_scale_pdata,
 	.phy_init_seq		= phy_init_seq,
 	.mpm_otgsessvld_int	= MSM_MPM_PIN_USB1_OTGSESSVLD,
-	.enable_lpm_on_dev_suspend	= false,
 };
 //ASUS BSP ---
 
@@ -1233,16 +1166,6 @@ static struct msm_usb_host_platform_data msm_ehci_host_pdata4;
 
 static void __init apq8064_ehci_host_init(void)
 {
-	//ASUS_BSP+++ BennyCheng "enable ehci host 3"
-	if (g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_SR2) {
-		apq8064_device_ehci_host3.dev.platform_data =
-			&msm_ehci_host_pdata3;
-		platform_device_register(&apq8064_device_ehci_host3);
-		pr_info("%s: enable ehci host 3\n", __func__);
-		return;
-	}
-	//ASUS_BSP--- BennyCheng "enable ehci host 3"
-
 	if (machine_is_apq8064_liquid() || machine_is_mpq8064_cdp() ||
 		machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv()) {
 		if (machine_is_apq8064_liquid())
@@ -1336,8 +1259,6 @@ static void __init apq8064_epm_adc_init(void)
  * does not need to be as high as 2.85V. It is choosen for
  * microphone sensitivity purpose.
  */
-//Bruno++
-#if 0
 static struct wcd9xxx_pdata apq8064_tabla_platform_data = {
 	.slimbus_slave_device = {
 		.name = "tabla-slave",
@@ -1404,8 +1325,6 @@ static struct slim_device apq8064_slim_tabla = {
 		.platform_data = &apq8064_tabla_platform_data,
 	},
 };
-#endif
-//Bruno++
 
 static struct wcd9xxx_pdata apq8064_tabla20_platform_data = {
 	.slimbus_slave_device = {
@@ -1474,152 +1393,6 @@ static struct slim_device apq8064_slim_tabla20 = {
 	},
 };
 
-static struct wcd9xxx_pdata apq8064_tabla_i2c_platform_data = {
-	.irq = MSM_GPIO_TO_INT(77),
-	.irq_base = TABLA_INTERRUPT_BASE,
-	.num_irqs = NR_WCD9XXX_IRQS,
-	.reset_gpio = PM8921_GPIO_PM_TO_SYS(34),
-	.micbias = {
-		.ldoh_v = TABLA_LDOH_2P85_V,
-		.cfilt1_mv = 1800,
-		.cfilt2_mv = 1800,
-		.cfilt3_mv = 1800,
-		.bias1_cfilt_sel = TABLA_CFILT1_SEL,
-		.bias2_cfilt_sel = TABLA_CFILT2_SEL,
-		.bias3_cfilt_sel = TABLA_CFILT3_SEL,
-		.bias4_cfilt_sel = TABLA_CFILT3_SEL,
-	},
-	.regulator = {
-	{
-		.name = "CDC_VDD_CP",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_CP_CUR_MAX,
-	},
-	{
-		.name = "CDC_VDDA_RX",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_RX_CUR_MAX,
-	},
-	{
-		.name = "CDC_VDDA_TX",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_TX_CUR_MAX,
-	},
-	{
-		.name = "VDDIO_CDC",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_VDDIO_CDC_CUR_MAX,
-	},
-	{
-		.name = "VDDD_CDC_D",
-		.min_uV = 1225000,
-		.max_uV = 1250000,
-		.optimum_uA = WCD9XXX_VDDD_CDC_D_CUR_MAX,
-	},
-	{
-		.name = "CDC_VDDA_A_1P2V",
-		.min_uV = 1225000,
-		.max_uV = 1250000,
-		.optimum_uA = WCD9XXX_VDDD_CDC_A_CUR_MAX,
-	},
-	},
-};
-
-static struct i2c_board_info apq8064_tabla_i2c_device_info[] __initdata = {
-	{
-		I2C_BOARD_INFO("tabla top level",
-				APQ_8064_TABLA_I2C_SLAVE_ADDR),
-		.platform_data = &apq8064_tabla_i2c_platform_data,
-	},
-	{
-		I2C_BOARD_INFO("tabla analog",
-				APQ_8064_TABLA_ANALOG_I2C_SLAVE_ADDR),
-		.platform_data = &apq8064_tabla_i2c_platform_data,
-	},
-	{
-		I2C_BOARD_INFO("tabla digital1",
-				APQ_8064_TABLA_DIGITAL1_I2C_SLAVE_ADDR),
-		.platform_data = &apq8064_tabla_i2c_platform_data,
-	},
-	{
-		I2C_BOARD_INFO("tabla digital2",
-				APQ_8064_TABLA_DIGITAL2_I2C_SLAVE_ADDR),
-		.platform_data = &apq8064_tabla_i2c_platform_data,
-	},
-};
-
-static struct wcd9xxx_pdata mpq8064_ashiko20_platform_data = {
-	.slimbus_slave_device = {
-		.name = "tabla-slave",
-		.e_addr = {0, 0, 0x60, 0, 0x17, 2},
-	},
-	.irq = MSM_GPIO_TO_INT(42),
-	.irq_base = TABLA_INTERRUPT_BASE,
-	.num_irqs = NR_WCD9XXX_IRQS,
-	.reset_gpio = PM8921_GPIO_PM_TO_SYS(34),
-	.micbias = {
-		.ldoh_v = TABLA_LDOH_2P85_V,
-		.cfilt1_mv = 1800,
-		.cfilt2_mv = 1800,
-		.cfilt3_mv = 1800,
-		.bias1_cfilt_sel = TABLA_CFILT1_SEL,
-		.bias2_cfilt_sel = TABLA_CFILT2_SEL,
-		.bias3_cfilt_sel = TABLA_CFILT3_SEL,
-		.bias4_cfilt_sel = TABLA_CFILT3_SEL,
-	},
-	.regulator = {
-	{
-		.name = "CDC_VDD_CP",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_CP_CUR_MAX,
-	},
-	{
-		.name = "CDC_VDDA_RX",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_RX_CUR_MAX,
-	},
-	{
-		.name = "CDC_VDDA_TX",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_CDC_VDDA_TX_CUR_MAX,
-	},
-	{
-		.name = "VDDIO_CDC",
-		.min_uV = 1800000,
-		.max_uV = 1800000,
-		.optimum_uA = WCD9XXX_VDDIO_CDC_CUR_MAX,
-	},
-	{
-		.name = "HRD_VDDD_CDC_D",
-		.min_uV = 1200000,
-		.max_uV = 1200000,
-		.optimum_uA = WCD9XXX_VDDD_CDC_D_CUR_MAX,
-	},
-	{
-		.name = "HRD_CDC_VDDA_A_1P2V",
-		.min_uV = 1200000,
-		.max_uV = 1200000,
-		.optimum_uA = WCD9XXX_VDDD_CDC_A_CUR_MAX,
-	},
-	},
-};
-
-static struct slim_device mpq8064_slim_ashiko20 = {
-	.name = "tabla2x-slim",
-	.e_addr = {0, 1, 0x60, 0, 0x17, 2},
-	.dev = {
-		.platform_data = &mpq8064_ashiko20_platform_data,
-	},
-};
-
-
 /* enable the level shifter for cs8427 to make sure the I2C
  * clock is running at 100KHz and voltage levels are at 3.3
  * and 5 volts
@@ -1656,9 +1429,7 @@ static struct i2c_board_info cs8427_device_info[] __initdata = {
 	},
 };
 
-//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-//#define HAP_SHIFT_LVL_OE_GPIO		PM8921_MPP_PM_TO_SYS(8)
-//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
+#define HAP_SHIFT_LVL_OE_GPIO		PM8921_MPP_PM_TO_SYS(8)
 #define ISA1200_HAP_EN_GPIO		PM8921_GPIO_PM_TO_SYS(33)
 #define ISA1200_HAP_LEN_GPIO		PM8921_GPIO_PM_TO_SYS(20)
 #define ISA1200_HAP_CLK_PM8921		PM8921_GPIO_PM_TO_SYS(44)
@@ -1762,8 +1533,8 @@ static struct i2c_board_info isa1200_board_info[] __initdata = {
 	},
 };
 
-//+++ ASUS_BSP : Novatek A80 touch Deeo
-
+//ASUS_BSP +++ Jessy: Novatek A80 touch
+#ifdef ASUS_A80_PROJECT	
 #define TOUCH_GPIO_IRQ_NOVATEK_T9		12
 #define TOUCH_GPIO_RST_NOVATEK_T9		62
 #define NOVATEK_I2C_ADDRESS			0x01
@@ -1775,54 +1546,13 @@ struct nt11003_platform_data {
 };
 
 static struct regulator *pm8921_l17;
-//static struct regulator *pm8921_l22;
 
 static int novatek_platform_init(struct i2c_client *client)
 {
 	int rc = -EINVAL;
 
 	printk("[Touch_N] Novatek_platform_init++\n");
-#if 0
-	/* configure touchscreen interrupt gpio */
-	rc = gpio_request(TOUCH_GPIO_IRQ_NOVATEK_T9, "touch-irq");
-	if (rc) {
-		pr_err("%s: unable to request gpio %d (touch-irq)\n",
-			__func__, TOUCH_GPIO_IRQ_NOVATEK_T9);
-		goto reg_disable;
-	}
 
-	rc = gpio_direction_input(TOUCH_GPIO_IRQ_NOVATEK_T9);
-	if (rc < 0) {
-		pr_err("%s: unable to set the direction of gpio %d\n",
-			__func__, TOUCH_GPIO_IRQ_NOVATEK_T9);
-		goto free_gpio;
-	}
-
-	rc = gpio_request(TOUCH_GPIO_RST_NOVATEK_T9, "touch-reset");
-	if (rc) {
-		pr_err("%s: unable to request gpio %d (touch-reset)\n",
-		__func__, TOUCH_GPIO_RST_NOVATEK_T9);
-		goto reg_disable;
-	}
-	rc = gpio_direction_output(TOUCH_GPIO_RST_NOVATEK_T9, 0);
-	if (rc < 0) {
-		pr_err("%s: unable to set the direction of gpio %d\n",
-			__func__, TOUCH_GPIO_RST_NOVATEK_T9);
-		goto free_gpio;
-	}
-
-	gpio_set_value(TOUCH_GPIO_RST_NOVATEK_T9, 0);
-
-	msleep(1);
-
-	gpio_set_value(TOUCH_GPIO_RST_NOVATEK_T9, 1);
-
-	msleep(100);
-
-	//printk("[touch] A80 : Novatek chip do hw reset\n");
-#endif
-
-	printk("[Touch_N] get regulator\n");
 	pm8921_l17 = regulator_get(NULL, "8921_l17");
 	if (IS_ERR(pm8921_l17)) {
 		pr_err("%s: [Touch_N] regulator get of 8921_l17 failed (%ld)\n",
@@ -1850,14 +1580,7 @@ static int novatek_platform_init(struct i2c_client *client)
 	printk("[Touch_N] Novatek_platform_init--\n");
 
 	return 0;
-#if 0
-free_gpio:
-	gpio_free(TOUCH_GPIO_RST_NOVATEK_T9);
-	gpio_free(TOUCH_GPIO_IRQ_NOVATEK_T9);
-reg_disable:
-	regulator_disable(pm8921_l17);
-//	regulator_disable(pm8921_lvs4);
-#endif
+
 reg_put:
 	regulator_put(pm8921_l17);
 //	regulator_put(pm8921_l22);
@@ -1872,18 +1595,6 @@ static int novatek_platform_exit(struct i2c_client *client)
 	return 0;
 }
 
-#if 0
-static u8 novatek_read_chg(void)
-{
-	return gpio_get_value(TOUCH_GPIO_IRQ_NOVATEK_T9);
-}
-
-static u8 novatek_valid_interrupt(void)
-{
-	return !novatek_read_chg();
-}
-#endif
-
 static struct nt11003_platform_data novatek_pdata = {
 	.init_platform_hw = novatek_platform_init,
 	.exit_platform_hw = novatek_platform_exit,
@@ -1896,246 +1607,143 @@ static struct i2c_board_info novatek_i2c_info[] __initdata = {
 		.irq = MSM_GPIO_TO_INT(TOUCH_GPIO_IRQ_NOVATEK_T9),
 	},
 };
-
-//--- ASUS_BSP : Novatek A80 touch Deeo
-
-//ASUS_BSP simpson: unset unused touchscreen setting +++
-#if 0
-/* configuration data for mxt1386e using V2.1 firmware */
-static const u8 mxt1386e_config_data_v2_1[] = {
-	/* T6 Object */
-	0, 0, 0, 0, 0, 0,
-	/* T38 Object */
-	14, 3, 0, 5, 7, 12, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0,
-	/* T7 Object */
-	32, 10, 50,
-	/* T8 Object */
-	25, 0, 20, 20, 0, 0, 0, 0, 0, 0,
-	/* T9 Object */
-	139, 0, 0, 26, 42, 0, 32, 80, 2, 5,
-	0, 5, 5, 79, 10, 30, 10, 10, 255, 2,
-	85, 5, 0, 5, 9, 5, 12, 35, 70, 40,
-	20, 5, 0, 0, 0,
-	/* T18 Object */
-	0, 0,
-	/* T24 Object */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0,
-	/* T25 Object */
-	1, 0, 60, 115, 156, 99,
-	/* T27 Object */
-	0, 0, 0, 0, 0, 0, 0,
-	/* T40 Object */
-	0, 0, 0, 0, 0,
-	/* T42 Object */
-	0, 0, 255, 0, 255, 0, 0, 0, 0, 0,
-	/* T43 Object */
-	0, 0, 0, 0, 0, 0, 0, 64, 0, 8,
-	16,
-	/* T46 Object */
-	68, 0, 16, 16, 0, 0, 0, 0, 0,
-	/* T47 Object */
-	0, 0, 0, 0, 0, 0, 3, 64, 66, 0,
-	/* T48 Object */
-	1, 64, 64, 0, 0, 0, 0, 0, 0, 0,
-	32, 40, 0, 10, 10, 0, 0, 100, 10, 90,
-	0, 0, 0, 0, 0, 0, 0, 10, 1, 10,
-	52, 10, 12, 0, 33, 0, 1, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0,
-	/* T56 Object */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0,
-};
-
-#define MXT_TS_GPIO_IRQ			6
-#define MXT_TS_PWR_EN_GPIO		PM8921_GPIO_PM_TO_SYS(23)
-#define MXT_TS_RESET_GPIO		33
-
-static struct mxt_config_info mxt_config_array[] = {
-	{
-		.config		= mxt1386e_config_data_v2_1,
-		.config_length	= ARRAY_SIZE(mxt1386e_config_data_v2_1),
-		.family_id	= 0xA0,
-		.variant_id	= 0x7,
-		.version	= 0x21,
-		.build		= 0xAA,
-		.bootldr_id	= MXT_BOOTLOADER_ID_1386E,
-		.fw_name	= "atmel_8064_liquid_v2_2_AA.hex",
-	},
-	{
-		/* The config data for V2.2.AA is the same as for V2.1.AA */
-		.config		= mxt1386e_config_data_v2_1,
-		.config_length	= ARRAY_SIZE(mxt1386e_config_data_v2_1),
-		.family_id	= 0xA0,
-		.variant_id	= 0x7,
-		.version	= 0x22,
-		.build		= 0xAA,
-		.bootldr_id	= MXT_BOOTLOADER_ID_1386E,
-	},
-};
-
-static struct mxt_platform_data mxt_platform_data = {
-	.config_array		= mxt_config_array,
-	.config_array_size	= ARRAY_SIZE(mxt_config_array),
-	.panel_minx		= 0,
-	.panel_maxx		= 1365,
-	.panel_miny		= 0,
-	.panel_maxy		= 767,
-	.disp_minx		= 0,
-	.disp_maxx		= 1365,
-	.disp_miny		= 0,
-	.disp_maxy		= 767,
-	.irqflags		= IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-	.i2c_pull_up		= true,
-	.reset_gpio		= MXT_TS_RESET_GPIO,
-	.irq_gpio		= MXT_TS_GPIO_IRQ,
-};
-
-static struct i2c_board_info mxt_device_info[] __initdata = {
-	{
-		I2C_BOARD_INFO("atmel_mxt_ts", 0x5b),
-		.platform_data = &mxt_platform_data,
-		.irq = MSM_GPIO_TO_INT(MXT_TS_GPIO_IRQ),
-	},
-};
-#define CYTTSP_TS_GPIO_IRQ		6
-#define CYTTSP_TS_GPIO_SLEEP		33
-#define CYTTSP_TS_GPIO_SLEEP_ALT	12
-
-static ssize_t tma340_vkeys_show(struct kobject *kobj,
-			struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 200,
-	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":73:1120:97:97"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":230:1120:97:97"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":389:1120:97:97"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":544:1120:97:97"
-	"\n");
-}
-
-static struct kobj_attribute tma340_vkeys_attr = {
-	.attr = {
-		.mode = S_IRUGO,
-	},
-	.show = &tma340_vkeys_show,
-};
-
-static struct attribute *tma340_properties_attrs[] = {
-	&tma340_vkeys_attr.attr,
-	NULL
-};
-
-static struct attribute_group tma340_properties_attr_group = {
-	.attrs = tma340_properties_attrs,
-};
-
-static int cyttsp_platform_init(struct i2c_client *client)
-{
-	int rc = 0;
-	static struct kobject *tma340_properties_kobj;
-
-	tma340_vkeys_attr.attr.name = "virtualkeys.cyttsp-i2c";
-	tma340_properties_kobj = kobject_create_and_add("board_properties",
-								NULL);
-	if (tma340_properties_kobj)
-		rc = sysfs_create_group(tma340_properties_kobj,
-					&tma340_properties_attr_group);
-	if (!tma340_properties_kobj || rc)
-		pr_err("%s: failed to create board_properties\n",
-				__func__);
-
-	return 0;
-}
-
-static struct cyttsp_regulator cyttsp_regulator_data[] = {
-	{
-		.name = "vdd",
-		.min_uV = CY_TMA300_VTG_MIN_UV,
-		.max_uV = CY_TMA300_VTG_MAX_UV,
-		.hpm_load_uA = CY_TMA300_CURR_24HZ_UA,
-		.lpm_load_uA = CY_TMA300_CURR_24HZ_UA,
-	},
-	{
-		.name = "vcc_i2c",
-		.min_uV = CY_I2C_VTG_MIN_UV,
-		.max_uV = CY_I2C_VTG_MAX_UV,
-		.hpm_load_uA = CY_I2C_CURR_UA,
-		.lpm_load_uA = CY_I2C_CURR_UA,
-	},
-};
-
-static struct cyttsp_platform_data cyttsp_pdata = {
-	.panel_maxx = 634,
-	.panel_maxy = 1166,
-	.disp_maxx = 599,
-	.disp_maxy = 1023,
-	.disp_minx = 0,
-	.disp_miny = 0,
-	.flags = 0x01,
-	.gen = CY_GEN3,
-	.use_st = CY_USE_ST,
-	.use_mt = CY_USE_MT,
-	.use_hndshk = CY_SEND_HNDSHK,
-	.use_trk_id = CY_USE_TRACKING_ID,
-	.use_sleep = CY_USE_DEEP_SLEEP_SEL,
-	.use_gestures = CY_USE_GESTURES,
-	.fw_fname = "cyttsp_8064_mtp.hex",
-	/* change act_intrvl to customize the Active power state
-	 * scanning/processing refresh interval for Operating mode
-	 */
-	.act_intrvl = CY_ACT_INTRVL_DFLT,
-	/* change tch_tmout to customize the touch timeout for the
-	 * Active power state for Operating mode
-	 */
-	.tch_tmout = CY_TCH_TMOUT_DFLT,
-	/* change lp_intrvl to customize the Low Power power state
-	 * scanning/processing refresh interval for Operating mode
-	 */
-	.lp_intrvl = CY_LP_INTRVL_DFLT,
-	.sleep_gpio = CYTTSP_TS_GPIO_SLEEP,
-	.resout_gpio = -1,
-	.irq_gpio = CYTTSP_TS_GPIO_IRQ,
-	.regulator_info = cyttsp_regulator_data,
-	.num_regulators = ARRAY_SIZE(cyttsp_regulator_data),
-	.init = cyttsp_platform_init,
-	.correct_fw_ver = 17,
-};
-
-static struct i2c_board_info cyttsp_info[] __initdata = {
-	{
-		I2C_BOARD_INFO(CY_I2C_NAME, 0x24),
-		.platform_data = &cyttsp_pdata,
-		.irq = MSM_GPIO_TO_INT(CYTTSP_TS_GPIO_IRQ),
-	},
-};
 #endif
-//ASUS_BSP simpson: unset unused touchscreen setting ---
+//ASUS_BSP --- Jessy: Novatek A80 touch
 
-//ASUS_BSP Desmond: p05 atmel touch ++
-static struct mxt_platform_data mxt_platform_data = {
+//ASUS_BSP +++ Jessy :Add support for synaptics touchscreen
+#ifdef ASUS_A68_PROJECT	
+struct syna_gpio_data {
+	u16 gpio_number;
+	char* gpio_name;
 };
 
-static struct i2c_board_info mxt_device_info[] __initdata = {
+#define S3202_ATTN	12
+#define S3202_RESET	52
+#define S3202_ADDR	0x20
+#define AXIS_ALIGNMENT { \
+	.swap_axes = false, \
+	.flip_x = false, \
+	.flip_y = false, \
+}
+
+static struct regulator *pm8921_l17;
+
+static int synaptics_touchpad_gpio_setup(void *gpio_data, bool configure);
+static struct syna_gpio_data s3202_gpiodata = {
+	.gpio_number = S3202_ATTN,
+	.gpio_name = "gsbi4_1.gpio_12",
+};
+
+static unsigned char s3202_f1a_button_codes[] = {KEY_BACK,KEY_HOMEPAGE,KEY_MENU};
+
+static struct rmi_f1a_button_map s3202_f1a_button_map = {
+	.nbuttons = ARRAY_SIZE(s3202_f1a_button_codes),
+	.map = s3202_f1a_button_codes,
+};
+
+static struct rmi_device_platform_data s3202_platformdata = {
+	.driver_name = "rmi_generic",
+	.sensor_name = "S3202",
+	.attn_gpio = S3202_ATTN,
+	.attn_polarity = RMI_ATTN_ACTIVE_LOW,
+	.gpio_data = &s3202_gpiodata,
+	.gpio_config = synaptics_touchpad_gpio_setup,
+	.reset_delay_ms = 100,
+	.axis_align = AXIS_ALIGNMENT,
+	.f1a_button_map = &s3202_f1a_button_map,
+};
+
+static struct i2c_board_info synaptic_i2c_clearpad3k[] = {
 	{
-		I2C_BOARD_INFO("atmel_mxt_pad_ts", 0x4a),
-		.platform_data = &mxt_platform_data,
-		.irq = MSM_GPIO_TO_INT(MXT_PAD_TS_GPIO_IRQ),
+	I2C_BOARD_INFO("rmi_i2c", S3202_ADDR),
+	.platform_data = &s3202_platformdata,
 	},
 };
-//ASUS_BSP Desmond: p05 atmel touch --
+static int synaptics_touchpad_gpio_setup(void *gpio_data, bool configure)
+{
+	int retval=0;
+	struct syna_gpio_data *data = gpio_data;
+	int rc = -EINVAL;
 
-//ASUS_BSP Desmond: Add support for sis touchscreen +++
+
+	printk("[touch_synaptics] synaptics_platform_init++\n");
+
+	printk("[touch_synaptics] get regulator\n");
+	pm8921_l17 = regulator_get(NULL, "8921_l17");
+	if (IS_ERR(pm8921_l17)) {
+		pr_err("%s: regulator get of 8921_l17 failed (%ld)\n",
+			__func__, PTR_ERR(pm8921_l17));
+		rc = PTR_ERR(pm8921_l17);
+		return rc;
+	}
+
+	printk("[touch_synaptics] set voltage\n");
+	rc = regulator_set_voltage(pm8921_l17, 3300000, 3300000);
+	if (rc) {
+		pr_err("%s: regulator_set_voltage of 8921_l17 failed(%d)\n",
+			__func__, rc);
+		goto reg_put;
+	}
+
+	printk("[touch_synaptics] enable regulator\n");
+	rc = regulator_enable(pm8921_l17);
+	if (rc) {
+		pr_err("%s: regulator_enable of 8921_l17 failed(%d)\n",
+			__func__, rc);
+		goto reg_put;
+	}
+
+	if (configure) {
+		retval = gpio_request(data->gpio_number, "rmi4_attn");
+		if (retval) {
+			pr_err("%s: Failed to get attn gpio %d. Code: %d.",
+			       __func__, data->gpio_number, retval);
+			return retval;
+		}
+
+		//omap_mux_init_signal(data->gpio_name, OMAP_PIN_INPUT_PULLUP);
+		retval = gpio_direction_input(data->gpio_number);
+		if (retval) {
+			pr_err("%s: Failed to setup attn gpio %d. Code: %d.",
+			       __func__, data->gpio_number, retval);
+			gpio_free(data->gpio_number);
+		}
+	} else {
+		pr_warn("%s: No way to deconfigure gpio %d.",
+		       __func__, data->gpio_number);
+	}
+
+	retval = gpio_request(S3202_RESET, "rmi4_reset");
+	if (retval) {
+		pr_err("%s: Failed to get reset gpio %d. Code: %d.",
+		       __func__, S3202_RESET, retval);
+		return retval;
+	}
+
+	retval = gpio_direction_output(S3202_RESET, 1);
+	if (retval) {
+		pr_err("%s: Failed to setup reset gpio %d. Code: %d.",
+		       __func__, S3202_RESET, retval);
+		gpio_free(data->gpio_number);
+	}
+	gpio_set_value(S3202_RESET, 0);
+	usleep(10000);
+	gpio_set_value(S3202_RESET, 1);
+	usleep(50000);
+
+	printk("[touch_synaptics] synaptics_platform_init--\n");
+
+	return retval;
+
+reg_put:
+	regulator_put(pm8921_l17);
+	return rc;
+}
+
+#endif
+//ASUS_BSP --- Jessy :Add support for synaptics touchscreen ---
+
+//ASUS_BSP Jessy: Add support for sis touchscreen +++
 static struct sis_i2c_rmi_platform_data sis_pdata = {
 };
 
@@ -2146,7 +1754,7 @@ static struct i2c_board_info sis_i2c_info[] __initdata = {
 		.irq = MSM_GPIO_TO_INT(TOUCH_SIS_GPIO_IRQ),
 	},
 };
-//SUS_BSP Desmond: Add support for sis touchscreen ---
+//SUS_BSP Jessy: Add support for sis touchscreen ---
 
 #define MSM_WCNSS_PHYS	0x03000000
 #define MSM_WCNSS_SIZE	0x280000
@@ -2260,6 +1868,27 @@ static struct msm_bus_vectors qseecom_enable_sfpb_vectors[] = {
 	},
 };
 
+static struct msm_bus_vectors qseecom_enable_dfab_sfpb_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_ADM_PORT0,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab = 70000000UL,
+		.ib = 70000000UL,
+	},
+	{
+		.src = MSM_BUS_MASTER_ADM_PORT1,
+		.dst = MSM_BUS_SLAVE_GSBI1_UART,
+		.ab = 2480000000UL,
+		.ib = 2480000000UL,
+	},
+	{
+		.src = MSM_BUS_MASTER_SPDM,
+		.dst = MSM_BUS_SLAVE_SPDM,
+		.ib = (64 * 8) * 1000000UL,
+		.ab = (64 * 8) *  100000UL,
+	},
+};
+
 static struct msm_bus_paths qseecom_hw_bus_scale_usecases[] = {
 	{
 		ARRAY_SIZE(qseecom_clks_init_vectors),
@@ -2272,6 +1901,10 @@ static struct msm_bus_paths qseecom_hw_bus_scale_usecases[] = {
 	{
 		ARRAY_SIZE(qseecom_enable_sfpb_vectors),
 		qseecom_enable_sfpb_vectors,
+	},
+	{
+		ARRAY_SIZE(qseecom_enable_dfab_sfpb_vectors),
+		qseecom_enable_dfab_sfpb_vectors,
 	},
 };
 
@@ -2413,7 +2046,7 @@ static struct mdm_vddmin_resource mdm_vddmin_rscs = {
 
 static struct gpiomux_setting mdm2ap_status_gpio_run_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_8MA,
+	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
@@ -2427,6 +2060,73 @@ static struct mdm_platform_data mdm_platform_data = {
 	.peripheral_platform_device = &apq8064_device_hsic_host,
 	.ramdump_timeout_ms = 120000,
 	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+};
+
+static struct mdm_platform_data amdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.early_power_on = 1,
+	.sfr_query = 1,
+	.send_shdn = 1,
+	.vddmin_resource = &mdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_hsic_host,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+	.no_a2m_errfatal_on_ssr = 1,
+};
+
+static struct mdm_vddmin_resource bmdm_vddmin_rscs = {
+	.rpm_id = MSM_RPM_ID_VDDMIN_GPIO,
+	.ap2mdm_vddmin_gpio = 30,
+	.modes  = 0x03,
+	.drive_strength = 8,
+	.mdm2ap_vddmin_gpio = 64,
+};
+
+static struct mdm_platform_data bmdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.sfr_query = 1,
+	.send_shdn = 1,
+	.vddmin_resource = &bmdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_ehci_host3,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM2,
+	.no_a2m_errfatal_on_ssr = 1,
+};
+
+static struct mdm_platform_data sglte2_mdm_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+	.early_power_on = 1,
+	.sfr_query = 1,
+	.vddmin_resource = &mdm_vddmin_rscs,
+	.peripheral_platform_device = &apq8064_device_hsic_host,
+	.ramdump_timeout_ms = 120000,
+	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
+	.sysmon_subsys_id_valid = 1,
+	.sysmon_subsys_id = SYSMON_SS_EXT_MODEM,
+	.no_a2m_errfatal_on_ssr = 1,
+	.subsys_name = "external_modem_mdm",
+};
+
+static struct mdm_platform_data sglte2_qsc_platform_data = {
+	.mdm_version = "3.0",
+	.ramdump_delay_ms = 2000,
+     /* delay between two PS_HOLDs */
+	.ps_hold_delay_ms = 500,
+	.ramdump_timeout_ms = 600000,
+	.no_powerdown_after_ramdumps = 1,
+	.image_upgrade_supported = 1,
+	.no_a2m_errfatal_on_ssr = 1,
+	.kpd_not_inverted = 1,
+	.subsys_name = "external_modem",
 };
 
 static struct tsens_platform_data apq_tsens_pdata  = {
@@ -2448,6 +2148,9 @@ static struct msm_thermal_data msm_thermal_pdata = {
 	.limit_temp_degC = 60,
 	.temp_hysteresis_degC = 10,
 	.freq_step = 2,
+	.core_limit_temp_degC = 80,
+	.core_temp_hysteresis_degC = 10,
+	.core_control_mask = 0xe,
 };
 
 #define MSM_SHARED_RAM_PHYS 0x80000000
@@ -2471,27 +2174,7 @@ static void __init apq8064_init_irq(void)
 	gic_init(0, GIC_PPI_START, MSM_QGIC_DIST_BASE,
 						(void *)MSM_QGIC_CPU_BASE);
 }
-//ASUS_BSP larry lai : MHL TX sii8240 +++
-//static struct msm_mhl_platform_data mhl_platform_data = {
-//	.irq = MSM_GPIO_TO_INT(MHL_GPIO_INT),
-//	.gpio_mhl_int = MHL_GPIO_INT,
-//	.gpio_mhl_reset = MHL_GPIO_RESET,
-//	.gpio_mhl_power = 0,
-//	.gpio_hdmi_mhl_mux = 0,
-//};
 
-//static struct i2c_board_info sii_device_info[] __initdata = {
-//	{
-//		/*
-//		 * keeps SI 8334 as the default
-//		 * MHL TX
-//		 */
-//		I2C_BOARD_INFO("sii8334", 0x39),
-//		.platform_data = &mhl_platform_data,
-//		.flags = I2C_CLIENT_WAKE,
-//	},
-//};
-//ASUS_BSP larry lai : MHL TX sii8240 ---
 static struct platform_device msm8064_device_saw_regulator_core0 = {
 	.name	= "saw-regulator",
 	.id	= 0,
@@ -2637,6 +2320,13 @@ static uint8_t spm_retention_cmd_sequence[] __initdata = {
 	0x0B, 0x00, 0x0f,
 };
 
+static uint8_t spm_retention_with_krait_v3_cmd_sequence[] __initdata = {
+	0x42, 0x1B, 0x00,
+	0x05, 0x03, 0x0D, 0x0B,
+	0x00, 0x42, 0x1B,
+	0x0f,
+};
+
 static uint8_t spm_power_collapse_with_rpm[] __initdata = {
 	0x00, 0x24, 0x54, 0x10,
 	0x09, 0x07, 0x01, 0x0B,
@@ -2688,11 +2378,16 @@ static struct msm_spm_seq_entry msm_spm_nonboot_cpu_seq_list[] __initdata = {
 		.cmd = spm_wfi_cmd_sequence,
 	},
 	[1] = {
+		.mode = MSM_SPM_MODE_POWER_RETENTION,
+		.notify_rpm = false,
+		.cmd = spm_retention_cmd_sequence,
+	},
+	[2] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = false,
 		.cmd = spm_power_collapse_without_rpm,
 	},
-	[2] = {
+	[3] = {
 		.mode = MSM_SPM_MODE_POWER_COLLAPSE,
 		.notify_rpm = true,
 		.cmd = spm_power_collapse_with_rpm,
@@ -2772,9 +2467,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
@@ -2787,9 +2482,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
@@ -2802,9 +2497,9 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.reg_init_values[MSM_SPM_REG_SAW2_AVS_HYSTERESIS] = 0x00,
 #endif
 		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x02020204,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0060009C,
-		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x0000001C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DLY] = 0x03020004,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_0] = 0x0084009C,
+		.reg_init_values[MSM_SPM_REG_SAW2_PMIC_DATA_1] = 0x00A4001C,
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
@@ -2884,8 +2579,6 @@ static struct platform_device apq8064_device_ext_5v_vreg __devinitdata = {
 	},
 };
 
-//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-/*
 static struct platform_device apq8064_device_ext_mpp8_vreg __devinitdata = {
 	.name	= GPIO_REGULATOR_DEV_NAME,
 	.id	= PM8921_MPP_PM_TO_SYS(8),
@@ -2912,8 +2605,6 @@ static struct platform_device apq8064_device_ext_ts_sw_vreg __devinitdata = {
 			= &apq8064_gpio_regulator_pdata[GPIO_VREG_ID_EXT_TS_SW],
 	},
 };
-*/
-//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 
 static struct platform_device apq8064_device_rpm_regulator __devinitdata = {
 	.name	= "rpm-regulator",
@@ -2946,22 +2637,9 @@ static struct platform_device gpio_ir_recv_pdev = {
 
 static struct platform_device *common_not_mpq_devices[] __initdata = {
 	&apq8064_device_qup_i2c_gsbi1,
-//ASUS BSP mini-porting +++ GSBI2 porting
-	&apq8064_device_qup_i2c_gsbi2,
-//ASUS BSP mini-porting --- GSBI2 porting	
+	&apq8064_device_qup_i2c_gsbi2,		//ASUS_BSP +++ Maggie Lee "I2C Porting"
 	&apq8064_device_qup_i2c_gsbi3,
-	&apq8064_device_qup_i2c_gsbi4,
-};
-
-static struct platform_device *common_mpq_devices[] __initdata = {
-	&mpq_cpudai_sec_i2s_rx,
-	&mpq_cpudai_mi2s_tx,
-};
-
-static struct platform_device *common_i2s_devices[] __initdata = {
-	&apq_cpudai_mi2s,
-	&apq_cpudai_i2s_rx,
-	&apq_cpudai_i2s_tx,
+	&apq8064_device_qup_i2c_gsbi4,		//ASUS_BSP +++ Maggie Lee "I2C Porting"
 };
 
 static struct platform_device *early_common_devices[] __initdata = {
@@ -2972,27 +2650,17 @@ static struct platform_device *early_common_devices[] __initdata = {
 
 static struct platform_device *pm8921_common_devices[] __initdata = {
 	&apq8064_device_ext_5v_vreg,
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	//&apq8064_device_ext_mpp8_vreg,
-	//&apq8064_device_ext_3p3v_vreg,
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
+	&apq8064_device_ext_mpp8_vreg,
+	&apq8064_device_ext_3p3v_vreg,
 	&apq8064_device_ssbi_pmic1,
 	&apq8064_device_ssbi_pmic2,
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	//&apq8064_device_ext_ts_sw_vreg,
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 };
 
 static struct platform_device *pm8917_common_devices[] __initdata = {
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	//&apq8064_device_ext_mpp8_vreg,
-	//&apq8064_device_ext_3p3v_vreg,
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
+	&apq8064_device_ext_mpp8_vreg,
+	&apq8064_device_ext_3p3v_vreg,
 	&apq8064_device_ssbi_pmic1,
 	&apq8064_device_ssbi_pmic2,
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	//&apq8064_device_ext_ts_sw_vreg,
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 };
 
 static struct platform_device *common_devices[] __initdata = {
@@ -3043,6 +2711,8 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_pcm_routing,
 	&apq_cpudai0,
 	&apq_cpudai1,
+	&mpq_cpudai_sec_i2s_rx,
+	&mpq_cpudai_mi2s_tx,
 	&apq_cpudai_hdmi_rx,
 	&apq_cpudai_bt_rx,
 	&apq_cpudai_bt_tx,
@@ -3087,7 +2757,8 @@ static struct platform_device *common_devices[] __initdata = {
 	&msm_pil_vidc,
 	&msm_gss,
 	&apq8064_rtb_device,
-	&apq8064_cpu_idle_device,
+	&apq8064_dcvs_device,
+	&apq8064_msm_gov_device,
 	&apq8064_device_cache_erp,
 	&msm8960_device_ebi1_ch0_erp,
 	&msm8960_device_ebi1_ch1_erp,
@@ -3111,6 +2782,7 @@ static struct platform_device *common_devices[] __initdata = {
 #ifdef CONFIG_BATTERY_BCL
 	&battery_bcl_device,
 #endif
+	&apq8064_msm_mpd_device,
 };
 
 static struct platform_device *cdp_devices[] __initdata = {
@@ -3120,6 +2792,8 @@ static struct platform_device *cdp_devices[] __initdata = {
 #ifdef CONFIG_MSM_ROTATOR
 	&msm_rotator_device,
 #endif
+	&msm8064_pc_cntr,
+	&msm8064_cpu_slp_status,
 };
 
 static struct platform_device
@@ -3207,34 +2881,14 @@ static int rf4ce_gpio_init(void)
 late_initcall(rf4ce_gpio_init);
 
 #ifdef CONFIG_SERIAL_MSM_HS
-static int configure_uart_gpios(int on)
-{
-	int ret = 0, i;
-	int uart_gpios[] = {14, 15, 16, 17};
-
-	for (i = 0; i < ARRAY_SIZE(uart_gpios); i++) {
-		if (on) {
-			ret = gpio_request(uart_gpios[i], NULL);
-			if (ret) {
-				pr_err("%s:unable to request uart gpio[%d]\n",
-						__func__, uart_gpios[i]);
-				break;
-			}
-		} else {
-			gpio_free(uart_gpios[i]);
-		}
-	}
-
-	if (ret && on && i)
-		for (; i >= 0; i--)
-			gpio_free(uart_gpios[i]);
-	return ret;
-}
-
 static struct msm_serial_hs_platform_data mpq8064_gsbi6_uartdm_pdata = {
+	.config_gpio		= 4,
+	.uart_tx_gpio		= 14,
+	.uart_rx_gpio		= 15,
+	.uart_cts_gpio		= 16,
+	.uart_rfr_gpio		= 17,
 	.inject_rx_on_wakeup	= 1,
 	.rx_to_inject		= 0xFD,
-	.gpio_config		= configure_uart_gpios,
 };
 #else
 static struct msm_serial_hs_platform_data msm_uart_dm9_pdata;
@@ -3262,9 +2916,8 @@ static struct msm_spi_platform_data apq8064_qup_spi_gsbi5_pdata = {
 	.max_clock_speed = 1100000,
 };
 
-
-//+++ ASUS_BSP : add for miniporting		
-/*
+//ASUS_BSP +++ Maggie Lee "I2C Porting"
+#if 0
 #define KS8851_IRQ_GPIO		43
 
 static struct spi_board_info spi_board_info[] __initdata = {
@@ -3284,18 +2937,14 @@ static struct spi_board_info spi_board_info[] __initdata = {
 		.mode			= SPI_MODE_0,
 	},
 };
-*/
-//--- ASUS_BSP : add for miniporting		
+#endif
+//ASUS_BSP --- Maggie Lee "I2C Porting"
 
 static struct slim_boardinfo apq8064_slim_devices[] = {
-//Bruno++
-#if 0
 	{
 		.bus_num = 1,
 		.slim_slave = &apq8064_slim_tabla,
 	},
-#endif
-//Bruno++
 	{
 		.bus_num = 1,
 		.slim_slave = &apq8064_slim_tabla20,
@@ -3303,19 +2952,16 @@ static struct slim_boardinfo apq8064_slim_devices[] = {
 	/* add more slimbus slaves as needed */
 };
 
-//ASUS BSP+++ 
-//larry lai: default enable i2c high speed mode
+//ASUS_BSP +++ Maggie Lee "I2C Porting"
 static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi1_pdata = {
 	.clk_freq = 400000,
 	.src_clk_rate = 24000000,
 };
 
-//ASUS BSP mini-porting +++ GSBI2 porting
 static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi2_pdata = {
 	.clk_freq = 400000,
 	.src_clk_rate = 24000000,
 };
-//ASUS BSP mini-porting --- GSBI2 porting
 
 static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi3_pdata = {
 	.clk_freq = 400000,
@@ -3331,128 +2977,9 @@ static struct msm_i2c_platform_data mpq8064_i2c_qup_gsbi5_pdata = {
 	.clk_freq = 400000,
 	.src_clk_rate = 24000000,
 };
+//ASUS_BSP --- Maggie Lee "I2C Porting"
 
-//ASUS_BSP simpson: Add support for synaptics touchscreen +++
-#if 1 //defined(CONFIG_TOUCHSCREEN_SYNAPTICS)
-struct syna_gpio_data {
-	u16 gpio_number;
-	char* gpio_name;
-};
-
-#define S3202_ATTN	12
-#define S3202_RESET	52
-#define S3202_ADDR	0x20
-#define AXIS_ALIGNMENT { \
-	.swap_axes = false, \
-	.flip_x = false, \
-	.flip_y = false, \
-}
-
-static struct regulator *pm8921_l17;
-
-static int synaptics_touchpad_gpio_setup(void *gpio_data, bool configure);
-static struct syna_gpio_data s3202_gpiodata = {
-	.gpio_number = S3202_ATTN,
-	.gpio_name = "gsbi4_1.gpio_12",
-};
-
-static unsigned char s3202_f1a_button_codes[] = {KEY_BACK,KEY_HOMEPAGE,KEY_MENU};
-
-static struct rmi_f1a_button_map s3202_f1a_button_map = {
-	.nbuttons = ARRAY_SIZE(s3202_f1a_button_codes),
-	.map = s3202_f1a_button_codes,
-};
-
-static struct rmi_device_platform_data s3202_platformdata = {
-	.driver_name = "rmi_generic",
-	.sensor_name = "S3202",
-	.attn_gpio = S3202_ATTN,
-	.attn_polarity = RMI_ATTN_ACTIVE_LOW,
-	.gpio_data = &s3202_gpiodata,
-	.gpio_config = synaptics_touchpad_gpio_setup,
-	.reset_delay_ms = 100,
-	.axis_align = AXIS_ALIGNMENT,
-	.f1a_button_map = &s3202_f1a_button_map,
-};
-
-static struct i2c_board_info synaptic_i2c_clearpad3k[] = {
-	{
-	I2C_BOARD_INFO("rmi_i2c", S3202_ADDR),
-	.platform_data = &s3202_platformdata,
-	},
-};
-static int synaptics_touchpad_gpio_setup(void *gpio_data, bool configure)
-{
-	int retval=0;
-	struct syna_gpio_data *data = gpio_data;
-	int rc = -EINVAL;
-
-
-	printk("[touch_synaptics] synaptics_platform_init++\n");
-
-	printk("[touch_synaptics] get regulator\n");
-	pm8921_l17 = regulator_get(NULL, "8921_l17");
-	if (IS_ERR(pm8921_l17)) {
-		pr_err("%s: regulator get of 8921_l17 failed (%ld)\n",
-			__func__, PTR_ERR(pm8921_l17));
-		rc = PTR_ERR(pm8921_l17);
-		return rc;
-	}
-
-	printk("[touch_synaptics] set voltage\n");
-	rc = regulator_set_voltage(pm8921_l17, 3300000, 3300000);
-	if (rc) {
-		pr_err("%s: regulator_set_voltage of 8921_l17 failed(%d)\n",
-			__func__, rc);
-		goto reg_put;
-	}
-
-	printk("[touch_synaptics] enable regulator\n");
-	rc = regulator_enable(pm8921_l17);
-	if (rc) {
-		pr_err("%s: regulator_enable of 8921_l17 failed(%d)\n",
-			__func__, rc);
-		goto reg_put;
-	}
-
-	if (configure) {
-		retval = gpio_request(data->gpio_number, "rmi4_attn");
-		if (retval) {
-			pr_err("%s: Failed to get attn gpio %d. Code: %d.",
-			       __func__, data->gpio_number, retval);
-			return retval;
-		}
-
-		//omap_mux_init_signal(data->gpio_name, OMAP_PIN_INPUT_PULLUP);
-		retval = gpio_direction_input(data->gpio_number);
-		if (retval) {
-			pr_err("%s: Failed to setup attn gpio %d. Code: %d.",
-			       __func__, data->gpio_number, retval);
-			gpio_free(data->gpio_number);
-		}
-	} else {
-		pr_warn("%s: No way to deconfigure gpio %d.",
-		       __func__, data->gpio_number);
-	}
-
-	gpio_set_value(S3202_RESET, 0);
-	usleep(10000);
-	gpio_set_value(S3202_RESET, 1);
-	usleep(50000);
-
-	printk("[touch_synaptics] synaptics_platform_init--\n");
-
-	return retval;
-
-reg_put:
-	regulator_put(pm8921_l17);
-	return rc;
-}
-
-#endif
-//ASUS_BSP simpson: Add support for synaptics touchscreen ---
-
-//ASUS_BSP Wei_Lai mydp 7808 +++
+// ASUS_BSP +++ Tingyi "[A80][HDMI] Enable MyDP HDMI"
 #ifdef	CONFIG_SLIMPORT_ANX7808
 enum {
 	A80_SR3_myDP_GPIO,	// A80 SR3
@@ -3496,18 +3023,17 @@ static struct i2c_board_info anx7808_boardinfo[] __initdata = {
 //		.platform_data = &anx7808_i2c_pdata,
 	},
 };
+
 #endif
-//ASUS_BSP Wei_Lai mydp 7808 ---
+// ASUS_BSP --- Tingyi "[A80][HDMI] Enable MyDP HDMI"
+
 //ASUS_BSP larry lai : MHL TX sii8240 +++
 #ifdef CONFIG_FB_MSM_HDMI_MHL_8240
-#define A68_MHL_8240_IRQ			MSM_GPIO_TO_INT(32)
-#define A80_SR1_MHL_8240_IRQ		MSM_GPIO_TO_INT(53)
-
 static struct i2c_board_info sii_device_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("SiI-8240", 0x3B),
 		.flags = I2C_CLIENT_WAKE,
-//		.irq = MSM_GPIO_TO_INT(32),
+		.irq = MSM_GPIO_TO_INT(32),
 	},
 };
 #endif
@@ -3519,7 +3045,6 @@ static void __init apq8064_i2c_init(void)
 {
 	void __iomem *gsbi_mem;
 
-	apq8064_i2c_qup_gsbi1_pdata.use_gsbi_mux_mode = 1;
 	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
 					&apq8064_i2c_qup_gsbi1_pdata;
 	gsbi_mem = ioremap_nocache(MSM_GSBI1_PHYS, 4);
@@ -3528,47 +3053,44 @@ static void __init apq8064_i2c_init(void)
 	wmb();
 	iounmap(gsbi_mem);
 	apq8064_i2c_qup_gsbi1_pdata.use_gsbi_shared_mode = 1;
-	apq8064_device_qup_i2c_gsbi3.dev.platform_data =
-					&apq8064_i2c_qup_gsbi3_pdata;
-	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-					&apq8064_i2c_qup_gsbi1_pdata;
-//ASUS_BSP mini-porting +++ GSBI2 porting
-	apq8064_device_qup_i2c_gsbi2.dev.platform_data =
-					&apq8064_i2c_qup_gsbi2_pdata;
-//ASUS_BSP mini-porting --- GSBI2 porting	
-//ASUS_BSP larry lai : GSBI4 porting +++
+	apq8064_device_qup_i2c_gsbi3.dev.platform_data = &apq8064_i2c_qup_gsbi3_pdata;
+	apq8064_device_qup_i2c_gsbi1.dev.platform_data = &apq8064_i2c_qup_gsbi1_pdata;
+	//ASUS_BSP +++ Maggie Lee "I2C Porting"
+	apq8064_device_qup_i2c_gsbi2.dev.platform_data = &apq8064_i2c_qup_gsbi2_pdata;
 	apq8064_i2c_qup_gsbi4_pdata.use_gsbi_mux_mode = 4;
-//ASUS_BSP larry lai : GSBI4 porting ---
-	apq8064_device_qup_i2c_gsbi4.dev.platform_data =
-					&apq8064_i2c_qup_gsbi4_pdata;
+	apq8064_device_qup_i2c_gsbi4.dev.platform_data = &apq8064_i2c_qup_gsbi4_pdata;
 	mpq8064_device_qup_i2c_gsbi5.dev.platform_data =
 					&mpq8064_i2c_qup_gsbi5_pdata;
+	//ASUS_BSP --- Maggie Lee "I2C Porting"
 }
 
-
-//#if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
-//static int ethernet_init(void)
-//{
-//	int ret;
-//	ret = gpio_request(KS8851_IRQ_GPIO, "ks8851_irq");
-//	if (ret) {
-//		pr_err("ks8851 gpio_request failed: %d\n", ret);
-//		goto fail;
-//	}
-//
-//	return 0;
-//fail:
-//	return ret;
-//}
-//#else
-//static int ethernet_init(void)
-//{
-//	return 0;
-//}
-//#endif
-
-//ASUS_BSP HANS+++
+//ASUS_BSP +++ Maggie Lee "I2C Porting"
 #if 0
+#if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
+static int ethernet_init(void)
+{
+	int ret;
+	ret = gpio_request(KS8851_IRQ_GPIO, "ks8851_irq");
+	if (ret) {
+		pr_err("ks8851 gpio_request failed: %d\n", ret);
+		goto fail;
+	}
+
+	return 0;
+fail:
+	return ret;
+}
+#else
+static int ethernet_init(void)
+{
+	return 0;
+}
+#endif
+#endif
+//ASUS_BSP --- Maggie Lee "I2C Porting"
+
+//ASUS_BSP+++
+#if 0  
 #define GPIO_KEY_HOME			PM8921_GPIO_PM_TO_SYS(27)
 #define GPIO_KEY_VOLUME_UP		PM8921_GPIO_PM_TO_SYS(35)
 #define GPIO_KEY_VOLUME_DOWN_PM8921	PM8921_GPIO_PM_TO_SYS(38)
@@ -3804,43 +3326,10 @@ static struct platform_device mpq_keypad_device = {
 	},
 };
 #endif
+//ASUS_BSP---
 
-//+++ASUS_BSP : Add for keypad
-#if 1 
-static struct gpio_keys_button a68_gpio_keys_button[] = {
-    {
-        .code           = KEY_VOLUMEUP,
-        .type           = EV_KEY,
-        .gpio           = 53,
-        .active_low     = 1,
-        .wakeup         = 0,
-        .debounce_interval  = 15, /* ms */
-        .desc           = "Vol_up",
-	.irq		= 341,
-    },
-    {
-        .code           = KEY_VOLUMEDOWN,
-        .type           = EV_KEY,
-        .gpio           = 54,
-        .active_low     = 1,
-        .wakeup         = 0,
-        .debounce_interval  = 15, /* ms */
-        .desc           = "Vol_down",
-	.irq		= 342,
-    },
-        {
-        .code           = KEY_POWER,
-        .type           = EV_KEY,
-        .gpio           = 26,
-        .active_low     = 1,
-        .wakeup         = 1,
-        .debounce_interval  = 15, /* ms */
-        .desc           = "power_key",
-	.irq		= 314,
-    },
-
-};
-
+//ASUS_BSP CLIFF+++
+#ifdef ASUS_A80_PROJECT
 static struct gpio_keys_button a80_gpio_keys_button[] = {
     {
         .code           = KEY_VOLUMEUP,
@@ -3875,15 +3364,57 @@ static struct gpio_keys_button a80_gpio_keys_button[] = {
 
 };
 
+static struct gpio_keys_platform_data a80_keys_platform_data = {
+    .buttons    = a80_gpio_keys_button,
+    .nbuttons   = ARRAY_SIZE(a80_gpio_keys_button),
+};
+
+static struct platform_device a80_gpio_platform_device = {
+    .name   = "gpio-keys",
+    .id     = -1,
+    .dev    = {
+        .platform_data  = &a80_keys_platform_data,
+    },
+};
+
+#else
+static struct gpio_keys_button a68_gpio_keys_button[] = {
+    {
+        .code           = KEY_VOLUMEUP,
+        .type           = EV_KEY,
+        .gpio           = 53,
+        .active_low     = 1,
+        .wakeup         = 0,
+        .debounce_interval  = 15, /* ms */
+        .desc           = "Vol_up",
+	.irq		= 341,
+    },
+    {
+        .code           = KEY_VOLUMEDOWN,
+        .type           = EV_KEY,
+        .gpio           = 54,
+        .active_low     = 1,
+        .wakeup         = 0,
+        .debounce_interval  = 15, /* ms */
+        .desc           = "Vol_down",
+	.irq		= 342,
+    },
+        {
+        .code           = KEY_POWER,
+        .type           = EV_KEY,
+        .gpio           = 26,
+        .active_low     = 1,
+        .wakeup         = 1,
+        .debounce_interval  = 15, /* ms */
+        .desc           = "power_key",
+	.irq		= 314,
+    },
+
+};
 
 static struct gpio_keys_platform_data a68_keys_platform_data = {
     .buttons    = a68_gpio_keys_button,
     .nbuttons   = ARRAY_SIZE(a68_gpio_keys_button),
-};
-
-static struct gpio_keys_platform_data a80_keys_platform_data = {
-    .buttons    = a80_gpio_keys_button,
-    .nbuttons   = ARRAY_SIZE(a80_gpio_keys_button),
 };
 
 static struct platform_device a68_gpio_platform_device = {
@@ -3894,17 +3425,9 @@ static struct platform_device a68_gpio_platform_device = {
     },
 };
 
-static struct platform_device a80_gpio_platform_device = {
-    .name   = "gpio-keys",
-    .id     = -1,
-    .dev    = {
-        .platform_data  = &a80_keys_platform_data,
-    },
-};
-//---ASUS_BSP : Add for keypad
 #endif
 
-//ASUS BSP HANS---
+//ASUS_BSP CLIFF---
 
 //ASUS BSP Eason_Chang +++
 static struct smb346_platform_data smb346_pdata={
@@ -4025,9 +3548,11 @@ struct i2c_registry {
 	int                    len;
 };
 
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
-#ifdef CONFIG_MPU_SENSORS_MPU6050B1
+
+//ASUS_BSP +++ Maggie Lee "Sensors Porting"
 static struct i2c_registry __initdata apq8064_sensor_devices[] = {
+//ASUS_BSP +++ Maggie Lee "9-axis sensor porting"
+#ifdef CONFIG_MPU_SENSORS_MPU6050B1
         {
                 I2C_SURF | I2C_FFA | I2C_RUMI,
                 APQ_8064_GSBI2_QUP_I2C_BUS_ID,
@@ -4040,30 +3565,39 @@ static struct i2c_registry __initdata apq8064_sensor_devices[] = {
                 ami306_i2c_boardinfo,
                 ARRAY_SIZE(ami306_i2c_boardinfo),
        },
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
         {
                 I2C_SURF | I2C_FFA | I2C_RUMI,
                 APQ_8064_GSBI1_QUP_I2C_BUS_ID,
                 p05_ami306_i2c_boardinfo,
                 ARRAY_SIZE(p05_ami306_i2c_boardinfo),
         },
-//ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
-};
 #endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
+//ASUS_BSP --- Maggie Lee
+//ASUS_BSP +++ Maggie Lee "Lightsensor Cm36283 driver"
+#ifdef CONFIG_SENSORS_CM36283
 
-//ASUS_BSP larry lai : MHL TX porting +++
-#ifdef CONFIG_FB_MSM_HDMI_MHL_8240
-static struct i2c_registry __initdata apq8064_mhl_devices[] = {
 	{
-		I2C_SURF | I2C_FFA | I2C_RUMI,
-		APQ_8064_GSBI4_QUP_I2C_BUS_ID,
-		sii_device_info,
-		ARRAY_SIZE(sii_device_info),
+	        I2C_SURF | I2C_FFA  | I2C_RUMI,
+       	 	APQ_8064_GSBI2_QUP_I2C_BUS_ID,
+        	cm36283_i2c_info,
+        	ARRAY_SIZE(cm36283_i2c_info),
+    	},
+#endif
+//ASUS_BSP --- Maggie Lee
+//ASUS_BSP +++ Maggie Lee "Lightsensor Al3010 driver on Pad"
+#ifdef CONFIG_SENSORS_AL3010
+	{
+    		I2C_SURF | I2C_FFA | I2C_RUMI,
+		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
+		al3010_Pad_i2c_info,
+		ARRAY_SIZE(al3010_Pad_i2c_info),
 	},
+#endif
+//ASUS_BSP --- Maggie Lee
 };
-#endif	
-	//ASUS_BSP Wei_Lai porting mydp 7808+++
+//ASUS_BSP --- Maggie Lee "Sensors Porting"
+
+// ASUS_BSP +++ Tingyi "[A80][HDMI] Enable MyDP HDMI"
 #ifdef CONFIG_SLIMPORT_ANX7808
 static struct i2c_registry __initdata apq8064_mydp_devices[] = {
 	{
@@ -4074,9 +3608,9 @@ static struct i2c_registry __initdata apq8064_mydp_devices[] = {
 	},
 };
 #endif
+// ASUS_BSP --- Tingyi "[A80][HDMI] Enable MyDP HDMI"
 
 
-//ASUS_BSP larry lai : MHL TX porting ---
 static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 //ASUS BSP Eason_Chang TIgauge +++
     {
@@ -4100,33 +3634,18 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		smb349_charger_i2c_info,
 		ARRAY_SIZE(smb349_charger_i2c_info)
 	},
-
-//+++ ASUS_BSP : Novatek A80 touch Deeo
+//ASUS_BSP +++ Jessy: Novatek A80 touch
+#ifdef ASUS_A80_PROJECT	
 	{
 		I2C_SURF | I2C_FFA | I2C_RUMI,
 		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
 		novatek_i2c_info,
 		ARRAY_SIZE(novatek_i2c_info),
 	},
-//--- ASUS_BSP : Novatek A80 touch Deeo
-//ASUS_BSP simpson: unset unused touchscreen setting +++
-#if 0
-	{
-		I2C_SURF | I2C_LIQUID,
-		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
-		mxt_device_info,
-		ARRAY_SIZE(mxt_device_info),
-	},
-	{
-		I2C_FFA,
-		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
-		cyttsp_info,
-		ARRAY_SIZE(cyttsp_info),
-	},
-#endif
-//ASUS_BSP simpson: unset unused touchscreen setting ---
-//ASUS_BSP simpson: Add support for synaptics touchscreen +++
-#if 1 //defined(CONFIG_TOUCHSCREEN_SYNAPTICS)
+#endif	
+//ASUS_BSP --- Jessy: Novatek A80 touch
+//ASUS_BSP +++ Jessy :Add support for synaptics touchscreen
+#ifdef ASUS_A68_PROJECT	
 	{
 		I2C_SURF | I2C_FFA | I2C_RUMI,
 		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
@@ -4134,25 +3653,15 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		ARRAY_SIZE(synaptic_i2c_clearpad3k),
 	},
 #endif
-//ASUS_BSP simpson: Add support for synaptics touchscreen ---
-
-//ASUS_BSP desmond: support sis9257 & atmel1664s touch ++
-	{
-		//I2C_SURF | I2C_LIQUID,
-		I2C_SURF | I2C_FFA | I2C_RUMI,
-		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
-		mxt_device_info,
-		ARRAY_SIZE(mxt_device_info),
-	},
-
+//ASUS_BSP --- Jessy :Add support for synaptics touchscreen
+//ASUS_BSP Jessy: support sis9257 touch ++
 	{
 		I2C_SURF | I2C_FFA | I2C_RUMI,
 		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
 		sis_i2c_info,
 		ARRAY_SIZE(sis_i2c_info),
 	},
-//ASUS_BSP desmond: support sis9257 & atmel1664s touch --
-
+//ASUS_BSP Jessy: support sis9257 touch --
 	{
 		I2C_FFA | I2C_LIQUID,
 		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
@@ -4166,23 +3675,16 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		ARRAY_SIZE(cs8427_device_info),
 	},
 
-//ASUS BSP Lenter+++
-    {
-        I2C_SURF | I2C_FFA | I2C_RUMI,
-        APQ_8064_GSBI1_QUP_I2C_BUS_ID,
-        p03_scaler_info,
-        ARRAY_SIZE(p03_scaler_info),
-    },
-//ASUS BSP Lenter---
-
-//ASUS BSP Lenter+++
+//ASUS_BSP larry lai : MHL TX porting +++
+#ifdef CONFIG_FB_MSM_HDMI_MHL_8240
 	{
 		I2C_SURF | I2C_FFA | I2C_RUMI,
-		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
-		p03_scaler_update_info,
-		ARRAY_SIZE(p03_scaler_update_info),
+		APQ_8064_GSBI4_QUP_I2C_BUS_ID,
+		sii_device_info,
+		ARRAY_SIZE(sii_device_info),
 	},
-//ASUS BSP Lenter---
+#endif	
+//ASUS_BSP larry lai : MHL TX porting ---
 
 //ASUS_BSP +++ Sina Chou "support pad microp"
 #ifdef CONFIG_EEPROM_NUVOTON
@@ -4194,33 +3696,16 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 	},
 #endif
 //ASUS_BSP --- Sina Chou "support pad microp"
-
-//ASUS_BSP +++ Peter Lu "Lightsensor Cm36283 driver"
-	{
-	        I2C_SURF | I2C_FFA  | I2C_RUMI,
-       	 APQ_8064_GSBI2_QUP_I2C_BUS_ID,
-        	cm36283_i2c_info,
-        	ARRAY_SIZE(cm36283_i2c_info),
-    	},
-//ASUS_BSP --- Peter Lu
-
-//ASUS_BSP --- Peter Lu "Lightsensor Al3010 driver on Pad"
-	{
-    		I2C_SURF | I2C_FFA | I2C_RUMI,
-		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
-		al3010_Pad_i2c_info,
-		ARRAY_SIZE(al3010_Pad_i2c_info),
-	},
-//ASUS_BSP --- Peter Lu
-
-//ASUS_BSP +++ Louis "Add NT71890 driver on P05"
+//ASUS_BSP +++ Jason Chang "Add NT71890 driver on P05"
+#ifdef ASUS_A80_PROJECT
 	{
     	I2C_SURF | I2C_FFA | I2C_RUMI,
 		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
 		NT71890_P05_i2c_info,
 		ARRAY_SIZE(NT71890_P05_i2c_info),
 	},
-//ASUS_BSP --- Louis "Add NT71890 driver on P05"
+#endif
+//ASUS_BSP --- Jason Chang "Add NT71890 driver on P05"
 
 	//+++ASUS_BSP:Porting NFC+++
         {
@@ -4229,15 +3714,7 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
               apq_nfc_board_info,
               ARRAY_SIZE(apq_nfc_board_info),
         },
-	//+++ASUS_BSP:Porting NFC+++ 
-};
-
-static struct i2c_registry apq8064_tabla_i2c_devices[] __initdata = {
-	{
-		.bus = APQ_8064_GSBI1_QUP_I2C_BUS_ID,
-		.info = apq8064_tabla_i2c_device_info,
-		.len = ARRAY_SIZE(apq8064_tabla_i2c_device_info),
-	},
+	//+++ASUS_BSP:Porting NFC+++
 };
 
 #define SX150X_EXP1_INT_N	PM8921_MPP_IRQ(PM8921_IRQ_BASE, 9)
@@ -4314,154 +3791,7 @@ static struct i2c_registry mpq8064_i2c_devices[] __initdata = {
 	},
 };
 
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
-#ifdef CONFIG_MPU_SENSORS_MPU6050B1
-static void __init register_sensor_devices(void)
-{
-	u8 mach_mask = 0;
-	int i;  
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
-	int sensor_count = 0;
-//ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
-
-	/* Build the matching 'supported_machs' bitmask */
-	if (machine_is_apq8064_cdp())
-		mach_mask = I2C_SURF;
-	else if (machine_is_apq8064_mtp())
-		mach_mask = I2C_FFA;
-	else if (machine_is_apq8064_liquid())
-		mach_mask = I2C_LIQUID;
-	else if (machine_is_apq8064_rumi3())
-		mach_mask = I2C_RUMI;
-	else if (machine_is_apq8064_sim())
-		mach_mask = I2C_SIM;
-	else if (PLATFORM_IS_MPQ8064())
-		mach_mask = I2C_MPQ_CDP;
-	else
-		pr_err("unmatched machine ID in register_i2c_devices\n");
-#if 1
-        switch(g_A68_hwID)
-        {
-            case A68_EVB:
-            case A68_SR1_1:
-            case A68_SR1_2:
-            case A68_SR2:
-            case A68_ER1:
-            case A68_ER2:
-            case A68_ER3:
-            case A68_PR:
-            case A68_MP:
-            case A68_PR2:
-                printk("ami306 on i2c-1\n");
-                apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;  //compass use i2c-1
-                break;
-            case A68_CD:
-                printk("[sensor] A68_CD on i2c-1\n");
-                apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;  //compass use i2c-1
-                break;                
-            case A68_UNKNOWN:
-                printk("Warning: unknown HWID, default ami306 use i2c-1\n");
-                apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;
-                break;
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-            case A80_EVB:
-            case A80_SR1:
-            case A80_SR2:  
-            case A80_SR3:          
-            case A80_SR4:           
-            case A80_SR5:         
-            case A80_ER:
-            case A80_PR:
-            default:
-				apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;
-                break;
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
-        }        
-#else
-apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;  //compass use i2c-1
-#endif
-	/* Run the array and install devices as appropriate */
-
-//ASUS_BSP +++ Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
-	sensor_count = ARRAY_SIZE(apq8064_sensor_devices);
-	if(g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD)
-	{
-		sensor_count = sensor_count - 1;
-	}
-	for (i = 0; i < sensor_count; ++i) {
-//ASUS_BSP --- Jiunhau_Wang "[A80][Sensor][NA][Spec] support P05 e-compass"
-		if (apq8064_sensor_devices[i].machs & mach_mask)
-			i2c_register_board_info(apq8064_sensor_devices[i].bus,
-						apq8064_sensor_devices[i].info,
-						apq8064_sensor_devices[i].len);
-	}
-}
-#endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
-
-//ASUS_BSP +++ Larry Lai "MHL porting"
-#ifdef CONFIG_FB_MSM_HDMI_MHL_8240
-static void __init register_mhl_devices(void)
-{
-	u8 mach_mask = 0;
-	int i;  
-
-	/* Build the matching 'supported_machs' bitmask */
-	if (machine_is_apq8064_cdp())
-		mach_mask = I2C_SURF;
-	else if (machine_is_apq8064_mtp())
-		mach_mask = I2C_FFA;
-	else if (machine_is_apq8064_liquid())
-		mach_mask = I2C_LIQUID;
-	else if (machine_is_apq8064_rumi3())
-		mach_mask = I2C_RUMI;
-	else if (machine_is_apq8064_sim())
-		mach_mask = I2C_SIM;
-	else if (PLATFORM_IS_MPQ8064())
-		mach_mask = I2C_MPQ_CDP;
-	else
-		pr_err("unmatched machine ID in register_mhl_devices\n");
-	
-        switch(g_A68_hwID)
-        {
-		case A68_EVB:
-		case A68_SR1_1:
-		case A68_SR1_2:
-		case A68_SR2:
-		case A68_ER1:
-		case A68_ER2:
-		case A68_ER3:
-		case A68_PR:
-		case A68_PR2:
-		case A68_MP:
-		    printk("mhl8240 on A68\n");
-		    apq8064_mhl_devices[0].info->irq = A68_MHL_8240_IRQ;
-		    break;        
-		case A80_EVB:
-		case A80_SR1:
-		    printk("mhl8240 on A80 SR1\n");
-                apq8064_mhl_devices[0].info->irq = A80_SR1_MHL_8240_IRQ;
-                break;
-            default:
-		    printk("mhl8240 on A68 default\n");
-                apq8064_mhl_devices[0].info->irq = A80_SR1_MHL_8240_IRQ;
-                break;
-        }        
-
-	/* Run the array and install devices as appropriate */
-	for (i = 0; i < ARRAY_SIZE(apq8064_mhl_devices); ++i) {				
-		if (apq8064_mhl_devices[i].machs & mach_mask)
-		{
-			i2c_register_board_info(apq8064_mhl_devices[i].bus,
-						apq8064_mhl_devices[i].info,
-						apq8064_mhl_devices[i].len);
-		}
-	}
-}
-#endif
-//ASUS_BSP --- Larry Lai "MHL porting"
-
-//ASUS_BSP +++ Larry Lai "mydp porting"
+// ASUS_BSP +++ Tingyi "[A80][HDMI] Enable MyDP HDMI"
 #ifdef CONFIG_SLIMPORT_ANX7808
 static void __init register_mydp_devices(void)
 {
@@ -4484,17 +3814,19 @@ static void __init register_mydp_devices(void)
 	else
 		pr_err("unmatched machine ID in register_mhl_devices\n");       
 
-	if(g_A68_hwID >= A80_SR4)
+	if(1)//g_A68_hwID >= A80_SR4)
 	{
-	    printk("myDP A80 SR4 GPIO set\n");
+	    printk("[MyDP]%s: A80 SR4 GPIO set\n",__func__);
            apq8064_mydp_devices[0].info->platform_data  = &anx7808_i2c_pdata[A80_SR4_myDP_GPIO];
 	}
 	else
 	{
-	    printk("myDP A80 SR3 GPIO set\n");
+	    printk("[MyDP]%s: A80 SR3 GPIO set\n",__func__);
            apq8064_mydp_devices[0].info->platform_data =  &anx7808_i2c_pdata[A80_SR3_myDP_GPIO];
 	}
+
 	/* Run the array and install devices as appropriate */
+	printk("[MyDP]%s:mach_mask = %d\n",__func__,mach_mask);
 	for (i = 0; i < ARRAY_SIZE(apq8064_mydp_devices); ++i) {				
 		if (apq8064_mydp_devices[i].machs & mach_mask)
 		{
@@ -4505,13 +3837,46 @@ static void __init register_mydp_devices(void)
 	}
 }
 #endif
-//ASUS_BSP --- Larry Lai "mydp porting"
+// ASUS_BSP --- Tingyi "[A80][HDMI] Enable MyDP HDMI"
+
+//ASUS_BSP +++ Maggie Lee "Sensors Porting"
+static void __init register_sensor_devices(void)
+{
+	u8 mach_mask = 0;
+	int i;  
+	int sensor_count = 0;
+
+	/* Build the matching 'supported_machs' bitmask */
+	if (machine_is_apq8064_cdp())
+		mach_mask = I2C_SURF;
+	else if (machine_is_apq8064_mtp())
+		mach_mask = I2C_FFA;
+	else if (machine_is_apq8064_liquid())
+		mach_mask = I2C_LIQUID;
+	else if (machine_is_apq8064_rumi3())
+		mach_mask = I2C_RUMI;
+	else if (machine_is_apq8064_sim())
+		mach_mask = I2C_SIM;
+	else if (PLATFORM_IS_MPQ8064())
+		mach_mask = I2C_MPQ_CDP;
+	else
+		pr_err("unmatched machine ID in register_i2c_devices\n");
+
+	apq8064_sensor_devices[1].bus = APQ_8064_GSBI2_QUP_I2C_BUS_ID;
+	sensor_count = ARRAY_SIZE(apq8064_sensor_devices);
+	for (i = 0; i < sensor_count; ++i) {
+		if (apq8064_sensor_devices[i].machs & mach_mask)
+			i2c_register_board_info(apq8064_sensor_devices[i].bus,
+						apq8064_sensor_devices[i].info,
+						apq8064_sensor_devices[i].len);
+	}
+}
+//ASUS_BSP --- Maggie Lee "Sensors Porting"
 
 static void __init register_i2c_devices(void)
 {
 	u8 mach_mask = 0;
 	int i;
-	u32 version;
 
 #ifdef CONFIG_MSM_CAMERA
 	struct i2c_registry apq8064_camera_i2c_devices = {
@@ -4554,34 +3919,6 @@ static void __init register_i2c_devices(void)
 					mpq8064_i2c_devices[i].info,
 					mpq8064_i2c_devices[i].len);
 	}
-
-	if (machine_is_apq8064_mtp()) {
-		version = socinfo_get_platform_version();
-		if (SOCINFO_VERSION_MINOR(version) == 1)
-			for (i = 0; i < ARRAY_SIZE(apq8064_tabla_i2c_devices);
-				 ++i)
-				i2c_register_board_info(
-				apq8064_tabla_i2c_devices[i].bus,
-				apq8064_tabla_i2c_devices[i].info,
-				apq8064_tabla_i2c_devices[i].len);
-	}
-
-}
-
-static void enable_ddr3_regulator(void)
-{
-	static struct regulator *ext_ddr3;
-//ASUS_BSP+++ add for miniporting	
-	return;
-//ASUS_BSP--- add for miniporting	
-	/* Use MPP7 output state as a flag for PCDDR3 presence. */
-	if (gpio_get_value_cansleep(PM8921_MPP_PM_TO_SYS(7)) > 0) {
-		ext_ddr3 = regulator_get(NULL, "ext_ddr3");
-		if (IS_ERR(ext_ddr3) || ext_ddr3 == NULL)
-			pr_err("Could not get MPP7 regulator\n");
-		else
-			regulator_enable(ext_ddr3);
-	}
 }
 
 static void enable_avc_i2c_bus(void)
@@ -4615,63 +3952,15 @@ static int __init device_gpiomux_init(void)
 }
 //--ASUS_BSP : miniporting
 
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
+//ASUS_BSP +++ Maggie Lee "9-axis sensor porting"
 #ifdef CONFIG_MPU_SENSORS_MPU6050B1
 static int sensor_platform_init(void)
 {
     int rc = -EINVAL;
-    int ecompass_gpio = A68_ECOM_GPIO_IRQ_AMI306_EVB;
-    int gyro_gpio = A68_GYRO_GPIO_IRQ_MPU6050_EVB;
+    int ecompass_gpio = A80_ECOM_GPIO_IRQ_AMI306_SR1_1;
+    int gyro_gpio = A80_GYRO_GPIO_IRQ_MPU6050_SR1_1;
 
     printk("sensor_platform_init++\n");
-
-    // change GPIO according to HWID
-#if 1
-    switch(g_A68_hwID)
-    {
-        case A68_EVB:
-            printk("apply A68 EVB sensor GPIO\n");
-            ecompass_gpio = A68_ECOM_GPIO_IRQ_AMI306_EVB;
-            gyro_gpio = A68_GYRO_GPIO_IRQ_MPU6050_EVB;
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-            printk("apply A68 SR1_1 sensor GPIO\n");
-            ecompass_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
-            gyro_gpio = A68_GYRO_GPIO_IRQ_MPU6050_SR1_1;
-            break;
-        case A68_UNKNOWN:
-            printk("Warning: unknown HWID, can't set sensor GPIO\n");
-            ecompass_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
-            gyro_gpio = A68_GYRO_GPIO_IRQ_MPU6050_SR1_1;
-            break;
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:     
-        case A80_ER:
-        case A80_PR:
-        default:
-            printk("[Sensor] apply A80 SR1_1 sensor GPIO\n");
-            ecompass_gpio = A80_ECOM_GPIO_IRQ_AMI306_SR1_1;
-            gyro_gpio = A80_GYRO_GPIO_IRQ_MPU6050_SR1_1;
-            break;
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
-    }
-#else
-ecompass_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
-gyro_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
-#endif
     if(ecompass_gpio <= 0 || gyro_gpio <= 0 )
     {
         printk("[sensor]failed to set IRQ\n");
@@ -4680,8 +3969,7 @@ gyro_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
     // get LDO9
     pm8921_l9 = regulator_get(NULL, "8921_l9");
     if (IS_ERR(pm8921_l9)) {
-        pr_err("%s: regulator get of 8921_l9 failed (%ld)\n",
-			__func__, PTR_ERR(pm8921_l9));
+        pr_err("%s: regulator get of 8921_l9 failed (%ld)\n", __func__, PTR_ERR(pm8921_l9));
 	rc = PTR_ERR(pm8921_l9);
 	return rc;
     }
@@ -4689,61 +3977,53 @@ gyro_gpio = A68_ECOM_GPIO_IRQ_AMI306_SR1_1;
     // set LDO9 to 2.85V
     rc = regulator_set_voltage(pm8921_l9, 2850000, 2850000);
     if (rc) {
-	pr_err("%s: regulator_set_voltage of 8921_l9 failed(%d)\n",
-	        	__func__, rc);
+	pr_err("%s: regulator_set_voltage of 8921_l9 failed(%d)\n", __func__, rc);
 	goto reg_put_LDO9;
     }
 
     //enable LDO9 for sensors
     rc = regulator_enable(pm8921_l9);
     if (rc) {
-	pr_err("%s: regulator_enable of 8921_l9 failed(%d)\n",
-			__func__, rc);
+	pr_err("%s: regulator_enable of 8921_l9 failed(%d)\n", __func__, rc);
 	goto reg_put_LDO9;
     }
 
     // get LSV4
     pm8921_lvs4 = regulator_get(NULL, "8921_lvs4");
     if (IS_ERR(pm8921_lvs4)) {
-        pr_err("%s: regulator get of 8921_lvs4 failed (%ld)\n",
-			__func__, PTR_ERR(pm8921_lvs4));
+        pr_err("%s: regulator get of 8921_lvs4 failed (%ld)\n", __func__, PTR_ERR(pm8921_lvs4));
 	rc = PTR_ERR(pm8921_lvs4);
 	return rc;
     }
 
     rc = regulator_enable(pm8921_lvs4);
     if (rc) {
-		pr_err("%s: regulator_enable of 8921_lvs4 failed(%d)\n",
-			__func__, rc);
+		pr_err("%s: regulator_enable of 8921_lvs4 failed(%d)\n", __func__, rc);
 	goto reg_put_lv4;
     }
 
     /* configure sensor interrupt gpio */
     rc = gpio_request(gyro_gpio, "gyro-irq");
     if (rc) {
-        pr_err("%s: unable to request gpio %d (gyro-irq)\n",
-			__func__, gyro_gpio);
+        pr_err("%s: unable to request gpio %d (gyro-irq)\n", __func__, gyro_gpio);
         goto reg_disable;
     }
 
     rc = gpio_direction_input(gyro_gpio);
     if (rc < 0) {
-        pr_err("%s: unable to set the direction of gpio %d\n",
-			__func__, gyro_gpio);
+        pr_err("%s: unable to set the direction of gpio %d\n", __func__, gyro_gpio);
         goto free_gpio;
     }
 
     rc = gpio_request(ecompass_gpio, "e-compass-irq");
     if (rc) {
-        pr_err("%s: unable to request gpio %d (e-compass-irq)\n",
-			__func__, ecompass_gpio);
+        pr_err("%s: unable to request gpio %d (e-compass-irq)\n", __func__, ecompass_gpio);
         goto reg_disable;
     }
 
     rc = gpio_direction_input(ecompass_gpio);
     if (rc < 0) {
-        pr_err("%s: unable to set the direction of gpio %d\n",
-			__func__, ecompass_gpio);
+        pr_err("%s: unable to set the direction of gpio %d\n", __func__, ecompass_gpio);
         goto free_gpio;
     }
     return 0;
@@ -4765,77 +4045,37 @@ reg_put_lv4:
 }
 static void apq8064_mpuirq_init(void)
 {
-	/*A68 EVB */
-        signed char orientationGyroEP_EVB [9] = { 0, -1, 0, -1, 0, 0, 0, 0, -1 };
-        signed char orientationMagEP_EVB [9] = { 0, -1, 0, 1, 0, 0, 0, 0, 1 };
-	/*A68 SR1_1 */
-        signed char orientationGyroEP_SR1_1 [9] = { 0, -1, 0, -1, 0, 0, 0, 0, -1 };
-        signed char orientationMagEP_SR1_1 [9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-        signed char A80_orientationGyroEP_SR1_1 [9] = { -1, 0, 0, 0, 1, 0, 0, 0, -1 };
-        signed char A80_orientationMagEP_SR1_1 [9] = { 0, 0, 1, 0, -1, 0, 1, 0, 0 };
-        signed char P05_orientationMagEP_SR1_1 [9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
+	#ifdef ASUS_A80_PROJECT
+        signed char phone_orientationGyro [9] = { -1, 0, 0, 0, 1, 0, 0, 0, -1 };
+        signed char phone_orientationMag [9] = { 0, 0, 1, 0, -1, 0, 1, 0, 0 };
+	#else
+        signed char phone_orientationGyro [9] = { 0, -1, 0, -1, 0, 0, 0, 0, -1 };
+        signed char phone_orientationMag [9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	#endif
+        signed char pad_orientationMag [9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+
 	pr_info("*** MPU START *** enterprise_mpuirq_init...\n");
 
-        switch (g_A68_hwID)
-        {
-
-        case A68_EVB:
-            printk("apply A68 EVB sensor GPIO\n");
-            memcpy( mpu_6050_data.orientation, orientationGyroEP_EVB, sizeof(mpu_6050_data.orientation));
-            memcpy( inv_mpu_ami306_data.orientation, orientationMagEP_EVB, sizeof(inv_mpu_ami306_data.orientation));
-            mpu_i2c_boardinfo[0].irq = MSM_GPIO_TO_INT(A68_GYRO_GPIO_IRQ_MPU6050_EVB);
-        case A68_SR1_1:
-        case A68_SR1_2:
-        case A68_SR2:
-        case A68_ER1:
-        case A68_ER2:
-        case A68_ER3:
-        case A68_PR:
-        case A68_MP:
-        case A68_PR2:
-        case A68_CD:
-            printk("apply A68 SR1_1 orientation\n");
-            memcpy( mpu_6050_data.orientation, orientationGyroEP_SR1_1, sizeof(mpu_6050_data.orientation));
-            memcpy( inv_mpu_ami306_data.orientation, orientationMagEP_SR1_1, sizeof(inv_mpu_ami306_data.orientation));
-            mpu_i2c_boardinfo[0].irq = MSM_GPIO_TO_INT(A68_GYRO_GPIO_IRQ_MPU6050_SR1_1);
-            break;
-//ASUS_BSP +++ Jiunhau_Wang "support A80 E-compass"
-        case A80_EVB:
-        case A80_SR1:
-        case A80_SR2:
-        case A80_SR3:
-        case A80_SR4:
-        case A80_SR5:
-        case A80_ER:
-        case A80_PR:
-//ASUS_BSP --- Jiunhau_Wang "support A80 E-compass"
-        default:
-            printk("[sensor] apply A80 SR1_1 orientation\n");
-            memcpy( mpu_6050_data.orientation, A80_orientationGyroEP_SR1_1, sizeof(mpu_6050_data.orientation));
-            memcpy( inv_mpu_ami306_data.orientation, A80_orientationMagEP_SR1_1, sizeof(inv_mpu_ami306_data.orientation));
-            mpu_i2c_boardinfo[0].irq = MSM_GPIO_TO_INT(A80_GYRO_GPIO_IRQ_MPU6050_SR1_1);
-            printk("[sensor] apply P05 SR1_1 orientation\n");
-            memcpy( inv_mpu_p05_ami306_data.orientation, P05_orientationMagEP_SR1_1, sizeof(inv_mpu_p05_ami306_data.orientation));       
-            break;
-
-        }
+	memcpy( mpu_6050_data.orientation, phone_orientationGyro, sizeof(mpu_6050_data.orientation));
+	memcpy( inv_mpu_ami306_data.orientation, phone_orientationMag, sizeof(inv_mpu_ami306_data.orientation));
+	mpu_i2c_boardinfo[0].irq = MSM_GPIO_TO_INT(A80_GYRO_GPIO_IRQ_MPU6050_SR1_1);
+	memcpy( inv_mpu_p05_ami306_data.orientation, pad_orientationMag, sizeof(inv_mpu_p05_ami306_data.orientation));       
 
         if(sensor_platform_init())
             pr_info("sensor_platform_init fail\n");
 
 	pr_info("*** MPU END *** enterprise_mpuirq_init...\n");
-#if defined(CONFIG_MPU_SENSORS_AMI306)
+
+	#ifdef CONFIG_MPU_SENSORS_AMI306
 	pr_info("AMI306 on the board\n");
-#else
+	#else
 	pr_info("AMI30X on the board\n");
-#endif
+	#endif
 
         return;
 }
 #endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
+//ASUS_BSP --- Maggie Lee "9-axis sensor porting"
 
 //+++ASUS_BSP : miniporting
 #if 0
@@ -4892,10 +4132,38 @@ reg_put_LDO15:
 }
 //ASUS_BSP Eason RF SW power issue ---
 
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data apq8064_uartdm_gsbi4_pdata = {
+	.config_gpio	= 4,
+	.uart_tx_gpio	= 10,
+	.uart_rx_gpio	= 11,
+	.uart_cts_gpio	= 12,
+	.uart_rfr_gpio	= 13,
+};
+#else
+static struct msm_serial_hs_platform_data apq8064_uartdm_gsbi4_pdata;
+#endif
+
+static void __init apq8064ab_update_retention_spm(void)
+{
+	int i;
+
+	/* Update the SPM sequences for krait retention on all cores */
+	for (i = 0; i < ARRAY_SIZE(msm_spm_data); i++) {
+		int j;
+		struct msm_spm_platform_data *pdata = &msm_spm_data[i];
+		for (j = 0; j < pdata->num_modes; j++) {
+			if (pdata->modes[j].cmd ==
+					spm_retention_cmd_sequence)
+				pdata->modes[j].cmd =
+				spm_retention_with_krait_v3_cmd_sequence;
+		}
+	}
+}
+
 static void __init apq8064_common_init(void)
 {
 	u32 platform_version = socinfo_get_platform_version();
-	struct msm_rpmrs_level rpmrs_level;
 
 //+++ASUS_BSP : miniporting
 #if 0
@@ -4905,6 +4173,16 @@ static void __init apq8064_common_init(void)
 //---ASUS_BSP : miniporting
 
 	platform_device_register(&msm_gpio_device);
+	if (cpu_is_apq8064ab())
+		apq8064ab_update_krait_spm();
+	if (cpu_is_krait_v3()) {
+		msm_pm_set_tz_retention_flag(0);
+		apq8064ab_update_retention_spm();
+	} else {
+		msm_pm_set_tz_retention_flag(1);
+	}
+	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
+	msm_spm_l2_init(msm_spm_l2_data);
 	msm_tsens_early_init(&apq_tsens_pdata);
 	msm_thermal_init(&msm_thermal_pdata);
 	if (socinfo_init() < 0)
@@ -4925,20 +4203,11 @@ static void __init apq8064_common_init(void)
 	device_gpiomux_init();
 //---ASUS_BSP : miniporting
 	apq8064_i2c_init();
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
-#ifdef CONFIG_MPU_SENSORS_MPU6050B1
-	register_sensor_devices();
-#endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
-//ASUS_BSP +++ Larry Lai "MHL porting"
-#ifdef CONFIG_FB_MSM_HDMI_MHL_8240
-        register_mhl_devices();
-#endif
-//ASUS_BSP --- Larry Lai "MHL porting"
+// ASUS_BSP +++ Tingyi "[A80][HDMI] Enable MyDP HDMI"
 #ifdef CONFIG_SLIMPORT_ANX7808
         register_mydp_devices();
 #endif
-
+// ASUS_BSP --- Tingyi "[A80][HDMI] Enable MyDP HDMI"
 	register_i2c_devices();
 
 	apq8064_device_qup_spi_gsbi5.dev.platform_data =
@@ -4947,12 +4216,6 @@ static void __init apq8064_common_init(void)
 	if (machine_is_apq8064_liquid())
 		msm_otg_pdata.mhl_enable = true;
 
-//ASUS_BSP larry lai : MHL TX sii8240 +++		
-/*
-	if (apq8064_mhl_display_enabled())
-		mhl_platform_data.mhl_enabled = true;
-*/
-//ASUS_BSP larry lai : MHL TX sii8240 ---
 	android_usb_pdata.swfi_latency =
 		msm_rpmrs_levels[0].latency_us;
 
@@ -4968,43 +4231,55 @@ static void __init apq8064_common_init(void)
 	else
 		platform_add_devices(pm8917_common_devices,
 					ARRAY_SIZE(pm8917_common_devices));
+
+	if (!machine_is_apq8064_mtp())
+		platform_device_register(&apq8064_device_ext_ts_sw_vreg);
+
 	platform_add_devices(common_devices, ARRAY_SIZE(common_devices));
-//+++ ASUS_BSP : add for miniporting
-//	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
-//			machine_is_mpq8064_dtv()))
-//--- ASUS_BSP : add for miniporting
+//ASUS_BSP +++ Maggie_Lee "I2C Porting"
+//	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())) {
 		platform_add_devices(common_not_mpq_devices,
 			ARRAY_SIZE(common_not_mpq_devices));
+//	}
 
-	if ((machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
-			machine_is_mpq8064_dtv()))
-		platform_add_devices(common_mpq_devices,
-			ARRAY_SIZE(common_mpq_devices));
-
-	if (machine_is_apq8064_mtp()) {
-		if (SOCINFO_VERSION_MINOR(platform_version) == 1)
-			platform_add_devices(common_i2s_devices,
-			ARRAY_SIZE(common_i2s_devices));
-	}
-
-	enable_ddr3_regulator();
-	rpmrs_level =
-		msm_rpmrs_levels[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT];
-	msm_hsic_pdata.swfi_latency = rpmrs_level.latency_us;
-	rpmrs_level =
-		msm_rpmrs_levels[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE];
-	msm_hsic_pdata.standalone_latency = rpmrs_level.latency_us;
+	msm_hsic_pdata.swfi_latency =
+		msm_rpmrs_levels[0].latency_us;
 	if (machine_is_apq8064_mtp()) {
 		msm_hsic_pdata.log2_irq_thresh = 5,
 		apq8064_device_hsic_host.dev.platform_data = &msm_hsic_pdata;
 		device_initialize(&apq8064_device_hsic_host.dev);
+		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
+			apq8064_device_ehci_host3.dev.platform_data =
+				&msm_ehci_host_pdata3;
+			device_initialize(&apq8064_device_ehci_host3.dev);
+		}
 	}
 	apq8064_pm8xxx_gpio_mpp_init();
 	apq8064_init_mmc();
 
 	if (machine_is_apq8064_mtp()) {
-		mdm_8064_device.dev.platform_data = &mdm_platform_data;
-		if (SOCINFO_VERSION_MINOR(platform_version) == 1) {
+		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
+			amdm_8064_device.dev.platform_data =
+				&amdm_platform_data;
+			platform_device_register(&amdm_8064_device);
+			bmdm_8064_device.dev.platform_data =
+				&bmdm_platform_data;
+			platform_device_register(&bmdm_8064_device);
+		} else if (socinfo_get_platform_subtype() ==
+				   PLATFORM_SUBTYPE_SGLTE2) {
+			sglte_mdm_8064_device.dev.platform_data =
+				&sglte2_mdm_platform_data;
+			platform_device_register(&sglte_mdm_8064_device);
+			sglte2_qsc_8064_device.dev.platform_data =
+				&sglte2_qsc_platform_data;
+			platform_device_register(&sglte2_qsc_8064_device);
+
+			/* GSBI4 UART device for Primay IPC */
+			apq8064_uartdm_gsbi4_pdata.wakeup_irq = gpio_to_irq(11);
+			apq8064_device_uartdm_gsbi4.dev.platform_data =
+						&apq8064_uartdm_gsbi4_pdata;
+			platform_device_register(&apq8064_device_uartdm_gsbi4);
+		} else if (SOCINFO_VERSION_MINOR(platform_version) == 1) {
 			i2s_mdm_8064_device.dev.platform_data =
 				&mdm_platform_data;
 			platform_device_register(&i2s_mdm_8064_device);
@@ -5014,32 +4289,32 @@ static void __init apq8064_common_init(void)
 		}
 	}
 	platform_device_register(&apq8064_slim_ctrl);
-	if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv()) {
-		apq8064_slim_devices[ARRAY_SIZE(apq8064_slim_devices) - 1].\
-			slim_slave = &mpq8064_slim_ashiko20;
-	}
 	slim_register_board_info(apq8064_slim_devices,
 		ARRAY_SIZE(apq8064_slim_devices));
 	if (!PLATFORM_IS_MPQ8064()) {
 		apq8064_init_dsps();
 		platform_device_register(&msm_8960_riva);
 	}
-	if (cpu_is_apq8064ab())
-		apq8064ab_update_krait_spm();
-	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
-	msm_spm_l2_init(msm_spm_l2_data);
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	apq8064_epm_adc_init();
-	msm_pm_set_tz_retention_flag(1);
-//ASUS_BSP +++ Jason Chang "9-axis sensor porting"
-#ifdef CONFIG_MPU_SENSORS_MPU6050B1
+	//ASUS_BSP +++ Maggie Lee "Backlight Porting"
+	#ifdef CONFIG_ASUS_BACKLIGHT
+	platform_device_register(&asus_led_device);
+	#endif
+	//ASUS_BSP --- Maggie Lee "Backlight Porting"
+	//ASUS_BSP +++ Maggie Lee "Sensors porting"
+	register_sensor_devices();
+	//ASUS_BSP --- Maggie Lee "Sensors porting"
+	//ASUS_BSP +++ Maggie Lee "9-axis sensor porting"
+	#ifdef CONFIG_MPU_SENSORS_MPU6050B1
 	apq8064_mpuirq_init();
-#endif
-//ASUS_BSP --- Jason Chang "9-axis sensor porting"
-
-// +++ ASUS_BSP: Louis
-    platform_device_register(&a68_led_device);
-// --- ASUS_BSP: Louis
+	#endif
+	//ASUS_BSP --- Maggie Lee
+	//ASUS_BSP +++ Maggie Lee "light/proximity sensor"
+	#ifdef CONFIG_SENSORS_CM36283
+	platform_device_register(&cm36283_device);
+	#endif
+	//ASUS_BSP --- Maggie Lee "light/proximity sensor"
 
 //ASUS_BSP Eason RF SW power issue +++
 	if( (A80_SR4 <= g_A68_hwID) )
@@ -5047,10 +4322,6 @@ static void __init apq8064_common_init(void)
 		 RF_Switch_Power_init();
 	}
 //ASUS_BSP Eason RF SW power issue ---
-
-//ASUS_BSP Maggie Lee: light/proximity sensor
-	platform_device_register(&cm36283_device);
-//ASUS_BSP Maggie Lee: light/proximity sensor
 
 }
 
@@ -5063,13 +4334,11 @@ static void __init apq8064_cdp_init(void)
 {
 	if (meminfo_init(SYS_MEMORY, SZ_256M) < 0)
 		pr_err("meminfo_init() failed!\n");
-//ASUS_BSP simpson: unset unused touchscreen setting +++
-#if 0
-	if (machine_is_apq8064_mtp() &&
-		SOCINFO_VERSION_MINOR(socinfo_get_platform_version()) == 1)
-			cyttsp_pdata.sleep_gpio = CYTTSP_TS_GPIO_SLEEP_ALT;
-#endif
-//ASUS_BSP simpson: unset unused touchscreen setting ---
+//ASUS_BSP +++ Jessy
+//	if (machine_is_apq8064_mtp() &&
+//		SOCINFO_VERSION_MINOR(socinfo_get_platform_version()) == 1)
+//			cyttsp_pdata.sleep_gpio = CYTTSP_TS_GPIO_SLEEP_ALT;
+//ASUS_BSP --- Jessy
 	apq8064_common_init();
 	if (machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
 		machine_is_mpq8064_dtv()) {
@@ -5078,15 +4347,13 @@ static void __init apq8064_cdp_init(void)
 		platform_add_devices(mpq_devices, ARRAY_SIZE(mpq_devices));
 		mpq8064_pcie_init();
 	} else {
-//+++ ASUS_BSP : add for miniporting	
-//		ethernet_init();
-//--- ASUS_BSP : add for miniporting
+		//ethernet_init();			//ASUS_BSP +++ Maggie Lee "I2C Porting"
 		msm_rotator_set_split_iommu_domain();
 		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
-//+++ ASUS_BSP : add for miniporting		
+//ASUS_BSP +++ Maggie Lee "I2C Porting"
 //		spi_register_board_info(spi_board_info,
 //						ARRAY_SIZE(spi_board_info));
-//--- ASUS_BSP : add for miniporting
+//ASUS_BSP --- Maggie Lee "I2C Porting"
 	}
 	apq8064_init_fb();
 	apq8064_init_gpu();
@@ -5096,16 +4363,16 @@ static void __init apq8064_cdp_init(void)
 #endif
 
 	if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv()) {
-		platform_device_register(&mpq8064_device_uartdm_gsbi6);
 #ifdef CONFIG_SERIAL_MSM_HS
 		/* GSBI6(2) - UARTDM_RX */
 		mpq8064_gsbi6_uartdm_pdata.wakeup_irq = gpio_to_irq(15);
 		mpq8064_device_uartdm_gsbi6.dev.platform_data =
 					&mpq8064_gsbi6_uartdm_pdata;
 #endif
+		platform_device_register(&mpq8064_device_uartdm_gsbi6);
 	}
-	
-//ASUS_BSP HANS+++
+
+//ASUS_BSP CLIFF+++
 #if 0
 	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid())
 		platform_device_register(&cdp_kp_pdev);
@@ -5113,24 +4380,19 @@ static void __init apq8064_cdp_init(void)
 	if (machine_is_apq8064_mtp())
 		platform_device_register(&mtp_kp_pdev);
 
-	change_memory_power = &apq8064_change_memory_power;
-
 	if (machine_is_mpq8064_cdp()) {
 		platform_device_register(&mpq_gpio_keys_pdev);
 		platform_device_register(&mpq_keypad_device);
 	}
-#else
-//austin++++
-if( g_A68_hwID >= A80_EVB && g_A68_hwID <= A80_PR )
-	platform_device_register(&a80_gpio_platform_device);
-else if( g_A68_hwID >= A68_EVB && g_A68_hwID <= A68_CD )
-	platform_device_register(&a68_gpio_platform_device);
-else
-	printk("fail to register gpio-keys platform_device");
-//austin----
-
 #endif
-//ASUS_BSP HANS---
+
+#ifdef ASUS_A80_PROJECT
+	platform_device_register(&a80_gpio_platform_device);
+#else
+	platform_device_register(&a68_gpio_platform_device);
+#endif
+	printk("[keys]platform_device_register\n");
+//ASUB_BSP CLIFF---
 
 //ASUS_BSP Eason_Chang+++
 #ifdef CONFIG_SMB_346_CHARGER

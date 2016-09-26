@@ -68,8 +68,7 @@ module_param(iSerialNumber, charp, 0);
 MODULE_PARM_DESC(iSerialNumber, "SerialNumber string");
 
 static char composite_manufacturer[50];
-static int is_get_device = 0;
-static int is_win_connect = 0;
+
 /*-------------------------------------------------------------------------*/
 /**
  * next_ep_desc() - advance to the next EP descriptor
@@ -627,9 +626,9 @@ static int set_config(struct usb_composite_dev *cdev,
 	     usb_speed_string(gadget->speed),
 	     number, c ? c->label : "unconfigured");
 
-//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
+	//ASUS_BSP+++ "[USB][NA][Other] Add USB event log"
 	ASUSEvtlog("[USB] speed:%d\n",gadget->speed);
-//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
+	//ASUS_BSP--- "[USB][NA][Other] Add USB event log"
 
 	if (!c)
 		goto done;
@@ -1106,26 +1105,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	req->length = 0;
 	gadget->ep0->driver_data = cdev;
 
-	if((ctrl->bRequest==USB_REQ_GET_DESCRIPTOR)&&ctrl->bRequestType == USB_DIR_IN){
-		if((w_value >> 8)==USB_DT_DEVICE){
-			if(is_get_device==0){
-				is_win_connect = 0;
-			}
-			is_get_device = 1;			
-		}
-	}
-	else if(ctrl->bRequest==USB_REQ_SET_CONFIGURATION){
-		if(is_get_device){
-			if(is_win_connect){
-				printk("connect to WIN\n");
-			}
-			else{
-				printk("connect to MAC\n");
-			}
-		}
-		is_get_device = 0;
-	}
-
 	switch (ctrl->bRequest) {
 
 	/* we handle all standard USB descriptors */
@@ -1135,9 +1114,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		switch (w_value >> 8) {
 
 		case USB_DT_DEVICE:
-			if(w_length==0x40){
-				is_win_connect=1;
-			}
 			cdev->desc.bNumConfigurations =
 				count_configs(cdev, USB_DT_DEVICE);
 			cdev->desc.bMaxPacketSize0 =
@@ -1396,6 +1372,10 @@ static void composite_disconnect(struct usb_gadget *gadget)
 		reset_config(cdev);
 	if (composite->disconnect)
 		composite->disconnect(cdev);
+	if (cdev->delayed_status != 0) {
+		INFO(cdev, "delayed status mismatch..resetting\n");
+		cdev->delayed_status = 0;
+	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 

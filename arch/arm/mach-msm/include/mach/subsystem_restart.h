@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,21 +27,8 @@ enum {
 	RESET_LEVEL_MAX
 };
 
-struct device;
-struct module;
-
-/**
- * struct subsys_desc - subsystem descriptor
- * @name: name of subsystem
- * @depends_on: subsystem this subsystem depends on to operate
- * @dev: parent device
- * @owner: module the descriptor belongs to
- */
 struct subsys_desc {
 	const char *name;
-	const char *depends_on;
-	struct device *dev;
-	struct module *owner;
 
 	int (*shutdown)(const struct subsys_desc *desc);
 	int (*powerup)(const struct subsys_desc *desc);
@@ -58,8 +45,16 @@ extern int subsystem_restart(const char *name);
 extern struct subsys_device *subsys_register(struct subsys_desc *desc);
 extern void subsys_unregister(struct subsys_device *dev);
 
+// ASUS_BSP+++ "save SSR reason"
+extern void subsys_save_reason(char *reason, char *name);
+// ASUS_BSP--- "save SSR reason"
 #else
-
+// ASUS_BSP+++ "save SSR reason"
+static inline void subsys_save_reason(char *reason, char *name);
+{
+	return;
+}
+// ASUS_BSP--- "save SSR reason"
 static inline int get_restart_level(void)
 {
 	return 0;

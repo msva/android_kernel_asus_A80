@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,17 +27,15 @@ VREG_CONSUMERS(L1) = {
 	REGULATOR_SUPPLY("8921_l1",		NULL),
 };
 VREG_CONSUMERS(L2) = {
-    //ASUS_miniporting: Louis ++
+//ASUS_BSP +++ Jason Chang "display miniporting"
     REGULATOR_SUPPLY("dsi_vdda",        "mipi_dsi.1"),
-    //ASUS_miniporting: Louis --
+//ASUS_BSP --- Jason Chang "display miniporting"
 	REGULATOR_SUPPLY("8921_l2",		NULL),
 	REGULATOR_SUPPLY("mipi_csi_vdd",	"msm_csid.0"),
 	REGULATOR_SUPPLY("mipi_csi_vdd",	"msm_csid.1"),
 	REGULATOR_SUPPLY("mipi_csi_vdd",	"msm_csid.2"),
 	REGULATOR_SUPPLY("lvds_pll_vdda",	"lvds.0"),
 	REGULATOR_SUPPLY("dsi1_pll_vdda",	"mipi_dsi.1"),
-	REGULATOR_SUPPLY("HRD_VDDD_CDC_D",		"tabla2x-slim"),
-	REGULATOR_SUPPLY("HRD_CDC_VDDA_A_1P2V",	"tabla2x-slim"),
 	REGULATOR_SUPPLY("dsi_pll_vdda",	"mdp.0"),
         REGULATOR_SUPPLY("mipi_csi_vdd",	"4-003c"), //ASUS_BSP LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"
         REGULATOR_SUPPLY("mipi_csi_vdd",	"4-005e"), //ASUS_BSP LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"
@@ -63,11 +61,12 @@ VREG_CONSUMERS(L6) = {
 };
 VREG_CONSUMERS(L7) = {
 	REGULATOR_SUPPLY("8921_l7",		NULL),
-	//REGULATOR_SUPPLY("sdc_vdd_io",		"msm_sdcc.3"),
+	REGULATOR_SUPPLY("sdc_vdd_io",		"msm_sdcc.3"),
 };
 VREG_CONSUMERS(L8) = {
 	REGULATOR_SUPPLY("8921_l8",		NULL),
 	REGULATOR_SUPPLY("cam_vana",		"4-001a"),
+	REGULATOR_SUPPLY("cam_vana",		"4-0010"),
 	REGULATOR_SUPPLY("cam_vana",		"4-0048"),
 	REGULATOR_SUPPLY("cam_vana",		"4-006c"),
 	REGULATOR_SUPPLY("cam_vana",		"4-0034"),
@@ -83,20 +82,21 @@ VREG_CONSUMERS(L10) = {
 };
 VREG_CONSUMERS(L11) = {
 	REGULATOR_SUPPLY("8921_l11",		NULL),
-// ASUS_BSP miniporting : Louis ++
+//ASUS_BSP +++ Jason Chang "display miniporting"
 //	REGULATOR_SUPPLY("dsi1_avdd",		"mipi_dsi.1"),
     REGULATOR_SUPPLY("dsi_vdc",       "mipi_dsi.1"),
-// ASUS_BSP miniporting : Louis --
+//ASUS_BSP --- Jason Chang "display miniporting"
 };
 VREG_CONSUMERS(L12) = {
 	REGULATOR_SUPPLY("cam_vdig",		"4-001a"),
+	REGULATOR_SUPPLY("cam_vdig",		"4-0010"),
 	REGULATOR_SUPPLY("cam_vdig",		"4-0048"),
 	REGULATOR_SUPPLY("cam_vdig",		"4-006c"),
 	REGULATOR_SUPPLY("cam_vdig",		"4-0034"),
 	REGULATOR_SUPPLY("cam_vdig",		"4-0020"),
-	//ASUS BSP +++ Wei_Lai 
+// ASUS_BSP +++ Tingyi "[A80][HDMI] Enable MyDP HDMI"
 	REGULATOR_SUPPLY("mydp7808",		"4-0039"),
-	//ASUS BSP ---  Wei_Lai 
+// ASUS_BSP --- Tingyi "[A80][HDMI] Enable MyDP HDMI"
 	REGULATOR_SUPPLY("8921_l12",		NULL),
 };
 VREG_CONSUMERS(L13) = {
@@ -104,6 +104,7 @@ VREG_CONSUMERS(L13) = {
 };
 VREG_CONSUMERS(L14) = {
 	REGULATOR_SUPPLY("8921_l14",		NULL),
+	REGULATOR_SUPPLY("vreg_xoadc",		"pm8921-charger"),
 };
 VREG_CONSUMERS(L15) = {
 	REGULATOR_SUPPLY("8921_l15",		NULL),
@@ -111,6 +112,7 @@ VREG_CONSUMERS(L15) = {
 VREG_CONSUMERS(L16) = {
 	REGULATOR_SUPPLY("8921_l16",		NULL),
 	REGULATOR_SUPPLY("cam_vaf",		"4-001a"),
+	REGULATOR_SUPPLY("cam_vaf",		"4-0010"),
 	REGULATOR_SUPPLY("cam_vaf",		"4-0048"),
 	REGULATOR_SUPPLY("cam_vaf",		"4-006c"),
 	REGULATOR_SUPPLY("cam_vaf",		"4-0034"),
@@ -145,8 +147,6 @@ VREG_CONSUMERS(L25) = {
 	REGULATOR_SUPPLY("CDC_VDDA_A_1P2V",	"tabla-slim"),
 	REGULATOR_SUPPLY("VDDD_CDC_D",		"tabla2x-slim"),
 	REGULATOR_SUPPLY("CDC_VDDA_A_1P2V",	"tabla2x-slim"),
-	REGULATOR_SUPPLY("VDDD_CDC_D",		"0-000d"),
-	REGULATOR_SUPPLY("CDC_VDDA_A_1P2V",	"0-000d"),
 };
 VREG_CONSUMERS(L26) = {
 	REGULATOR_SUPPLY("8921_l26",		NULL),
@@ -188,15 +188,12 @@ VREG_CONSUMERS(S4) = {
 	REGULATOR_SUPPLY("CDC_VDD_CP",		"tabla2x-slim"),
 	REGULATOR_SUPPLY("CDC_VDDA_TX",		"tabla2x-slim"),
 	REGULATOR_SUPPLY("CDC_VDDA_RX",		"tabla2x-slim"),
-	REGULATOR_SUPPLY("VDDIO_CDC",		"0-000d"),
-	REGULATOR_SUPPLY("CDC_VDD_CP",		"0-000d"),
-	REGULATOR_SUPPLY("CDC_VDDA_TX",		"0-000d"),
-	REGULATOR_SUPPLY("CDC_VDDA_RX",		"0-000d"),
 	REGULATOR_SUPPLY("riva_vddpx",		"wcnss_wlan.0"),
 	REGULATOR_SUPPLY("vcc_i2c",		"3-005b"),
 	REGULATOR_SUPPLY("vcc_i2c",		"3-0024"),
 	REGULATOR_SUPPLY("vddp",		"0-0048"),
 	REGULATOR_SUPPLY("hdmi_lvl_tsl",	"hdmi_msm.0"),
+	REGULATOR_SUPPLY("vdd-io",		"spi0.2"),
 };
 VREG_CONSUMERS(S5) = {
 	REGULATOR_SUPPLY("8921_s5",		NULL),
@@ -245,14 +242,10 @@ VREG_CONSUMERS(LVS7) = {
 	REGULATOR_SUPPLY("dsi_pll_vddio",	"mdp.0"),
 	REGULATOR_SUPPLY("hdmi_vdda",		"hdmi_msm.0"),
 };
-//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-/*
 VREG_CONSUMERS(USB_OTG) = {
 	REGULATOR_SUPPLY("8921_usb_otg",	NULL),
 	REGULATOR_SUPPLY("vbus_otg",		"msm_otg"),
 };
-*/
-//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 VREG_CONSUMERS(8821_S0) = {
 	REGULATOR_SUPPLY("8821_s0",		NULL),
 	REGULATOR_SUPPLY("krait2",		"acpuclk-8064"),
@@ -261,15 +254,13 @@ VREG_CONSUMERS(8821_S1) = {
 	REGULATOR_SUPPLY("8821_s1",		NULL),
 	REGULATOR_SUPPLY("krait3",		"acpuclk-8064"),
 };
-//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-/*
 VREG_CONSUMERS(EXT_MPP8) = {
 	REGULATOR_SUPPLY("ext_mpp8",		NULL),
 	REGULATOR_SUPPLY("vbus",		"msm_ehci_host.1"),
 };
 VREG_CONSUMERS(EXT_3P3V) = {
 	REGULATOR_SUPPLY("ext_3p3v",		NULL),
-	REGULATOR_SUPPLY("vdd_io",		"spi0.2"),
+	REGULATOR_SUPPLY("vdd-phy",		"spi0.2"),
 	REGULATOR_SUPPLY("mhl_usb_hs_switch",	"msm_otg"),
 	REGULATOR_SUPPLY("lvds_vccs_3p3v",      "lvds.0"),
 	REGULATOR_SUPPLY("dsi1_vccs_3p3v",      "mipi_dsi.1"),
@@ -280,8 +271,6 @@ VREG_CONSUMERS(EXT_TS_SW) = {
 	REGULATOR_SUPPLY("ext_ts_sw",		NULL),
 	REGULATOR_SUPPLY("vdd_ana",		"3-005b"),
 };
-*/
-//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 VREG_CONSUMERS(AVC_1P2V) = {
 	REGULATOR_SUPPLY("avc_1p2v",	NULL),
 };
@@ -306,20 +295,15 @@ VREG_CONSUMERS(LVS2) = {
 	REGULATOR_SUPPLY("8921_lvs2",		NULL),
 	REGULATOR_SUPPLY("iris_vdddig",		"wcnss_wlan.0"),
 };
-//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-/*
 VREG_CONSUMERS(HDMI_MVS) = {
 	REGULATOR_SUPPLY("8921_hdmi_mvs",	NULL),
 	REGULATOR_SUPPLY("hdmi_mvs",		"hdmi_msm.0"),
 };
-*/
-//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 VREG_CONSUMERS(NCP) = {
 	REGULATOR_SUPPLY("8921_ncp",		NULL),
 };
 VREG_CONSUMERS(EXT_5V) = {
 	REGULATOR_SUPPLY("ext_5v",		NULL),
-	REGULATOR_SUPPLY("ext_ddr3",		NULL),
 	REGULATOR_SUPPLY("vbus",		"msm_ehci_host.0"),
 };
 
@@ -351,7 +335,6 @@ VREG_CONSUMERS(L36) = {
 };
 VREG_CONSUMERS(BOOST) = {
 	REGULATOR_SUPPLY("8917_boost",		NULL),
-	REGULATOR_SUPPLY("ext_ddr3",		NULL),
 	REGULATOR_SUPPLY("vbus",		"msm_ehci_host.0"),
 	REGULATOR_SUPPLY("hdmi_mvs",		"hdmi_msm.0"),
 };
@@ -587,16 +570,12 @@ struct gpio_regulator_platform_data
 apq8064_gpio_regulator_pdata[] __devinitdata = {
 	/*        ID      vreg_name gpio_label   gpio                  supply */
 	GPIO_VREG(EXT_5V, "ext_5v", "ext_5v_en", PM8921_MPP_PM_TO_SYS(7), NULL),
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	/*
 	GPIO_VREG(EXT_3P3V, "ext_3p3v", "ext_3p3v_en",
 		  APQ8064_EXT_3P3V_REG_EN_GPIO, NULL),
 	GPIO_VREG(EXT_TS_SW, "ext_ts_sw", "ext_ts_sw_en",
 		  PM8921_GPIO_PM_TO_SYS(23), "ext_3p3v"),
 	GPIO_VREG(EXT_MPP8, "ext_mpp8", "ext_mpp8_en",
 			PM8921_MPP_PM_TO_SYS(8), NULL),
-	*/
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
 };
 
 struct gpio_regulator_platform_data
@@ -634,12 +613,8 @@ msm8064_pm8921_regulator_pdata[] __devinitdata = {
 		0, 1),
 
 	/*           ID        name     always_on pd       en_t supply reg_ID */
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	/*
 	PM8XXX_VS300(USB_OTG,  "8921_usb_otg",  0, 0,         0, "ext_5v", 2),
 	PM8XXX_VS300(HDMI_MVS, "8921_hdmi_mvs", 0, 1,         0, "ext_5v", 3),
-	*/
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
 };
 
 /* PM8917 regulator constraints */
@@ -672,9 +647,7 @@ msm8064_pm8917_regulator_pdata[] __devinitdata = {
 	PM8XXX_BOOST(BOOST, "8917_boost", 0,  5000000, 5000000, 500, NULL, 9),
 
 	/*	     ID        name      always_on pd en_t supply    reg_ID */
-	//ASUS_BSP+++ BennyCheng "remove unused mpp/gpio pins"
-	//PM8XXX_VS300(USB_OTG,  "8921_usb_otg",  0, 1, 0,   "8917_boost", 10),
-	//ASUS_BSP--- BennyCheng "remove unused mpp/gpio pins"
+	PM8XXX_VS300(USB_OTG,  "8921_usb_otg",  0, 1, 0,   "8917_boost", 10),
 };
 
 static struct rpm_regulator_init_data
@@ -690,22 +663,35 @@ apq8064_rpm_regulator_init_data[] __devinitdata = {
 	/*	ID a_on pd ss min_uV   max_uV   supply    sys_uA init_ip */
 	RPM_LDO(L1,  1, 1, 0, 1100000, 1100000, "8921_s4",     0,  1000),
 	RPM_LDO(L2,  0, 1, 0, 1200000, 1200000, "8921_s4",     0,     0),
-	RPM_LDO(L3,  0, 1, 0, 3075000, 3075000, NULL,          0,     0),
+	RPM_LDO(L3,  0, 1, 0, 3075000, 3300000, NULL,          0,     0),
 	RPM_LDO(L4,  1, 1, 0, 1800000, 1800000, NULL,          0, 10000),
 	RPM_LDO(L5,  0, 1, 0, 2950000, 2950000, NULL,          0,     0),
 	RPM_LDO(L6,  0, 1, 0, 2700000, 2700000, NULL,          0,     0),  //ASUS_BSP LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"
 	RPM_LDO(L7,  0, 1, 0, 1850000, 2950000, NULL,          0,     0),
 	RPM_LDO(L8,  0, 1, 0, 2800000, 2800000, NULL,          0,     0),
-	RPM_LDO(L9,  0, 1, 0, 2850000, 2850000, NULL,          0,     0),  // ASUS_BSP Jason Chang "9 axis sensor porting"
+	RPM_LDO(L9,  0, 1, 0, 2850000, 2850000, NULL,          0,     0),		//ASUS_BSP +++ Maggie Lee "9-axis sensors Porting"
 	RPM_LDO(L10, 0, 1, 0, 2900000, 2900000, NULL,          0,     0),
 	RPM_LDO(L11, 0, 1, 0, 3100000, 3100000, NULL,          0,     0),   //ASUS_BSP miniporting ++
 //Wei for myDP 1.0V	
+#ifdef ASUS_A68_PROJECT
+	RPM_LDO(L12, 1, 1, 0, 1200000, 1200000, "8921_s4",     0,     0),    //ASUS_BSP miniporting ++ for MHL 1.2V always on
+#else
+#ifdef ASUS_A80_PROJECT
 	RPM_LDO(L12, 0, 1, 0, 1000000, 1200000, "8921_s4",     0,     0),    //ASUS_BSP miniporting ++ for MHL 1.2V always on
+#else
+	#error "Not A68 or A80 project!! there must be something wrong!"
+#endif
+#endif
 	RPM_LDO(L13, 0, 0, 0, 2220000, 2220000, NULL,          0,     0),
 	RPM_LDO(L14, 0, 1, 0, 1800000, 1800000, NULL,          0,     0),
 	RPM_LDO(L15, 0, 1, 0, 3300000, 3300000, NULL,          0,     0), //ASUS_BSP Eason RF SW power issue ++
 	RPM_LDO(L16, 0, 1, 0, 2800000, 2800000, NULL,          0,     0),
-	RPM_LDO(L17, 0, 1, 0, 3000000, 3300000, NULL,	       0,     0),//ASUS_BSP simpson: add for touch miniporting ++
+#ifdef ASUS_A80_PROJECT	
+	RPM_LDO(L17, 0, 1, 0, 3000000, 3300000, NULL,	       0,     0),//ASUS_BSP Jessy: add for touch miniporting ++
+#endif
+#ifdef ASUS_A68_PROJECT	
+	RPM_LDO(L17, 1, 1, 0, 3300000, 3300000, NULL,          0,     0),//ASUS_BSP Jessy: add for touch miniporting ++
+#endif
 	RPM_LDO(L18, 0, 1, 0, 1300000, 1800000, "8921_s4",     0,     0),
 	RPM_LDO(L21, 0, 1, 0, 1050000, 1050000, NULL,          0,     0),
 	RPM_LDO(L22, 0, 1, 0, 2600000, 2600000, NULL,          0,     0),
@@ -719,7 +705,7 @@ apq8064_rpm_regulator_init_data[] __devinitdata = {
 	/*     ID  a_on pd ss                   supply */
 	RPM_VS(LVS1, 0, 1, 0,                   "8921_s4"),
 	RPM_VS(LVS3, 0, 1, 0,                   "8921_s4"),
-	RPM_VS(LVS4, 1, 1, 0,                   "8921_s4"),//ASUS_BSP simpson: add for touch miniporting ++
+	RPM_VS(LVS4, 1, 1, 0,                   "8921_s4"),//ASUS_BSP Jessy: add for touch miniporting ++
 	RPM_VS(LVS5, 0, 1, 0,                   "8921_s4"),
 	RPM_VS(LVS6, 0, 1, 0,                   "8921_s4"),
 	RPM_VS(LVS7, 0, 1, 1,                   "8921_s4"),
@@ -803,5 +789,24 @@ void __init configure_apq8064_pm8917_power_grid(void)
 			rpm_data->init_data.num_consumer_supplies
 				= ARRAY_SIZE(vreg_consumers_8917_S1);
 		}
+
+		/*
+		 * Currently min/max voltage level for LD03 was set to 3.075V.
+		 * But some Full speed USB headsets requires higher cross over
+		 * voltage. The cross over voltage is directly proportional
+		 * to the phy 3.3V rail voltage. So modified the max voltage
+		 * level of LD03 to 3.3V. But apq8064_rpm_regulator_init_data
+		 * is shared between PM8921 and PM8917, so set max_uV back to
+		 * 3.075V for PM8917.
+		 */
+		 if (rpm_data->id == RPM_VREG_ID_PM8921_L3)
+			rpm_data->init_data.constraints.max_uV = 3075000;
+
 	}
+
+	/*
+	 * Switch to 8960_PM8917 rpm-regulator version so that TCXO workaround
+	 * is applied to PM8917 regulators L25, L26, L27, and L28.
+	 */
+	apq8064_rpm_regulator_pdata.version = RPM_VREG_VERSION_8960_PM8917;
 }

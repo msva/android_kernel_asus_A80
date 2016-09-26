@@ -55,9 +55,6 @@ GNU General Public License for more details.
 #include <asm/io.h>
 // for GPIO debug use ---
 #include "sii_hal_priv.h"
-//ASUS BSP wei lai+++
-#include <linux/regulator/consumer.h>
-//ASUS bsp wei lai---
 
 #ifdef SII8240_PM_SUPPORT
 #include <linux/microp.h>
@@ -105,17 +102,9 @@ int g_mhl_early_suspend_flag = 0;
 #endif
 
 int mhl_reset_set = 0;
-//ASUS BSP +++ Wei_Lai
-#ifdef SII8240_HDCP_ON
-int mhl_hdcp_value=1;
-#else
-int mhl_hdcp_value=0;
-#endif
-extern void MHL_disable_irq(void);
-extern void MHL_enable_irq(void);
-//ASUS BSP --- Wei_Lai
+
 static int mhl_swing_base_value = 0;  // default enable cbus enable
-static int mhl_tx_control7_value = 0;
+
 //ASUS_BSP +++: larry lai : for by-pass check QCOM TMDS H V total while booting in PAD mode
 static int P03_QcomTmdsHVTotalByPassCheck = 1;
 //ASUS_BSP ---: larry lai : for by-pass check QCOM TMDS H V total while booting in PAD mode
@@ -126,9 +115,7 @@ static int p03_plug_in_set(const char *val, struct kernel_param *kp);
 //static int mhl_cbus_set(const char *val, struct kernel_param *kp);
 #endif
 static int mhl_swing_base_set(const char *val, struct kernel_param *kp);
-static int mhl_tx_control7_set(const char *val, struct kernel_param *kp);
 static int mhl_reset_function(const char *val, struct kernel_param *kp);
-static int mhl_reset_hdcp_function(const char *val, struct kernel_param *kp);
 
 int get_p03_plug_in(void);
 
@@ -173,12 +160,6 @@ module_param_call(mhl_reset_set, mhl_reset_function, param_get_int,
 module_param_call(mhl_swing_base_value, mhl_swing_base_set, param_get_int,
 			&mhl_swing_base_value, 0644);
 
-module_param_call(mhl_tx_control7_value, mhl_tx_control7_set, param_get_int,
-			&mhl_tx_control7_value, 0644);
-//ASUS BSP Wei_Lai +++
-module_param_call(mhl_hdcp_value, mhl_reset_hdcp_function, param_get_int,
-			&mhl_hdcp_value, 0644);
-//ASUS BSP Wei_Lai ---
 
 /***** local functions *******************************************************/
 static int pad_tv_mode_set(const char *val, struct kernel_param *kp)
@@ -214,29 +195,7 @@ static int pad_tv_mode_set(const char *val, struct kernel_param *kp)
 	return 0;
 }
 
-static int mhl_tx_control7_set(const char *val, struct kernel_param *kp)
-{
-	int ret;
-	int old_val = mhl_tx_control7_value;
 
-	ret = param_set_int(val, kp);
-
-	if (ret)
-		return ret;
-
-	/* If tv mode is great than 2, ignore. */
-	if (mhl_tx_control7_value > 0xf) {
-		mhl_tx_control7_value = old_val;
-		return -EINVAL;
-	}
-    SiiRegWrite(REG_MHLTX_CTL7, mhl_tx_control7_value);	
-
-
-	printk("MHL  mhl_tx_control7 value :0x%x\n", mhl_tx_control7_value);
-
-	return 0;
-
-}
 static int mhl_swing_base_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
@@ -248,16 +207,14 @@ static int mhl_swing_base_set(const char *val, struct kernel_param *kp)
 		return ret;
 
 	/* If tv mode is great than 2, ignore. */
-	if (mhl_swing_base_value > (BIT_CLK_SWING_CTL_MASK | BIT_DATA_SWING_CTL_MASK)) {
+	if (mhl_swing_base_value > 0xf) {
 		mhl_swing_base_value = old_val;
 		return -EINVAL;
 	}
-    SiiRegModify(REG_MHLTX_CTL4
-        	,BIT_CLK_SWING_CTL_MASK | BIT_DATA_SWING_CTL_MASK
-            ,mhl_swing_base_value);
+    SiiRegWrite(REG_MHLTX_CTL7, mhl_swing_base_value);	
 
 
-	printk("MHL REG_MHLTX_CTL4 :0x%x\n", mhl_swing_base_value);
+	printk("MHL mhl_swing_base_value :0x%x\n", mhl_swing_base_value);
 
 	return 0;
 
@@ -347,37 +304,15 @@ int get_pad_tv_mode(void)
 
 		if (asus_padstation_exist_realtime())	
 		{
-//#ifdef CONFIG_EEPROM_NUVOTON		
-//		   if (AX_IsPadUsing_MHL_H())
-		   switch (g_A68_hwID)
-		   {
-			case A68_EVB:
-			case A68_SR1_1:
-			case A68_SR1_2:
-			case A68_SR2:
-			case A68_ER1:
-			case A68_ER2:
-			case A68_ER3:
-			case A68_PR:
-			case A68_MP:   
+#ifdef CONFIG_EEPROM_NUVOTON		
+//			if (AX_IsPadUsing_MHL_H())
+			if (0)  // always return PAD LOW
+				return MHL_PAD_MODE_H;  // pad mode High
+			else	
 				return MHL_PAD_MODE_L;  // pad mode Low
-				break;
-			case A80_EVB:
-			case A80_SR1:			
-				return MHL_PAD_MODE_L;  // pad mode Low -- 24 bit mode (temp solution)				
-			case A80_SR2:
-			case A80_SR3:
-			case A80_SR4:
-			case A80_SR5:
-			case A80_ER:
-			case A80_PR:
-				return MHL_PAD_MODE_H;  // pad mode High -- PP mode		
-			default:
-				return MHL_PAD_MODE_L;  // pad mode Low
-		   	}
-//#else			
-//			return pad_tv_mode;
-//#endif				
+#else			
+			return pad_tv_mode;
+#endif				
 		}
 		else
 		{
@@ -420,47 +355,7 @@ int get_p03_plug_in(void)
 {
 	return p03_plug_in;
 }	
-//ASUS BSP Wei_Lai	+++
-static int mhl_reset_hdcp_function(const char *val, struct kernel_param *kp)
-{
-	int ret;
-	int old_val = mhl_hdcp_value;
 
-	ret = param_set_int(val, kp);
-
-	if (ret)
-		return ret;
-
-	if (mhl_hdcp_value > 0xf)  {
-		mhl_hdcp_value = old_val;
-		return -EINVAL;
-	}
-	if(mhl_hdcp_value == 0){
-		PlatformGPIOSet(pinDoHdcp,false);
-		//SiiRegWrite(TPI_HDCP_CONTROL_DATA_REG,0);
-//ASUS_BSP: larry for P05 SR2, default disable HDCP		
-#ifdef SII8240_HDCP_ON 
-		MHL_disable_irq();
-		SiiMhlTxHwReset(10,10);
-		MHL_enable_irq();		
-		SiiMhlTxInitialize(30);
-#endif		
-	}else{
-		PlatformGPIOSet(pinDoHdcp,true);
-		//SiiRegModify(TPI_HDCP_CONTROL_DATA_REG
-		//	,BIT_TPI_HDCP_CONTROL_DATA_DOUBLE_RI_CHECK_MASK | BIT_TPI_HDCP_CONTROL_DATA_COPP_PROTLEVEL_MASK
-		//	,BIT_TPI_HDCP_CONTROL_DATA_DOUBLE_RI_CHECK_ENABLE | BIT_TPI_HDCP_CONTROL_DATA_COPP_PROTLEVEL_MAX);
-#ifndef SII8240_HDCP_ON 
-		MHL_disable_irq();
-		SiiMhlTxHwReset(10,10);
-		MHL_enable_irq();		
-		SiiMhlTxInitialize(30);
-#endif
-	}
-	printk("MHL mhl_hdcp_value :0x%x\n", mhl_hdcp_value);
-	return 0;
-}
-//ASUS BSP Wei_Lai	---
 static int mhl_reset_function(const char *val, struct kernel_param *kp)
 {
 	int ret;
@@ -552,7 +447,7 @@ static void sii8240drv_early_suspend(struct early_suspend *handler)
 
 //joe1_++
 #ifdef CONFIG_EEPROM_NUVOTON
-	if (/*!AX_MicroP_IsP01Connected() || */!asus_padstation_exist_realtime()) {
+	if (!AX_MicroP_IsP01Connected() || !asus_padstation_exist_realtime()) {
 		printk("[MHL] early_suspend, not in pad, skip DISABLE mhl cbus \n");
 		toggletxoutput_off();			
 	}
@@ -590,7 +485,7 @@ static void sii8240drv_late_resume(struct early_suspend *handler)
 
 //joe1_++
 #ifdef CONFIG_EEPROM_NUVOTON
-	if (/*!AX_MicroP_IsP01Connected() ||*/ !asus_padstation_exist_realtime()) {
+	if (!AX_MicroP_IsP01Connected() || !asus_padstation_exist_realtime()) {
 		printk("[MHL] late_resume, not in pad, skip ENABLE mhl cbus \n");
 		toggletxoutput_on();	
 	}
@@ -629,10 +524,6 @@ static struct early_suspend sii8240drv_early_suspend_desc = {
 #endif
 
 extern int CarKitInitialize(void);
-
-//ASUS BSP Wei_Lai	+++
-extern int mhlCableInitialize(void);
-//ASUS BSP Wei_Lai	---
 
 //ASUS_BSP ---: larry : for VD suspend/Voff test
 
@@ -707,9 +598,6 @@ int32_t StartMhlTxDevice(void)
     HalReleaseIsrLock();
 
 	CarKitInitialize();
-//ASUS BSP Wei_Lai +++
-	mhlCableInitialize();
-//ASUS BSP Wei_Lai ---
 //ASUS_BSP +++: larry : for VD suspend/Voff test
 #ifdef CONFIG_HAS_EARLYSUSPEND
     register_early_suspend( &sii8240drv_early_suspend_desc );
@@ -1705,11 +1593,20 @@ struct device_attribute driver_attribs[] = {
 
 static int __init SiiMhlInit(void)
 {
-    int32_t	 ret =-1;
+    int32_t	ret;
     dev_t	devno;
-    struct regulator *mhl_v10;
-	if(g_A68_hwID>=A80_SR3)
-		goto exit;
+
+#ifdef ASUS_A68_PROJECT
+	printk("MHL:%s:+++\n",__func__);
+#else
+#ifdef ASUS_A80_PROJECT
+	printk("MHL:%s:Oh no! A80 have no MHL! Just return...\n",__func__);
+	return 0;
+#else
+	#error Neither ASUS_A68_PROJECT nor ASUS_A80_PROJECT is defined!!
+#endif
+#endif
+
 	pr_info("%s driver starting!\n", MHL_DRIVER_NAME);
 	pr_info("Version: %s%d\n", buildVersion,BUILDNUM);
 	pr_info("%s", buildTime);
@@ -1718,24 +1615,6 @@ static int __init SiiMhlInit(void)
     pr_info("register_chrdev %s\n", MHL_DRIVER_NAME);
 
     pr_info("TX Driver version = %d\n", BUILD_NUMBER);
-//ASUS BSP wei lai +++
-
-
-	mhl_v10=regulator_get(NULL,"8921_l12");
-	 if (IS_ERR(mhl_v10)) {
-		printk("unable to get mhl_v10\n");
-		return PTR_ERR(mhl_v10);
-	}
-      ret = regulator_set_voltage(mhl_v10, 1200000, 1200000);
-	if (ret) {
-		printk("%s: unable to set the voltage for regulator "
-			"mhl_v10\n", __func__);
-		return ret;
-	}
-	regulator_enable(mhl_v10);
-	
-//ASUS BSP wei lai ---
-
 	
     /* If a major device number has already been selected use it,
      * otherwise dynamically allocate one.
@@ -1854,7 +1733,7 @@ free_cdev:
 
 free_chrdev:
 	unregister_chrdev_region(MKDEV(devMajor, 0), MHL_DRIVER_MINOR_MAX);
-exit:
+
 	return ret;
 }
 
@@ -1863,6 +1742,10 @@ exit:
 static void __exit SiiMhlExit(void)
 {
 	pr_info("%s driver exiting!\n", MHL_DRIVER_NAME);
+#ifdef ASUS_A80_PROJECT
+	printk("MHL:%s:Oh no! A80 have no MHL! Just return...\n",__func__);
+	return;
+#endif
 
 	StopMhlTxDevice();
 

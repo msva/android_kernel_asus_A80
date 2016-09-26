@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -90,7 +90,6 @@ static int msm_csid_config(struct csid_device *csid_dev,
 	uint32_t val = 0;
 	void __iomem *csidbase;
 	csidbase = csid_dev->base;
-       pr_info("%s +\n",__func__);
 	if (!csidbase || !csid_params) {
 		pr_err("%s:%d csidbase %p, csid params %p\n", __func__,
 			__LINE__, csidbase, csid_params);
@@ -119,7 +118,6 @@ static int msm_csid_config(struct csid_device *csid_dev,
 		return rc;
 
 	msm_csid_set_debug_reg(csidbase, csid_params);
-       pr_info("%s -\n",__func__);
 	return rc;
 }
 
@@ -127,7 +125,7 @@ static irqreturn_t msm_csid_irq(int irq_num, void *data)
 {
 	uint32_t irq;
 	struct csid_device *csid_dev = data;
-	if (!csid_dev) {
+	if (!csid_dev||!csid_dev->base) {
 		pr_err("%s:%d csid_dev NULL\n", __func__, __LINE__);
 		return IRQ_HANDLED;
 	}
@@ -229,7 +227,6 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	int rc = 0;
 	uint8_t core_id = 0;
 
-       pr_info("%s +\n",__func__);
 	if (!csid_version) {
 		pr_err("%s:%d csid_version NULL\n", __func__, __LINE__);
 		rc = -EINVAL;
@@ -354,7 +351,6 @@ vreg_enable_failed:
 vreg_config_failed:
 	iounmap(csid_dev->base);
 	csid_dev->base = NULL;
-       pr_info("%s -\n",__func__);
 	return rc;
 }
 
@@ -448,6 +444,13 @@ static long msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 			sizeof(struct msm_camera_csid_params))) {
 			pr_err("%s: %d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
+			break;
+		}
+		if (csid_params.lut_params.num_cid < 1 ||
+			csid_params.lut_params.num_cid > 16) {
+			pr_err("%s: %d num_cid outside range\n",
+				__func__, __LINE__);
+			rc = -EINVAL;
 			break;
 		}
 		vc_cfg = kzalloc(csid_params.lut_params.num_cid *
@@ -618,7 +621,7 @@ static int __devinit csid_probe(struct platform_device *pdev)
 csid_no_resource:
 	mutex_destroy(&new_csid_dev->mutex);
 	kfree(new_csid_dev);
-	return 0;
+	return rc;
 }
 
 static const struct of_device_id msm_csid_dt_match[] = {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,7 +29,6 @@ static int __init msm_sensor_init_module(void)
 		i2c_add_driver(sensor_i2c_driver[index]);
 	return 0;
 }
-
 
 module_init(msm_sensor_init_module);
 MODULE_DESCRIPTION("Sensor driver probe");

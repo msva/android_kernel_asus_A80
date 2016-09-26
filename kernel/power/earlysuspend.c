@@ -149,7 +149,7 @@ abort:
 
 //Add a timer to trigger wakelock debug
 extern struct timer_list unattended_timer;
-
+extern void set_mdp4_mixer_commit(int i); //Mickey+++, we allow mixer commit when system going to suspend
 void request_suspend_state(suspend_state_t new_state)
 {
 	unsigned long irqflags;
@@ -158,9 +158,10 @@ void request_suspend_state(suspend_state_t new_state)
 	spin_lock_irqsave(&state_lock, irqflags);
 	old_sleep = state & SUSPEND_REQUESTED;
 
-        pm_new_state=new_state;
-        ASUSEvtlog("[PM] request_suspend_state: %s (%d->%d)\n", new_state != PM_SUSPEND_ON ? "sleep" : "wakeup",
-                        requested_suspend_state, new_state);
+	pm_new_state=new_state;
+   set_mdp4_mixer_commit(1); //Mickey+++, we allow mixer commit when system going to suspend
+	ASUSEvtlog("[PM] request_suspend_state: %s (%d->%d)\n", new_state != PM_SUSPEND_ON ? "sleep" : "wakeup",
+		requested_suspend_state, new_state);
 	if (debug_mask & DEBUG_USER_STATE) {
 		struct timespec ts;
 		struct rtc_time tm;

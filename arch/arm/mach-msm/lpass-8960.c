@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,6 +24,11 @@
 #include <mach/peripheral-loader.h>
 #include <mach/subsystem_restart.h>
 #include <mach/subsystem_notif.h>
+
+#if defined(CONFIG_LGE_CRASH_HANDLER)
+#include <mach/restart.h>
+#include <mach/board_lge.h>
+#endif
 
 #include "smd_private.h"
 #include "ramdump.h"
@@ -120,6 +125,10 @@ static void lpass_fatal_fn(struct work_struct *work)
 	pr_err("%s %s: Watchdog bite received from Q6!\n", MODULE_NAME,
 		__func__);
 	lpass_log_failure_reason();
+#if defined(CONFIG_LGE_CRASH_HANDLER)
+	set_ssr_magic_number("lpass");
+	msm_set_restart_mode(0x6d634130);
+#endif
 	panic(MODULE_NAME ": Resetting the SoC");
 }
 
@@ -135,6 +144,10 @@ static void lpass_smsm_state_cb(void *data, uint32_t old_state,
 			" new_state = 0x%x, old_state = 0x%x\n", __func__,
 			new_state, old_state);
 		lpass_log_failure_reason();
+#if defined(CONFIG_LGE_CRASH_HANDLER)
+		set_ssr_magic_number("lpass");
+		msm_set_restart_mode(0x6d634130);
+#endif
 		panic(MODULE_NAME ": Resetting the SoC");
 	}
 }
@@ -250,10 +263,8 @@ static int __init lpass_fatal_init(void)
 		ret = -ENOMEM;
 		goto out;
 	}
-//ASUS_BSP+++ "Fix Riva restart crash due to wrong sybsys_name (riva -> wcnss)"
-	ssr_notif_hdle = subsys_notif_register_notifier("wcnss",
+	ssr_notif_hdle = subsys_notif_register_notifier("riva",
 							&rnb);
-//ASUS_BSP--- "Fix Riva restart crash due to wrong sybsys_name (riva -> wcnss)"
 	if (IS_ERR(ssr_notif_hdle) < 0) {
 		ret = PTR_ERR(ssr_notif_hdle);
 		pr_err("%s: subsys_register_notifier for Riva: err = %d\n",

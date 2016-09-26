@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,20 +37,21 @@
 #include <linux/fb.h>
 #include <linux/list.h>
 #include <linux/types.h>
+#include <linux/switch.h>
 #include <linux/msm_mdp.h>
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
-
+#ifdef ASUS_A80_PROJECT
+#define SPLASH_SCREEN_BUFFER_FOR_1080P //ASUS_BSP +++ Jason Chang "display miniporting"
+#endif
 #include "msm_fb_panel.h"
 #include "mdp.h"
-#define SPLASH_SCREEN_BUFFER_FOR_1080P //ASUS_BSP: Louis for miniporting
 
 #define MSM_FB_DEFAULT_PAGE_SIZE 2
 #define MFD_KEY  0x11161126
 #define MSM_FB_MAX_DEV_LIST 32
-/* Disable EARLYSUSPEND for mdp driver */
-#define DISABLE_EARLY_SUSPEND
 
 struct disp_info_type_suspend {
 	boolean op_enable;
@@ -83,8 +84,9 @@ struct msm_fb_data_type {
 	DISP_TARGET dest;
 	struct fb_info *fbi;
 
-	struct delayed_work backlight_worker;
+	struct device *dev;
 	boolean op_enable;
+	struct delayed_work backlight_worker;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
 	boolean sw_refreshing_enable;
@@ -129,6 +131,7 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
+	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -139,8 +142,10 @@ struct msm_fb_data_type {
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
 	void (*vsync_ctrl) (int enable);
+	void (*vsync_init) (int cndx);
 	void (*update_panel_info)(struct msm_fb_data_type *mfd);
 	bool (*is_panel_ready)(void);
+	void *vsync_show;
 	void *cursor_buf;
 	void *cursor_buf_phys;
 
@@ -180,7 +185,7 @@ struct msm_fb_data_type {
 	struct list_head writeback_busy_queue;
 	struct list_head writeback_free_queue;
 	struct list_head writeback_register_queue;
-	struct switch_dev *writeback_sdev;
+	struct switch_dev writeback_sdev;
 	wait_queue_head_t wait_q;
 	struct ion_client *iclient;
 	unsigned long display_iova;
@@ -193,37 +198,37 @@ struct msm_fb_data_type {
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
+	void *cpu_pm_hdl;
+	u32 acq_fen_cnt;
+	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
 	int cur_rel_fen_fd;
 	struct sync_pt *cur_rel_sync_pt;
 	struct sync_fence *cur_rel_fence;
 	struct sync_fence *last_rel_fence;
-	u32 acq_fen_cnt;
-	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
-	void *copy_splash_buf;
-	struct mutex sync_mutex;
-	void *msm_fb_backup;
-	u32 is_committing;
-	struct completion commit_comp;
-	atomic_t commit_cnt;
-	struct work_struct commit_work;
-	int wake_commit_thread;
-	wait_queue_head_t commit_queue;
 	struct sw_sync_timeline *timeline;
 	int timeline_value;
+	u32 last_acq_fen_cnt;
+	struct sync_fence *last_acq_fen[MDP_MAX_FENCE_FD];
+	struct mutex sync_mutex;
+	struct completion commit_comp;
+	u32 is_committing;
+	struct work_struct commit_work;
+	void *msm_fb_backup;
 	boolean panel_driver_on;
-	uint32 sec_mapped;
-	uint32 sec_active;
+	int vsync_sysfs_created;
+	void *copy_splash_buf;
+//ASUS_BSP +++ Jason Chang "display miniporting"
     boolean asus_panel_disable;//Mickey+++
-//ASUS_BSP: Louis for miniporting +++
 #ifdef SPLASH_SCREEN_BUFFER_FOR_1080P
     dma_addr_t copy_splash_phys;
 #else
 	unsigned char *copy_splash_phys;
 #endif
-//ASUS_BSP: Louis for miniporting ---
-	void *cpu_pm_hdl;
+//ASUS_BSP --- Jason Chang "display miniporting"
+	uint32 sec_mapped;
+	uint32 sec_active;
+	uint32 max_map_size;
 };
-
 struct msm_fb_backup_type {
 	struct fb_info info;
 	struct mdp_display_commit disp_commit;
@@ -249,14 +254,11 @@ int calc_fb_offset(struct msm_fb_data_type *mfd, struct fb_info *fbi, int bpp);
 void msm_fb_wait_for_fence(struct msm_fb_data_type *mfd);
 int msm_fb_signal_timeline(struct msm_fb_data_type *mfd);
 void msm_fb_release_timeline(struct msm_fb_data_type *mfd);
-void msm_fb_release_busy(struct msm_fb_data_type *mfd);
-
 #ifdef CONFIG_FB_BACKLIGHT
 void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 #endif
 
-void fill_black_screen(void);
-void unfill_black_screen(void);
+void fill_black_screen(bool on, uint8 pipe_num, uint8 mixer_num);
 int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 				struct fb_info *info);
 

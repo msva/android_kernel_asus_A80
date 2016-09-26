@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +15,6 @@
 #include "vcd_ddl_shared_mem.h"
 #include "vcd_ddl_metadata.h"
 #include "vcd_res_tracker_api.h"
-#include "media/msm/vcd_property.h"
 
 static u32 *ddl_metadata_hdr_entry(struct ddl_client_context *ddl,
 	u32 meta_data)
@@ -76,6 +75,9 @@ static u32 *ddl_metadata_hdr_entry(struct ddl_client_context *ddl,
 		break;
 		case VCD_METADATA_QCOMFILLER:
 			skip_words = 6;
+		break;
+		case VCD_METADATA_LTR_INFO:
+			skip_words = 9;
 		break;
 		}
 	}
@@ -148,19 +150,23 @@ void ddl_set_default_meta_data_hdr(struct ddl_client_context *ddl)
 		hdr_entry[DDL_METADATA_HDR_VERSION_INDEX] = 0x00000101;
 		hdr_entry[DDL_METADATA_HDR_PORT_INDEX] = 1;
 		hdr_entry[DDL_METADATA_HDR_TYPE_INDEX] = VCD_METADATA_ENC_SLICE;
+		hdr_entry = ddl_metadata_hdr_entry(ddl, VCD_METADATA_LTR_INFO);
+		hdr_entry[DDL_METADATA_HDR_VERSION_INDEX] = 0x00000101;
+		hdr_entry[DDL_METADATA_HDR_PORT_INDEX] = 1;
+		hdr_entry[DDL_METADATA_HDR_TYPE_INDEX] = VCD_METADATA_LTR_INFO;
 	}
 }
 
 static u32 ddl_supported_metadata_flag(struct ddl_client_context *ddl)
 {
 	u32 flag = 0;
+	enum vcd_codec codec =
+		ddl->codec_data.decoder.codec.codec;
 
 	if (ddl->decoding) {
-		enum vcd_codec codec =
-			ddl->codec_data.decoder.codec.codec;
-
 		flag |= (VCD_METADATA_CONCEALMB | VCD_METADATA_PASSTHROUGH |
-				VCD_METADATA_QPARRAY);
+				VCD_METADATA_QPARRAY |
+				VCD_METADATA_SEPARATE_BUF);
 		if (codec == VCD_CODEC_H264)
 			flag |= (VCD_METADATA_SEI | VCD_METADATA_VUI);
 		else if (codec == VCD_CODEC_VC1 ||
@@ -169,8 +175,12 @@ static u32 ddl_supported_metadata_flag(struct ddl_client_context *ddl)
 		else if (codec == VCD_CODEC_MPEG2)
 			flag |= (VCD_METADATA_USER_DATA |
 				VCD_METADATA_EXT_DATA);
-	} else
-		flag |= VCD_METADATA_ENC_SLICE;
+	} else {
+		if (codec == VCD_CODEC_H264)
+			flag |= VCD_METADATA_ENC_SLICE | VCD_METADATA_LTR_INFO;
+		else
+			flag |= VCD_METADATA_ENC_SLICE;
+	}
 	return flag;
 }
 
@@ -276,6 +286,12 @@ void ddl_set_default_encoder_metadata_buffer_size(struct ddl_encoder_data
 		size = DDL_METADATA_HDR_SIZE;
 		size += 4;
 		size += (num_of_mb << 3);
+		DDL_METADATA_ALIGNSIZE(size);
+		suffix += size;
+	}
+	if (flag & VCD_METADATA_LTR_INFO) {
+		size = DDL_METADATA_HDR_SIZE;
+		size += DDL_METADATA_LTR_INFO_PAYLOAD_SIZE;
 		DDL_METADATA_ALIGNSIZE(size);
 		suffix += size;
 	}

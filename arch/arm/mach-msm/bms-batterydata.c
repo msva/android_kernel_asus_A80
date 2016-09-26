@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/mfd/pm8xxx/pm8921-bms.h>
+#include <linux/mfd/pm8xxx/batterydata-lib.h>
 
 static struct single_row_lut fcc_temp = {
 	.x		= {-20, 0, 25, 40, 65},
@@ -245,7 +245,7 @@ static struct sf_lut rbatt_sf = {
 	}
 };
 
-struct pm8921_bms_battery_data palladium_1500_data = {
+struct bms_battery_data palladium_1500_data = {
 	.fcc			= 2100,//ASUS_BSP Eason
 	.fcc_temp_lut		= &fcc_temp,
 	.fcc_sf_lut		= &fcc_sf,//Eason: add scaling factor like 1035ICS
@@ -253,10 +253,11 @@ struct pm8921_bms_battery_data palladium_1500_data = {
 	.pc_sf_lut		= &pc_sf,//Eason: add scaling factor like 1035ICS
 	.rbatt_sf_lut		= &rbatt_sf,
 	.default_rbatt_mohm	= 236,
+	.rbatt_capacitive_mohm	= 50,
 };
 
 //ASUS_BSP Eason notify bms change OCVtable+++
-struct pm8921_bms_battery_data palladium_1500_data_TWS = {
+struct bms_battery_data palladium_1500_data_TWS = {
 	.fcc			= 2100,//ASUS_BSP Eason
 	.fcc_temp_lut		= &fcc_temp,
 	.fcc_sf_lut		= &fcc_sf,//Eason: add scaling factor like 1035ICS

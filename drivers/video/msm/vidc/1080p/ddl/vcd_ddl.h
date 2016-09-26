@@ -85,6 +85,7 @@
 #define DDL_ENC_CHANGE_BITRATE    0x04
 #define DDL_ENC_CHANGE_FRAMERATE  0x08
 #define DDL_ENC_CHANGE_CIR        0x10
+#define DDL_ENC_LTR_USE_FRAME     0x20
 
 #define DDL_DEC_REQ_OUTPUT_FLUSH  0x1
 
@@ -259,12 +260,10 @@ struct ddl_mp2_datadumpenabletype {
 	u32 seqdisp_extdump_enable;
 	u32 seq_extdump_enable;
 };
-
 struct ddl_ltrlist {
 	bool ltr_in_use;
 	u32 ltr_id;
 };
-
 struct ddl_ltr_encoding_type {
 	struct vcd_property_ltrmode_type ltrmode;
 	struct vcd_property_ltruse_type failed_use_cmd;
@@ -343,6 +342,7 @@ struct ddl_encoder_data{
 	u32  num_references_for_p_frame;
 	u32  closed_gop;
 	u32  num_slices_comp;
+	bool intra_period_changed;
 	struct vcd_property_slice_delivery_info slice_delivery_info;
 	struct ddl_batch_frame_data batch_frame;
 	u32 avc_delimiter_enable;
@@ -580,4 +580,3 @@ s32 ddl_allocate_ltr_list(struct ddl_ltr_encoding_type *ltr_control);
 s32 ddl_free_ltr_list(struct ddl_ltr_encoding_type *ltr_control);
 void ddl_print_ltr_list(struct ddl_ltr_encoding_type *ltr_control);
 #endif
-

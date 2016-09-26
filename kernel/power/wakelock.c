@@ -397,9 +397,9 @@ static void suspend_backoff(void)
 			  msecs_to_jiffies(SUSPEND_BACKOFF_INTERVAL));
 }
 
-//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-extern void msm_otg_host_power_off(void);
-//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+//ASUS_BSP+++ BennyCheng "add none mode switch for storage case"
+extern void asus_otg_host_power_off(void);
+//ASUS_BSP--- BennyCheng "add none mode switch for storage case"
 static void suspend(struct work_struct *work)
 {
 	int ret;
@@ -412,9 +412,9 @@ static void suspend(struct work_struct *work)
 		return;
 	}
 
-	//ASUS_BSP+++ BennyCheng "usb host porting for pad mode"
-	msm_otg_host_power_off();
-	//ASUS_BSP--- BennyCheng "usb host porting for pad mode"
+	//ASUS_BSP+++ BennyCheng "add none mode switch for storage case"
+	asus_otg_host_power_off();
+	//ASUS_BSP--- BennyCheng "add none mode switch for storage case"
 
 	entry_event_num = current_event_num;
 	suspend_sys_sync_queue();
@@ -434,8 +434,8 @@ static void suspend(struct work_struct *work)
 			tm.tm_hour, tm.tm_min, tm.tm_sec, ts_exit.tv_nsec);
 	}
 
-        if (ret)
-                ASUSEvtlog("[PM] suspend: exit suspend, ret = %d \n",ret);      //Ledger
+	if (ret)
+		ASUSEvtlog("[PM] suspend: exit suspend, ret = %d \n",ret);      //Ledger
 
 	if (ts_exit.tv_sec - ts_entry.tv_sec <= 1) {
 		++suspend_short_count;

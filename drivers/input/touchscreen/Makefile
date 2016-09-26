@@ -12,8 +12,10 @@ obj-$(CONFIG_TOUCHSCREEN_AD7879)	+= ad7879.o
 obj-$(CONFIG_TOUCHSCREEN_AD7879_I2C)	+= ad7879-i2c.o
 obj-$(CONFIG_TOUCHSCREEN_AD7879_SPI)	+= ad7879-spi.o
 obj-$(CONFIG_TOUCHSCREEN_ADS7846)	+= ads7846.o
+#ASUS_BSP +++ Jessy
 #obj-$(CONFIG_TOUCHSCREEN_ATMEL_MAXTOUCH)	+= atmel_maxtouch.o
 #obj-$(CONFIG_TOUCHSCREEN_ATMEL_MXT)	+= atmel_mxt_ts.o
+#ASUS_BSP --- Jessy
 obj-$(CONFIG_TOUCHSCREEN_ATMEL_TSADCC)	+= atmel_tsadcc.o
 obj-$(CONFIG_TOUCHSCREEN_AUO_PIXCIR)	+= auo-pixcir-ts.o
 obj-$(CONFIG_TOUCHSCREEN_BITSY)		+= h3600_ts_input.o
@@ -79,10 +81,16 @@ obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_MSM_LEGACY)		+= msm_touch.o
 obj-$(CONFIG_TOUCHSCREEN_CY8C_TS)	+= cy8c_ts.o
 obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C_QC)       += cyttsp-i2c-qc.o
-#ASUS_BSP Deeo ++
+#ASUS_BSP +++ Jessy: Novatek A80 touch
 obj-$(CONFIG_TOUCHSCREEN_NOVATEK_NT11003) += nt11003_10p.o
-#ASUS_BSP Deeo --
-#ASUS_BSP Desmond++
+#ASUS_BSP --- Jessy: Novatek A80 touch
+#ASUS_BSP +++ Jessy: add for pad touch
 obj-$(CONFIG_TOUCHSCREEN_SIS_I2C) += sis_i2c.o
-obj-$(CONFIG_ATMEL_MXT_PAD_TS) += atmel_mxt_pad_ts.o
-#ASUS_BSP Desmond--
+#ASUS_BSP --- Jessy: add for pad touch
+obj-$(CONFIG_TOUCHSCREEN_LGE_COMMON)	+= lge_touch_core.o
+obj-$(CONFIG_TOUCHSCREEN_LGE_SYNAPTICS) += touch_synaptics.o
+obj-$(CONFIG_TOUCHSCREEN_LGE_SYNAPTICS) += touch_synaptics_ds4_fw_upgrade.o
+obj-$(CONFIG_TOUCHSCREEN_FT5X06)	+= ft5x06_ts.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)		+= synaptics_i2c_rmi4.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI4_DEV)	+= synaptics_rmi_dev.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE) 	+= synaptics_fw_update.o

@@ -19,11 +19,13 @@ enum MICROP_INPUT{
         IN_NO_USE_4=13,
         IN_TS_ID=14,
         IN_CAP_RPOX_INT_R=15,
+#ifdef CONFIG_EEPROM_NUVOTON_A80
         IN_TCA6408A_INT=16,   // only for  P05
         IN_HS_HOOK_DET_R=17,   // only for  P05
         IN_JACK_IN_DET_R=18,   // only for  P05
         IN_PEN_DET=19,
         IN_PEN_IRQ=20,
+#endif
 };
 
 
@@ -45,12 +47,13 @@ enum MICROP_INTR_MASK{
         INTR_EN_COMPASS_RDY     =    0x1<<13,
         INTR_EN_RESERVED_2        =    0x1<<14,
         INTR_EN_CAP_RPOX_INT    =   0x1<<15,
+#ifdef CONFIG_EEPROM_NUVOTON_A80
         INTR_EN_TCA6408A_INT    =   0x1<<16,    // only for  P05
         INTR_EN_HS_HOOK_DET    =   0x1<<17,     // only for  P05
         INTR_EN_JACK_IN_DET    =   0x1<<18,     // only for  P05
         INTR_EN_PEN_DET		=	0x1<<19,
         INTR_EN_PEN_IRQ		=	0x1<<20,
-
+#endif
 };
 
 
@@ -77,12 +80,14 @@ enum MICROP_INTR_STATUS{
         INTR_STA_IND_RSTS_WDT=19,        
         INTR_STA_POWER_ON=20,
         INTR_STA_SLEEP_REMINDER=25,
+#ifdef CONFIG_EEPROM_NUVOTON_A80
         INTR_STA_JACK_IN_DET=26,                
         INTR_STA_HS_HOOK_DET=27,        
         INTR_STA_TCA6408A_INT=28,
         INTR_STA_PEN_DET=29,
         INTR_STA_PEN_IRQ=30,
         INTR_STA_BAT_STATUS_CHANGE=31,
+#endif
 };
 
 
@@ -111,11 +116,13 @@ enum MICROP_OUTPUT{
         OUT_uP_VBUS_EN=17,
         OUT_uP_TS_PWR_EN=18, //ER
         OUT_uP_MHL_5V_EN=19, //ER
+#ifdef CONFIG_EEPROM_NUVOTON_A80
         OUT_uP_CAP_PWR_EN=20, // only for  P05
         OUT_uP_PEN_PWR_EN=21, // only for  P05        
         OUT_uP_LED_O=22, // only for  P05        
         OUT_uP_LED_G=23, // only for  P05                
         OUT_uP_MIC_SEL=24, // only for  P05                        
+#endif
         OUT_uP_SIZE,
 };
 

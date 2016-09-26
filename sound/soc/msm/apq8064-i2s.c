@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1487,8 +1487,8 @@ static void *def_tabla_mbhc_cal(void)
 	S(v_btn_press_delta_cic, 50);
 #undef S
 	btn_cfg = TABLA_MBHC_CAL_BTN_DET_PTR(tabla_cal);
-//	btn_low = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_LOW);
-//	btn_high = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_HIGH);
+//	btn_low = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_LOW); //AllenCH_Lin@asus.com +++
+//	btn_high = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_V_BTN_HIGH); //AllenCH_Lin@asus.com +++
 	btn_low[0] = -50;
 	btn_high[0] = 10;
 	btn_low[1] = 11;
@@ -1505,19 +1505,18 @@ static void *def_tabla_mbhc_cal(void)
 	btn_high[6] = 163;
 	btn_low[7] = 164;
 	btn_high[7] = 250;
-//	n_ready = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_READY);
+//	n_ready = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_READY); //AllenCH_Lin@asus.com +++
 	n_ready[0] = 48;
 	n_ready[1] = 38;
-//	n_cic = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_CIC);
+//	n_cic = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_N_CIC); //AllenCH_Lin@asus.com +++
 	n_cic[0] = 60;
 	n_cic[1] = 47;
-//	gain = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_GAIN);
+//	gain = tabla_mbhc_cal_btn_det_mp(btn_cfg, TABLA_BTN_DET_GAIN); //AllenCH_Lin@asus.com +++
 	gain[0] = 11;
 	gain[1] = 9;
 
 	return tabla_cal;
 }
-
 static int msm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
@@ -2799,8 +2798,7 @@ module_init(msm_audio_init);
 
 static void __exit msm_audio_exit(void)
 {
-	if (!(cpu_is_apq8064() || cpu_is_apq8064ab()) ||
-				 (socinfo_get_id() == 130)) {
+	if (!soc_class_is_apq8064() || socinfo_get_id() == 130) {
 		pr_err("%s: Not the right machine type\n", __func__);
 		return ;
 	}

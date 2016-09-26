@@ -665,6 +665,7 @@ struct exif_cfg {
       uint32_t exp_time_denom;  // Denominator
       uint16_t flash_mode;
       uint32_t edge;
+      unsigned char info_3a[24];
 };
 //ASUS_BSP --- LiJen "[A80][Camera][NA][Others]implement EXIF in kernel"
 
@@ -1806,6 +1807,20 @@ enum v4l2_mpeg_vidc_video_h263_level {
 	V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_5_0 = 5,
 	V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_6_0 = 6,
 	V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_7_0 = 7,
+};
+
+#define V4L2_CID_MPEG_VIDC_VIDEO_H264_AU_DELIMITER \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 22)
+enum v4l2_mpeg_vidc_video_h264_au_delimiter {
+	V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_DISABLED = 0,
+	V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_ENABLED = 1
+};
+
+#define V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 23)
+enum v4l2_mpeg_vidc_video_h264_vui_timing_info {
+	V4L2_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO_DISABLED = 0,
+	V4L2_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO_ENABLED = 1
 };
 
 /*  Camera class control IDs */

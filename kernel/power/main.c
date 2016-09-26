@@ -224,6 +224,8 @@ power_attr(pm_test);
 #include <linux/fastboot.h>
 #include <linux/wakelock.h>
 
+DEFINE_MUTEX(fastboot_mutex);
+
 const char const fastboot_states[]="fastboot";
 static bool gb_in_fastboot_mode= false;
 static bool gb_ready_to_wake_up= false;
@@ -250,11 +252,16 @@ void ready_to_wake_up_in_fastboot(void)
 }
 void ready_to_wake_up_and_send_power_key_press_event_in_fastboot(void)
 {
-    ready_to_wake_up_in_fastboot();
+	mutex_lock(&fastboot_mutex);
 
-    send_fake_power_key_event(true);
+	if ( gb_ready_to_wake_up == false )	{
+		ready_to_wake_up_in_fastboot();
 
-    send_fake_power_key_event(false);
+		send_fake_power_key_event(true);
+
+		send_fake_power_key_event(false);
+	}
+	mutex_unlock(&fastboot_mutex);
 }
 
 static ssize_t fastboot_wakeup_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -295,7 +302,7 @@ static ssize_t fastboot_store(struct kobject *kobj, struct kobj_attribute *attr,
 	p = memchr(buf, '\n', n);
 	len = p ? p - buf : n;
 
-	mutex_lock(&pm_mutex);
+	mutex_lock(&fastboot_mutex);
 
        if(!strncmp(buf, "0", len)){
 
@@ -310,7 +317,7 @@ static ssize_t fastboot_store(struct kobject *kobj, struct kobj_attribute *attr,
 
        error = 0;
 
-	mutex_unlock(&pm_mutex);
+	mutex_unlock(&fastboot_mutex);
 
 	return error ? error : n;
 }

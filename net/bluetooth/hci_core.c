@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012 Code Aurora Forum.  All rights reserved.
+   Copyright (c) 2000-2001, 2010-2012 The Linux Foundation.  All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -999,7 +999,6 @@ static void hci_power_on(struct work_struct *work)
 	int err;
 
 	BT_DBG("%s", hdev->name);
-	ASUSEvtlog("[BT]POWERON\n");
 
 	err = hci_dev_open(hdev->id);
 	if (err && err != -EALREADY)
@@ -1020,7 +1019,6 @@ static void hci_power_off(struct work_struct *work)
 	struct hci_dev *hdev = container_of(work, struct hci_dev, power_off);
 
 	BT_DBG("%s", hdev->name);
-	ASUSEvtlog("[BT]POWEROFF\n");
 
 	hci_dev_close(hdev->id);
 }

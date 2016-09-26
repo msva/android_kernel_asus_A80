@@ -358,6 +358,10 @@ static int MhlI2c_suspend(struct i2c_client *client, pm_message_t mesg)
 		disable_irq(gMhlDevice.pI2cClient->irq);
 	}
 #endif	
+
+//ASUS_BSP+++: mhl disable irq while mhl_suspend	
+	MHL_disable_irq();
+//ASUS_BSP---: mhl disable irq while mhl_suspend
 	g_mhl_suspend_flag = 1;
 
 	printk("[MHL] MhlI2c_suspend---\n");	
@@ -392,6 +396,10 @@ static int MhlI2c_resume(struct i2c_client *client)
 //		enable_irq(gMhlDevice.pI2cClient->irq);
 //	}
 #endif	
+//ASUS_BSP+++: mhl enable irq while mhl_resume	
+	MHL_enable_irq();
+//ASUS_BSP---: mhl enable irq while mhl_resume
+
 	g_mhl_suspend_flag = 0;
 	   
 	printk("[MHL] MhlI2c_resume ----\n");
@@ -1033,7 +1041,7 @@ SiiPlatformStatus_t SiiMasterI2cTransfer(deviceAddrTypes_t busIndex,
     		return siiStatus;
     	}
 
-	/*if (qup_check_suspended_flag(APQ_8064_GSBI4_QUP_I2C_BUS_ID) == 1)
+	if (qup_check_suspended_flag(APQ_8064_GSBI4_QUP_I2C_BUS_ID) == 1)
 	{
 		if (g_mhl_i2c_not_ready_count > MAX_MHL_I2C_BUS_NOT_READY)
 		{
@@ -1060,9 +1068,9 @@ SiiPlatformStatus_t SiiMasterI2cTransfer(deviceAddrTypes_t busIndex,
 		return siiStatus;
 	}
 	else
-	{*///Wei_Lai
+	{
 		g_mhl_i2c_not_ready_count = 0;
-	//}Wei_Lai
+	}
 	
 //	printk("[MHL] i2c_transfer (0x%x) (0x%x)+++ \n", pMsgs->addr, *pMsgs->pBuf); 
     	i2cStatus = i2c_transfer(gMhlDevice.pI2cClient->adapter, i2cMsg, msgCount);

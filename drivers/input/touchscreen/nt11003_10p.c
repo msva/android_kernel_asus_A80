@@ -33,7 +33,7 @@
 #include <linux/slab.h>
 
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
+//#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 
 #include <linux/wait.h>
 #include <linux/wakelock.h>
@@ -103,8 +103,11 @@ static int tp_pad_attach =0;
 //ASUS_BSP : Add for wake_lock when update firmware ---
 
 //ASUS_BSP : Add report location +++
-static int REPORT_COUNT = 25;
+#define REPORT_LOCATION 1
+#if REPORT_LOCATION
+static int REPORT_COUNT = 100;
 static int finger_count[MAX_FINGER_NUM];
+#endif
 //ASUS_BSP : Add report location ---
 
 #define MAX_LEN		200 //ASUS_BSP Deeo : add for creating virtual_key_maps ++
@@ -208,12 +211,13 @@ static ssize_t led_icon_store(struct device *dev, struct device_attribute *attr,
 
 	if(mv_led_level > LED_MAX_LEVEL)
 		mv_led_level = LED_MAX_LEVEL;
-
-    duty_time = -1;
-    
-	pwm_config(pwmb, (duty_table[LEVEL_TO_TABLE(mv_led_level)]),
-                      duty_table[LEVEL_TO_TABLE(mv_led_level) + 1]);
 	
+	//for KK key_led
+	if(mv_led_level < 80)
+		mv_led_level = 80;
+	
+    duty_time = -1;
+
 	return count;
 }
 
@@ -913,6 +917,8 @@ static void detach_nv_padstation_work(struct work_struct *work)
 	tp_pad_attach = 0;
 
 	msleep(200); //ASUS_BSP Deeo: wait soft calibration finish
+	usb_state = 0;
+	printk("[Touch_N] Force switch USB state to NO POWER %d\n",usb_state);
 	nv_touch_mode(usb_state);	// ASUS_BSP Deeo: Add for resume to get USB state
 
 	printk("[Touch_N] detach_padstation_work()--\n");
@@ -1111,7 +1117,8 @@ static ssize_t ChipID(struct device *dev, struct device_attribute *devattr,char 
 	CTP_I2C_READ(ts->client, 0x01, I2C_Buf, 2);
 	sprintf(tmpstr,"0x%x\n",I2C_Buf[1] );
 */
-	get_chipid();
+	get_chipid();
+
 	sprintf(tmpstr,"0x%x\n",chipid);
 	strncat(buf,tmpstr,strlen(tmpstr));
 
@@ -1847,6 +1854,12 @@ static void nt11003_ts_work_func(struct work_struct *work)
 			
 			queue_delayed_work(wq_led_icon, &icon_led_off_w, msecs_to_jiffies(user_duration));
 			//ASUS_BSP HANS: add for led icon ---
+#if REPORT_LOCATION			
+			if(finger_count[index] != 0)
+				printk("[Touch_N][%d]Touch up!! \n",index);
+
+			finger_count[index] = 0;
+#endif            
 		} 
 		else 
 		{
@@ -1858,10 +1871,13 @@ static void nt11003_ts_work_func(struct work_struct *work)
 			if (input_y < 0)	input_y = 0;
 
 			// ASUS_BSP : Add report location +++
+#if REPORT_LOCATION			
 			if (finger_count[index]%REPORT_COUNT == 0)
-				A80_DP(DEBUG_MV_REPORT,"[Touch_N][%d][x,y,w][ %d, %d, %d]\n",index,input_x,input_y,input_w);
+				//A80_DP(DEBUG_MV_REPORT,"[Touch_N][%d][x,y,w][ %d, %d, %d]\n",index,input_x,input_y,input_w);
+				printk("[Touch_N][%d][x,y,w][ %d, %d, %d]-[%d] \n",index,input_x,input_y,input_w,finger_count[index]);
 
 			finger_count[index]++;
+#endif            
 			// ASUS_BSP : Add report location ---
 
 			//ASUS_BSP HANS: add for led icon +++
@@ -1929,6 +1945,7 @@ static irqreturn_t nt11003_ts_irq_handler(int irq, void *dev_id)
 //ASUS_BSP Deeo : add for On/Off touch in P05 +++
 static int touch_mp_nv_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
 	printk("[Touch_N] Mircop event %d\n",(unsigned int)event);
 	switch (event) {
 
@@ -1939,7 +1956,7 @@ static int touch_mp_nv_event(struct notifier_block *this, unsigned long event, v
 				printk("[Touch_N] cancel last detach_work\n");
 			}
 			queue_work(g_nv_wq_attach_detach, &g_mp_attach_work_nv);
-			return NOTIFY_DONE;
+			break;
 		}
 		case P01_REMOVE:{
 
@@ -1948,12 +1965,14 @@ static int touch_mp_nv_event(struct notifier_block *this, unsigned long event, v
 				printk("[Touch_N] cancel last detach_work\n");
 			}
 			queue_delayed_work(g_nv_wq_attach_detach, &g_mp_detach_work_nv, msecs_to_jiffies(2000));
-			return NOTIFY_DONE;
+			break;
 		}
 
 	default:
-		return NOTIFY_DONE;
+		break;
     }
+    printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+    return NOTIFY_DONE;
 }
 
 static struct notifier_block touch_mp_notifier_nv = {
@@ -2217,7 +2236,7 @@ static int nt11003_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	wake_lock_init(&touch_wake_lock, WAKE_LOCK_SUSPEND, "touch_wake_lock");
 
 	register_microp_notifier(&touch_mp_notifier_nv);
-	notify_register_microp_notifier(&touch_mp_notifier_nv, "nt11003_10p"); //ASUS_BSP Lenter+
+//	notify_register_microp_notifier(&touch_mp_notifier_nv, "nt11003_10p"); //ASUS_BSP Lenter+
 	//ASUS_BSP Deeo : add for On/Off touch in P05 ---
 
 	return 0;
@@ -2330,7 +2349,7 @@ static void __exit nt11003_ts_exit(void)
 
 	destroy_workqueue(g_nv_wq_attach_detach);
 	unregister_microp_notifier(&touch_mp_notifier_nv);
-	notify_unregister_microp_notifier(&touch_mp_notifier_nv, "nt11003_10p"); //ASUS_BSP Lenter+
+//	notify_unregister_microp_notifier(&touch_mp_notifier_nv, "nt11003_10p"); //ASUS_BSP Lenter+
 
 	i2c_del_driver(&nt11003_ts_driver);
 	if (nt11003_wq)

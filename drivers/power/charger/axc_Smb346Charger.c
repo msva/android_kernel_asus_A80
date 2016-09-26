@@ -21,7 +21,6 @@
 #include <linux/mfd/pm8xxx/pm8921-charger.h>
 #ifdef CONFIG_EEPROM_NUVOTON
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #include <linux/microp_api.h>
 #endif /*CONFIG_EEPROM_NUVOTON */
 #include <linux/platform_device.h>//ASUS_BSP Eason_Chang 1120 porting
@@ -627,16 +626,17 @@ static void charger_in_out_debounce_time_expired(unsigned long _data)
 
     wake_lock_timeout(&this->cable_in_out_wakelock, 3 * HZ);
 
-    //ASUS_BSP +++ Victor "suspend for fastboot mode"
+//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
 #ifdef CONFIG_FASTBOOT
-      if(is_fastboot_enable()){
-
+      if(is_fastboot_enable() && !AX_MicroP_IsP01Connected())
+      {
         if(online){
+            printk("[FastBoot]Detect cable in\n");	
             ready_to_wake_up_and_send_power_key_press_event_in_fastboot();
         }
       }
 #endif //#ifdef CONFIG_FASTBOOT
-    //ASUS_BSP --- Victor "suspend for fastboot mode"        
+//ASUS_BSP ---
 
 #if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
     g_chg_present = online;
@@ -1251,9 +1251,9 @@ PadDrawLimitCurrent_Type JudgePadThermalDrawLimitCurrent(void)
 		return PadDraw700;
 	}else if(1 == g_thermal_limit)
 	{
-		return PadDraw700;
+		return PadDraw900;
 	}else
-		return PadDraw700;
+		return PadDraw900;
 }
 void setChgLimitThermalRuleDrawCurrent(void)
 {
@@ -1267,8 +1267,9 @@ void setChgLimitThermalRuleDrawCurrent(void)
 	printk("[BAT][CHG][P03]:Thermal:%d,Rule:%d,Min:%d\n",PadThermalDraw_limit,PadRuleDraw_limit,MinThermalRule_limit);
 
 	disableAICL();
-	
-	if(PadDraw900==PadRuleDraw_limit)
+
+	//ForcePowerBankMode draw 900, but  still compare thermal result unless PhoneCap<=8
+	if( (PadDraw900==PadRuleDraw_limit)&&(smb346_getCapacity()<= 8))
 	{
 		limitSmb346chg900();
 		printk("[BAT][CHG][P03]:draw 900\n");
@@ -1287,6 +1288,10 @@ void setChgLimitThermalRuleDrawCurrent(void)
 				limitSmb346chg700();
 				printk("[BAT][CHG][P03]:draw 700\n");
 				break;
+			case PadDraw900:
+				limitSmb346chg900();
+				printk("[BAT][CHG][P03]:draw 900\n");
+				break;				
 			default:
 				limitSmb346chg700();
 				printk("[BAT][CHG][P03]:draw 700\n");
@@ -1332,7 +1337,7 @@ void setChgDrawCurrent(void)
 		disableAICL();
 		limitSmb346chg700();
 		enableAICL();
-		printk("[BAT][CHG]:limit charging current 500mA\n");
+		printk("[BAT][CHG]:limit charging current 700mA\n");
 
 	}else if(1 == g_thermal_limit){
 		disableAICL();
@@ -1397,7 +1402,7 @@ void setChgDrawACTypeCurrent_withCheckAICL(void)
 		disableAICL();
 		limitSmb346chg700();
 		enableAICL();
-		printk("[BAT][CHG]:limit charging current 900mA\n");
+		printk("[BAT][CHG]:limit charging current 700mA\n");
 
 	}else if( 1 == g_thermal_limit){
 		disableAICL();
@@ -1506,8 +1511,8 @@ static void AXC_Smb346_Charger_SetCharger(AXI_Charger *apCharger , AXE_Charger_T
                                             msParentCharger);
     
 //ASUS_BSP HANS: temporary way to notify usb state +++
-    if (g_A68_hwID > A80_EVB)
-        nv_touch_mode(aeChargerType);
+//    if (g_A68_hwID > A80_EVB)
+//        nv_touch_mode(aeChargerType);
 //ASUS_BSP HANS: temporary way to notify usb state ---
     
 	if(false == this->mbInited)
@@ -2106,13 +2111,21 @@ static int smb346_microp_event_handler(
 	unsigned long event,
 	void *ptr)
 {
+    printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
     if(gpCharger == NULL){
-
+		printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
         return NOTIFY_DONE;
     }
 
 	switch (event) {
 	case P01_ADD:
+#ifdef CONFIG_FASTBOOT
+		if(is_fastboot_enable())
+		{
+			printk("[FastBoot]Detect PAD add\n");
+			ready_to_wake_up_and_send_power_key_press_event_in_fastboot();
+		}
+#endif //#ifdef CONFIG_FASTBOOT
             gpCharger->msParentCharger.SetCharger(&gpCharger->msParentCharger,NORMAL_CURRENT_CHARGER_TYPE);           
 		break;	
 	case P01_REMOVE: // means P01 removed
@@ -2121,6 +2134,15 @@ static int smb346_microp_event_handler(
 	case P01_BATTERY_POWER_BAD: // P01 battery low
 		break;
 	case P01_AC_USB_IN:
+//ASUS_BSP +++ Peter_lu "suspend for fastboot mode"
+#ifdef CONFIG_FASTBOOT
+		if(is_fastboot_enable())
+		{
+			printk("[FastBoot]Detect PAD cable in\n");
+			ready_to_wake_up_and_send_power_key_press_event_in_fastboot();
+		}
+#endif //#ifdef CONFIG_FASTBOOT
+//ASUS_BSP ---
 		break;
 	case P01_AC_USB_OUT:
 		break;
@@ -2137,7 +2159,7 @@ static int smb346_microp_event_handler(
 	default:
              break;
 	}
-
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
 	return NOTIFY_DONE;
 }
 #endif /* CONFIG_EEPROM_NUVOTON */
@@ -2281,7 +2303,6 @@ static int smb346_probe(struct i2c_client *client, const struct i2c_device_id *d
 
 #ifdef CONFIG_EEPROM_NUVOTON
         err = register_microp_notifier(&smb346_microp_notifier);
-        notify_register_microp_notifier(&smb346_microp_notifier, "axc_smb346charger"); //ASUS_BSP Lenter+
 #endif /* CONFIG_EEPROM_NUVOTON */
 
     err = power_supply_register(&client->dev, &usb_psy);

@@ -154,13 +154,14 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 		/* this is a WARN_ON rather than BUG/BUG_ON */
 		printk(KERN_WARNING "------------[ cut here ]------------\n");
 
-		if (file)
+		if (file) {
 			printk(KERN_WARNING "WARNING: at %s:%u\n",
 			       file, line);
-		else
+		} else {
 			printk(KERN_WARNING "WARNING: at %p "
 			       "[verbose debug info unavailable]\n",
 			       (void *)bugaddr);
+		}
 
 		print_modules();
 		show_regs(regs);

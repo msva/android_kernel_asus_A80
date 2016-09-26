@@ -20,6 +20,14 @@
 #include <linux/mmc/host.h>
 #include "queue.h"
 
+//ASUS_BSP +++ Shunmin "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+#include "../core/mmc_ops.h"
+#include "../core/core.h"
+#include <linux/delay.h>
+#endif
+//ASUS_BSP --- Shunmin "mmc suspend stress test"
+
 #define MMC_QUEUE_BOUNCESZ	65536
 
 #define MMC_QUEUE_SUSPENDED	(1 << 0)
@@ -54,6 +62,42 @@ static int mmc_prep_request(struct request_queue *q, struct request *req)
 	return BLKPREP_OK;
 }
 
+//ASUS_BSP +++ Shunmin "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+static int mmc_run_set_suspendtest(struct mmc_queue *mq)
+{
+	int err;
+
+	if (mq->card->host->suspend_datasz) {
+		 if (mq->card->sectors_changed < mq->card->host->suspend_datasz*2)	// 1 sector = 512 byte
+			return 0;
+	} else {
+		mq->card->host->suspend_datasz = 100*1024;	//default value: 100MB
+		return 0;
+	}
+
+	mq->card->sectors_changed = 0;
+	mq->card->host->suspendcnt++;
+
+	err = mmc_suspend_host(mq->card->host);
+	if (err < 0)
+		pr_err("%s: %s: suspend host failed: %d\n", mmc_hostname(mq->card->host),
+		       __func__, err);
+
+	msleep(1000);
+
+	err = mmc_resume_host(mq->card->host);
+	if (err < 0)
+		pr_err("%s: %s: resume host failed: %d\n", mmc_hostname(mq->card->host),
+		       __func__, err);
+
+	msleep(1000);
+
+	return 0;
+}
+#endif
+//ASUS_BSP --- Shunmin "mmc suspend stress test"
+
 static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
@@ -75,17 +119,6 @@ static int mmc_queue_thread(void *d)
 		spin_unlock_irq(q->queue_lock);
 
 		if (req || mq->mqrq_prev->req) {
-			/*
-			 * If this is the first request, BKOPs might be in
-			 * progress and needs to be stopped before issuing the
-			 * request
-			 */
-			if (card->ext_csd.bkops_en &&
-			    card->bkops_info.started_delayed_bkops) {
-				card->bkops_info.started_delayed_bkops = false;
-				mmc_stop_bkops(card);
-			}
-
 			set_current_state(TASK_RUNNING);
 			mq->issue_fn(mq, req);
 		} else {
@@ -93,6 +126,12 @@ static int mmc_queue_thread(void *d)
 				set_current_state(TASK_RUNNING);
 				break;
 			}
+//ASUS_BSP +++ Shunmin "mmc suspend stress test"
+#ifdef CONFIG_MMC_SUSPENDTEST
+			if (mq->card->host->suspendtest)
+				mmc_run_set_suspendtest(mq);
+#endif
+//ASUS_BSP --- Shunmin "mmc suspend stress test"
 			mmc_start_delayed_bkops(card);
 			up(&mq->thread_sem);
 			schedule();
@@ -375,10 +414,11 @@ EXPORT_SYMBOL(mmc_cleanup_queue);
  * complete any outstanding requests.  This ensures that we
  * won't suspend while a request is being processed.
  */
-void mmc_queue_suspend(struct mmc_queue *mq)
+int mmc_queue_suspend(struct mmc_queue *mq)
 {
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
+	int rc = 0;
 
 	if (!(mq->flags & MMC_QUEUE_SUSPENDED)) {
 		mq->flags |= MMC_QUEUE_SUSPENDED;
@@ -387,8 +427,20 @@ void mmc_queue_suspend(struct mmc_queue *mq)
 		blk_stop_queue(q);
 		spin_unlock_irqrestore(q->queue_lock, flags);
 
-		down(&mq->thread_sem);
+		rc = down_trylock(&mq->thread_sem);
+		if (rc) {
+			/*
+			 * Failed to take the lock so better to abort the
+			 * suspend because mmcqd thread is processing requests.
+			 */
+			mq->flags &= ~MMC_QUEUE_SUSPENDED;
+			spin_lock_irqsave(q->queue_lock, flags);
+			blk_start_queue(q);
+			spin_unlock_irqrestore(q->queue_lock, flags);
+			rc = -EBUSY;
+		}
 	}
+	return rc;
 }
 
 /**

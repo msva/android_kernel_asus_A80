@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -620,6 +620,12 @@ static void mddi_reg_write(int ndx, uint32 off, uint32 data)
 	else
 		base = (char *)msm_pmdh_base;
 
+	if (base == NULL) {
+		printk(KERN_INFO "%s: base offset is not set properly. \
+			Please check if MDDI enables correctly\n", __func__);
+		return;
+	}
+
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	writel(data, base + off);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -642,6 +648,12 @@ static int mddi_reg_read(int ndx)
 		base = msm_emdh_base;
 	else
 		base = msm_pmdh_base;
+
+	if (base == NULL) {
+		printk(KERN_INFO "%s: base offset is not set properly. \
+			Please check if MDDI enables correctly\n", __func__);
+		return -EFAULT;
+	}
 
 	reg = mddi_regs_list;
 	bp = debug_buf;
@@ -1188,6 +1200,63 @@ static const struct file_operations hdmi_off_fops = {
 };
 
 
+static ssize_t hdmi_audio_switch_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	uint32 aud_s, cnt;
+
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	debug_buf[count] = 0;	/* end of string */
+
+	cnt = sscanf(debug_buf, "%x", &aud_s);
+
+	printk(KERN_INFO "%s: switch_set_state from %d to %d\n", __func__, external_common_state->audio_sdev.state, aud_s);
+	switch_set_state(&external_common_state->audio_sdev, aud_s);
+
+	return count;
+}
+
+static ssize_t hdmi_audio_switch_read(
+	struct file *file,
+	char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int len = 0;
+
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	len = snprintf(debug_buf, sizeof(debug_buf), "%d\n",
+				external_common_state->audio_sdev.state);
+	if (len < 0)
+		return 0;
+
+	if (copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+
+	return len;
+}
+
+static const struct file_operations hdmi_audio_switch_fops = {
+	.open = hdmi_open,
+	.release = hdmi_release,
+	.read = hdmi_audio_switch_read,
+	.write = hdmi_audio_switch_write,
+};
+
+
 static ssize_t hdmi_reg_write(
 	struct file *file,
 	const char __user *buff,
@@ -1293,31 +1362,6 @@ static const struct file_operations hdmi_reg_fops = {
  * debugfs
  *
  */
-
-//ASUS BSP Joy +++ Camera skip wait4dmap
-int Camera_skip_wait4dmap_enable = 1;
-static int Camera_skip_wait4dmap_set(void *data, u64 val)
-{
-	if (val == 1)
-		Camera_skip_wait4dmap_enable = 1;
-	else
-		Camera_skip_wait4dmap_enable = 0;
-		
-	return 0;
-}
-
-static int Camera_skip_wait4dmap_get(void *data, u64 *val)
-{
-	if (Camera_skip_wait4dmap_enable == 1)
-	    *val = 1;
-	else
-	    *val = 0;
-	
-	return 0;
-}
-//ASUS BSP Joy --- Camera skip wait4dmap
-
-DEFINE_SIMPLE_ATTRIBUTE(Camera_skip_wait4dmap, Camera_skip_wait4dmap_get, Camera_skip_wait4dmap_set, "%llu\n");
 
 int mdp_debugfs_init(void)
 {
@@ -1442,12 +1486,14 @@ int mdp_debugfs_init(void)
 			__FILE__, __LINE__);
 		return -ENOENT;
 	}
+
+	if (debugfs_create_file("audio_switch", 0644, dent, 0, &hdmi_audio_switch_fops)
+			== NULL) {
+		printk(KERN_ERR "%s(%d): debugfs_create_file: 'audio_switch' fail\n",
+			__FILE__, __LINE__);
+		return -ENOENT;
+	}
 #endif
-//ASUS BSP Joy +++ Camera skip wait4dmap
-	dent = debugfs_create_dir("Camera_skip_wait4dmap", 0);
-	if (IS_ERR(dent))
-		return PTR_ERR(dent);
-      debugfs_create_file("Camera_skip_wait4dmap", 0644, dent, NULL, &Camera_skip_wait4dmap);
-//ASUS BSP Joy --- Camera skip wait4dmap      
+
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,8 +16,7 @@
 #include <mach/msm_iomap.h>
 #include "external_common.h"
 #include <linux/wakelock.h>//Mickey+++
-//joe enable hdmi demsg
-//#define PORT_DEBUG
+/* #define PORT_DEBUG */
 
 #ifdef PORT_DEBUG
 const char *hdmi_msm_name(uint32 offset);
@@ -35,8 +34,7 @@ uint32 hdmi_inp(uint32 offset);
 #define HDMI_INP(offset)		inpdw(MSM_HDMI_BASE+(offset))
 #endif
 
-
-//Mickey+++, add for A68 DDS
+// ASUS_BSP +++ Tingyi "[A80][MyDP] Support Pad resolution"
 #define ASUS_FORCE_HDMI_P03_LOW     0
 #define ASUS_FORCE_HDMI_P03_HIGH    0
 #define ASUS_P03_STATUS_GPIO        36
@@ -46,17 +44,18 @@ enum {
     ASUS_P03_HIGH,
     ASUS_HDMI_DEBUG
 };
-//Mickey---
+// ASUS_BSP --- Tingyi "[A80][MyDP] Support Pad resolution"
 
 /*
  * Ref. HDMI 1.4a
  * Supplement-1 CEC Section 6, 7
  */
+#define CEC_MAX_OPERAND_SIZE 15
 struct hdmi_msm_cec_msg {
 	uint8 sender_id;
 	uint8 recvr_id;
 	uint8 opcode;
-	uint8 operand[15];
+	uint8 operand[CEC_MAX_OPERAND_SIZE];
 	uint8 frame_size;
 	uint8 retransmit;
 };
@@ -72,7 +71,8 @@ struct hdmi_msm_state_type {
 #endif
 	boolean full_auth_done;
 	boolean hpd_during_auth;
-	struct work_struct hpd_state_work;
+	//struct work_struct hpd_state_work;
+	struct delayed_work hpd_state_work;
 	struct completion ddc_sw_done;
 
 	bool hdcp_enable;
@@ -120,9 +120,11 @@ struct hdmi_msm_state_type {
 
 	struct external_common_state_type common;
 	boolean is_mhl_enabled;
-
-    struct wake_lock hpd_wake_lock; //Mickey+++
-    struct timer_list hpd_state_timer; //Mickey+++
+	struct completion hpd_event_processed;
+// ASUS_BSP +++ Tingyi "[A80][MyDP] Support Pad resolution"
+    struct wake_lock hpd_wake_lock;
+    struct timer_list hpd_state_timer;
+// ASUS_BSP --- Tingyi "[A80][MyDP] Support Pad resolution"
 };
 
 extern struct hdmi_msm_state_type *hdmi_msm_state;
@@ -136,7 +138,7 @@ void hdmi_phy_reset(void);
 void hdmi_msm_reset_core(void);
 void hdmi_msm_init_phy(int video_format);
 void hdmi_msm_powerdown_phy(void);
-void hdmi_frame_ctrl_cfg(const struct hdmi_disp_mode_timing_type *timing);
+void hdmi_frame_ctrl_cfg(const struct msm_hdmi_mode_timing_info *timing);
 void hdmi_msm_phy_status_poll(void);
 #endif
 

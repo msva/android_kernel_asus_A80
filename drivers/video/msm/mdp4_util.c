@@ -1,4 +1,5 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,21 +34,23 @@
 #include "msm_fb.h"
 #include "mdp4.h"
 
-//ASUS_BSP: Louis "restore argc lut" +++
+//ASUS_BSP +++ Jason Chang "restore argc lut"
 extern bool asus_padstation_exist_realtime(void);
 extern int g_restore_argc;
 struct mdp_pgc_lut_data g_phone_argc_lut_data, g_pad_argc_lut_data;
 
+static struct mdp_ar_gc_lut_data g_phone_argc_rdata[16];
+static struct mdp_ar_gc_lut_data g_phone_argc_bdata[16];
+static struct mdp_ar_gc_lut_data g_phone_argc_gdata[16];
+static struct mdp_ar_gc_lut_data g_pad_argc_rdata[16];
+static struct mdp_ar_gc_lut_data g_pad_argc_bdata[16];
+static struct mdp_ar_gc_lut_data g_pad_argc_gdata[16];
+//ASUS_BSP --- Jason Chang "restore argc lut"
 
-
-
-
-//ASUS_BSP: Louis "restore argc lut" ---
-
-//ASUS_BSP: Louis "restore csc intensity" +++
+//ASUS_BSP +++ Jason Chang "restore csc intensity"
 struct mdp_csc_cfg_data g_csc_cfg_data;
 extern int g_restore_csc;
-//ASUS_BSP: Louis "restore csc intensity" ---
+//ASUS_BSP --- Jason Chang "restore csc intensity"
 
 struct mdp4_statistic mdp4_stat;
 
@@ -215,13 +218,14 @@ void mdp4_sw_reset(ulong bits)
 
 	bits &= 0x1f;	/* 5 bits */
 	outpdw(MDP_BASE + 0x001c, bits);	/* MDP_SW_RESET */
+	wmb();
 
 	while (inpdw(MDP_BASE + 0x001c) & bits) /* self clear when complete */
 		;
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
-	MSM_FB_DEBUG("mdp4_sw_reset: 0x%x\n", (int)bits);
+	pr_debug("mdp4_sw_reset: 0x%x\n", (int)bits);
 }
 
 void mdp4_overlay_cfg(int overlayer, int blt_mode, int refresh, int direct_out)
@@ -407,6 +411,7 @@ void mdp4_hw_init(void)
 	int i;
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 
 #ifdef MDP4_ERROR
 	/*
@@ -468,7 +473,10 @@ void mdp4_hw_init(void)
 	clk_rate = mdp_get_core_clk();
 	mdp4_fetch_cfg(clk_rate);
 
-	mdp4_overlay_cfg_init();
+	if (mdp_rev >= MDP_REV_42) {
+		/* MDP_LAYERMIXER_IN_CFG_UPDATE_METHOD */
+		outpdw(MDP_BASE + 0x100fc, 0x01);
+	}
 
 	/* Mark hardware as initialized. Only revisions > v2.1 have a register
 	 * for tracking core reset status. */
@@ -477,6 +485,7 @@ void mdp4_hw_init(void)
 
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	mdp_clk_ctrl(0);
 }
 
 
@@ -510,8 +519,6 @@ void mdp4_clear_lcdc(void)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
 
-void dump_mdp4_overlay_perf_info(void);//Mickey+++
-
 irqreturn_t mdp4_isr(int irq, void *ptr)
 {
 	uint32 isr, mask, panel;
@@ -535,8 +542,7 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 	outpdw(MDP_INTR_CLEAR, isr);
 
 	if (isr & INTR_PRIMARY_INTF_UDERRUN) {
-        pr_debug("%s: UNDERRUN -- primary\n", __func__);
-        dump_mdp4_overlay_perf_info();//Mickey+++
+		pr_debug("%s: UNDERRUN -- primary\n", __func__);
 		mdp4_stat.intr_underrun_p++;
 		/* When underun occurs mdp clear the histogram registers
 		that are set before in hw_init so restore them back so
@@ -1403,6 +1409,14 @@ struct mdp_csc_cfg mdp_csc_convert[4] = {
 	},
 };
 
+void mdp4_vg_csc_restore(void)
+{
+        int i;
+
+        for (i = 0; i < CSC_MAX_BLOCKS; i++)
+                mdp4_csc_config(&csc_cfg_matrix[i]);
+}
+
 
 void mdp4_vg_csc_update(struct mdp_csc *p)
 {
@@ -2238,28 +2252,28 @@ void mdp4_csc_write(struct mdp_csc_cfg *data, uint32_t base)
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	off = (uint32_t *) ((uint32_t) base + CSC_MV_OFF);
-//ASUS_BSP: Louis "skip if we modify intensity" +++
+//ASUS_BSP: Jason Chang "skip if we modify intensity" +++
     if (data->flags != ASUS_CSC_FLAG_HSIC) {
 	    for (i = 0; i < 9; i++) {
 		    outpdw(off, data->csc_mv[i]);
 		    off++;
 	    }
     }
-//ASUS_BSP: Louis "skip if we modify intensity" ---
+//ASUS_BSP: Jason Chang "skip if we modify intensity" ---
 	off = (uint32_t *) ((uint32_t) base + CSC_BV_OFF);
 	for (i = 0; i < 3; i++) {
-//ASUS_BSP: Louis "skip if we modify intensity" +++
+//ASUS_BSP: Jason Chang "skip if we modify intensity" +++
         if (data->flags != ASUS_CSC_FLAG_HSIC) {
 		    outpdw(off, data->csc_pre_bv[i]);
         }
-//ASUS_BSP: Louis "skip if we modify intensity" ---
+//ASUS_BSP: Jason Chang "skip if we modify intensity" ---
 		outpdw((uint32_t *)((uint32_t)off + CSC_POST_OFF),
 					data->csc_post_bv[i]);
 		off++;
 	}
 
 	off = (uint32_t *) ((uint32_t) base + CSC_LV_OFF);
-//ASUS_BSP: Louis "skip if we modify intensity" +++
+//ASUS_BSP: Jason Chang "skip if we modify intensity" +++
     if (data->flags != ASUS_CSC_FLAG_HSIC) {
 	    for (i = 0; i < 6; i++) {
 		    outpdw(off, data->csc_pre_lv[i]);
@@ -2268,7 +2282,7 @@ void mdp4_csc_write(struct mdp_csc_cfg *data, uint32_t base)
 		    off++;
 	    }
     }
-//ASUS_BSP: Louis "skip if we modify intensity" ---
+//ASUS_BSP: Jason Chang "skip if we modify intensity" ---
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
 
@@ -2283,6 +2297,12 @@ int mdp4_csc_config(struct mdp_csc_cfg_data *config)
 				__func__, config->block);
 		return -EINVAL;
 	}
+
+     //ASUS_BSP : Jason Chang ++
+    if ((config->csc_data.flags == ASUS_CSC_FLAG_HSIC) && !g_restore_csc) {
+        memcpy(&g_csc_cfg_data, config, sizeof(struct mdp_csc_cfg_data));
+    }
+     //ASUS_BSP : Jason Chang --
 
 	mdp4_csc_write(&config->csc_data, (uint32_t) (MDP_BASE + base));
 
@@ -2332,7 +2352,7 @@ u32 mdp4_allocate_writeback_buf(struct msm_fb_data_type *mfd, u32 mix_num)
 		pr_info("%s:%d ion based allocation mfd->mem_hid 0x%x\n",
 			__func__, __LINE__, mfd->mem_hid);
 		buf->ihdl = ion_alloc(mfd->iclient, buffer_size, SZ_4K,
-			mfd->mem_hid);
+			mfd->mem_hid, 0);
 		if (!IS_ERR_OR_NULL(buf->ihdl)) {
 			if (mdp_iommu_split_domain) {
 				if (ion_map_iommu(mfd->iclient, buf->ihdl,
@@ -2711,32 +2731,31 @@ static int update_ar_gc_lut(uint32_t *offset, struct mdp_pgc_lut_data *lut_data)
 	uint32_t *c2_params_offset = (uint32_t *)((uint32_t)c2_offset
 						+MDP_GC_PARMS_OFFSET);
 
-
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	for (count = 0; count < MDP_AR_GC_MAX_STAGES; count++) {
-		if (count < lut_data->num_r_stages) {
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"+++
-            if (lut_data->r_data[count].x_start == 0xfff) {
+		if (count < lut_data->num_g_stages) {
+            //ASUS_BSP: Jason Chang "do not enable AR in 4095 case"+++
+            if (lut_data->g_data[count].x_start == 0xfff) {
                 outpdw(c0_offset+count,
-                    0xfff & lut_data->r_data[count].x_start);
+                    0xfff & lut_data->g_data[count].x_start);
             }
             else {
 			    outpdw(c0_offset+count,
-				    ((0xfff & lut_data->r_data[count].x_start)
+				    ((0xfff & lut_data->g_data[count].x_start)
 					    | 0x10000));
             }
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"---
+            //ASUS_BSP:Jason Chang "do not enable AR in 4095 case"---
 
 			outpdw(c0_params_offset+count,
-				((0x7fff & lut_data->r_data[count].slope)
+				((0x7fff & lut_data->g_data[count].slope)
 					| ((0xffff
-					& lut_data->r_data[count].offset)
+					& lut_data->g_data[count].offset)
 						<< 16)));
 		} else
 			outpdw(c0_offset+count, 0);
 
 		if (count < lut_data->num_b_stages) {
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"+++
+            //ASUS_BSP:Jason Chang "do not enable AR in 4095 case"+++
             if (lut_data->b_data[count].x_start == 0xfff) {
                 outpdw(c1_offset+count,
                     0xfff & lut_data->b_data[count].x_start);
@@ -2746,7 +2765,7 @@ static int update_ar_gc_lut(uint32_t *offset, struct mdp_pgc_lut_data *lut_data)
 				    ((0xfff & lut_data->b_data[count].x_start)
 					    | 0x10000));
             }
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"---
+            //ASUS_BSP:Jason Chang "do not enable AR in 4095 case"---
 
 			outpdw(c1_params_offset+count,
 				((0x7fff & lut_data->b_data[count].slope)
@@ -2756,23 +2775,23 @@ static int update_ar_gc_lut(uint32_t *offset, struct mdp_pgc_lut_data *lut_data)
 		} else
 			outpdw(c1_offset+count, 0);
 
-		if (count < lut_data->num_g_stages) {
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"+++
+		if (count < lut_data->num_r_stages) {
+            //ASUS_BSP:Jason Chang "do not enable AR in 4095 case"+++
             if (lut_data->g_data[count].x_start == 0xfff) {
                 outpdw(c2_offset+count,
-                    0xfff & lut_data->g_data[count].x_start);
+                    0xfff & lut_data->r_data[count].x_start);
             }
             else {
 			    outpdw(c2_offset+count,
-				    ((0xfff & lut_data->g_data[count].x_start)
+				    ((0xfff & lut_data->r_data[count].x_start)
 					    | 0x10000));
             }
-            //ASUS_BSP:Louis "do not enable AR in 4095 case"---
+            //ASUS_BSP:Jason Chang "do not enable AR in 4095 case"---
 
 			outpdw(c2_params_offset+count,
-				((0x7fff & lut_data->g_data[count].slope)
+				((0x7fff & lut_data->r_data[count].slope)
 				| ((0xffff
-				& lut_data->g_data[count].offset)
+				& lut_data->r_data[count].offset)
 					<< 16)));
 		} else
 			outpdw(c2_offset+count, 0);
@@ -2791,29 +2810,57 @@ static int mdp4_argc_process_write_req(uint32_t *offset,
 	struct mdp_ar_gc_lut_data g[MDP_AR_GC_MAX_STAGES];
 	struct mdp_ar_gc_lut_data b[MDP_AR_GC_MAX_STAGES];
 
-	ret = copy_from_user(&r[0], pgc_ptr->r_data,
-		pgc_ptr->num_r_stages * sizeof(struct mdp_ar_gc_lut_data));
+    if (!g_restore_argc)    //ASUS_BSP : Jason Chang  "do not check in restore case"
+    {
+	    ret = copy_from_user(&r[0], pgc_ptr->r_data,
+		    pgc_ptr->num_r_stages * sizeof(struct mdp_ar_gc_lut_data));
 
-	if (!ret) {
-		ret = copy_from_user(&g[0],
-				pgc_ptr->g_data,
-				pgc_ptr->num_g_stages
-				* sizeof(struct mdp_ar_gc_lut_data));
-		if (!ret)
-			ret = copy_from_user(&b[0],
-					pgc_ptr->b_data,
-					pgc_ptr->num_b_stages
-					* sizeof(struct mdp_ar_gc_lut_data));
-	}
+	    if (!ret) {
+		    ret = copy_from_user(&g[0],
+				    pgc_ptr->g_data,
+				    pgc_ptr->num_g_stages
+				    * sizeof(struct mdp_ar_gc_lut_data));
+		    if (!ret)
+			    ret = copy_from_user(&b[0],
+					    pgc_ptr->b_data,
+					    pgc_ptr->num_b_stages
+					    * sizeof(struct mdp_ar_gc_lut_data));
+	    }
 
-	if (ret)
-		return ret;
+	    if (ret)
+		    return ret;
 
-	pgc_ptr->r_data = &r[0];
-	pgc_ptr->g_data = &g[0];
-	pgc_ptr->b_data = &b[0];
+	    pgc_ptr->r_data = &r[0];
+	    pgc_ptr->g_data = &g[0];
+	    pgc_ptr->b_data = &b[0];
 
-	ret = update_ar_gc_lut(offset, pgc_ptr);
+        //ASUS_BSP : Jason Chang "store r,g,b lut data" +++
+        if (pgc_ptr->block == MDP_BLOCK_DMA_P) {
+            memcpy(g_phone_argc_rdata, r, sizeof(r));
+            memcpy(g_phone_argc_gdata, g, sizeof(g));
+            memcpy(g_phone_argc_bdata, b, sizeof(b));
+            g_phone_argc_lut_data.r_data = g_phone_argc_rdata;
+            g_phone_argc_lut_data.g_data = g_phone_argc_gdata;
+            g_phone_argc_lut_data.b_data = g_phone_argc_bdata;
+        }
+        else if (pgc_ptr->block == MDP_BLOCK_OVERLAY_1) {
+            memcpy(g_pad_argc_rdata, r, sizeof(r));
+            memcpy(g_pad_argc_gdata, g, sizeof(g));
+            memcpy(g_pad_argc_bdata, b, sizeof(b));
+            g_pad_argc_lut_data.r_data = g_pad_argc_rdata;
+            g_pad_argc_lut_data.g_data = g_pad_argc_gdata;
+            g_pad_argc_lut_data.b_data = g_pad_argc_bdata;
+        }
+        //ASUS_BSP : Jason Chang "store r,g,b lut data" ---
+    }
+
+    //ASUS_BSP:Jason Chang ++
+    if ((pgc_ptr->block == MDP_BLOCK_DMA_P && !asus_padstation_exist_realtime()) ||
+        (pgc_ptr->block == MDP_BLOCK_OVERLAY_1 && asus_padstation_exist_realtime())) {
+        ret = update_ar_gc_lut(offset, pgc_ptr);
+    }
+    //ASUS_BSP:Jason Chang --
+
 	return ret;
 }
 
@@ -2822,6 +2869,7 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 	int ret = -1;
 	uint32_t *offset = 0, *pgc_enable_offset = 0, lshift_bits = 0;
 	uint32_t blockbase;
+    int temp_data=0x0;   //ASUS_BSP:Jason Chang
 
 	if (!mdp_pp_block2argc(pgc_ptr->block))
 		return ret;
@@ -2863,6 +2911,16 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 			break;
 
 		case 0x2:
+            //ASUS_BSP : Jason Chang ++
+            if (!g_restore_argc) {
+                if (pgc_ptr->block == MDP_BLOCK_DMA_P) {
+                    memcpy(&g_phone_argc_lut_data, pgc_ptr, sizeof(struct mdp_pgc_lut_data));
+                }
+                else if (pgc_ptr->block == MDP_BLOCK_OVERLAY_1) {
+                    memcpy(&g_pad_argc_lut_data, pgc_ptr, sizeof(struct mdp_pgc_lut_data));
+                }
+            }
+            //ASUS_BSP : Jason Chang --
 			ret = mdp4_argc_process_write_req(offset, pgc_ptr);
 			break;
 
@@ -2872,9 +2930,26 @@ int mdp4_argc_cfg(struct mdp_pgc_lut_data *pgc_ptr)
 
 		if (!ret) {
 			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+        //ASUS_BSP: Jason Chang "enable gamma correction bit"+++
+        #if 0
 			outpdw(pgc_enable_offset, (inpdw(pgc_enable_offset) &
 							~(0x1<<lshift_bits)) |
 				((0x1 & pgc_ptr->flags) << lshift_bits));
+        #endif
+            if (pgc_ptr->block == MDP_BLOCK_DMA_P && !asus_padstation_exist_realtime()) {
+                temp_data = inpdw(MDP_BASE + 0x90000);
+                outpdw(pgc_enable_offset, temp_data | 1<<lshift_bits);
+            }
+            else if(pgc_ptr->block == MDP_BLOCK_OVERLAY_1 && asus_padstation_exist_realtime()) {
+                temp_data = inpdw(MDP_BASE + 0x18014);
+                outpdw(pgc_enable_offset, temp_data | 1<<lshift_bits);
+            }
+            else {
+                outpdw(pgc_enable_offset, (inpdw(pgc_enable_offset) &
+                            ~(0x1<<lshift_bits)) |
+                ((0x1 & pgc_ptr->flags) << lshift_bits));
+            }
+        //ASUS_BSP:Jason Chang  "enable gamma correction bit"---
 			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF,
 									FALSE);
 		}
@@ -3131,19 +3206,6 @@ int mdp4_qseed_cfg(struct mdp_qseed_cfg_data *config)
 
 error:
 	return ret;
-}
-u32 mdp4_get_mixer_num(u32 panel_type)
-{
-	u32 mixer_num;
-	if ((panel_type == TV_PANEL) ||
-			(panel_type == DTV_PANEL))
-		mixer_num = MDP4_MIXER1;
-	else if (panel_type == WRITEBACK_PANEL) {
-		mixer_num = MDP4_MIXER2;
-	} else {
-		mixer_num = MDP4_MIXER0;
-	}
-	return mixer_num;
 }
 
 static int is_valid_calib_addr(void *addr)

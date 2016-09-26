@@ -12,7 +12,6 @@
 #include <net/bluetooth/hci_core.h>
 
 static struct class *bt_class;
-static bool debugfs_exist = false; //ASUS_BSP AliceKuo [A80][BT][NA][Fix] add error handle for bt_dedbugfs to avoid hidp kernel panic
 
 struct dentry *bt_debugfs;
 EXPORT_SYMBOL_GPL(bt_debugfs);
@@ -159,17 +158,16 @@ void hci_conn_init_sysfs(struct hci_conn *conn)
 void hci_conn_add_sysfs(struct hci_conn *conn)
 {
 	BT_DBG("conn %p", conn);
-	
-	if (debugfs_exist)
-		queue_work(conn->hdev->workqueue, &conn->work_add); //ASUS_BSP AliceKuo [A80][BT][NA][Fix] add error handle for bt_dedbugfs to avoid hidp kernel panic
+
+	queue_work(conn->hdev->workqueue, &conn->work_add);
 }
 
 void hci_conn_del_sysfs(struct hci_conn *conn)
 {
 	BT_DBG("conn %p", conn);
-	
-	if (debugfs_exist)
-		queue_work(conn->hdev->workqueue, &conn->work_del); //ASUS_BSP AliceKuo [A80][BT][NA][Fix] add error handle for bt_dedbugfs to avoid hidp kernel panic
+
+	if (conn->hdev)
+		queue_work(conn->hdev->workqueue, &conn->work_del);
 }
 
 static inline char *host_bustostr(int bus)
@@ -550,8 +548,6 @@ int hci_register_sysfs(struct hci_dev *hdev)
 
 	debugfs_create_file("uuids", 0444, hdev->debugfs, hdev, &uuids_fops);
 
-	debugfs_exist = true; //ASUS_BSP AliceKuo [A80][BT][NA][Fix] add error handle for bt_dedbugfs to avoid hidp kernel panic
-
 	return 0;
 }
 
@@ -560,8 +556,6 @@ void hci_unregister_sysfs(struct hci_dev *hdev)
 	BT_DBG("%p name %s bus %d", hdev, hdev->name, hdev->bus);
 
 	debugfs_remove_recursive(hdev->debugfs);
-
-	debugfs_exist = false; //ASUS_BSP AliceKuo [A80][BT][NA][Fix] add error handle for bt_dedbugfs to avoid hidp kernel panic
 
 	device_del(&hdev->dev);
 }

@@ -946,32 +946,7 @@ config TOUCHSCREEN_FT5X06
          To compile this driver as a module, choose M here: the
          module will be called ft5x06_ts.
 
-#ASUS_BSP Desmond++
-config TOUCHSCREEN_SIS_I2C
-	tristate "SiS 9200 family I2C touchscreen driver"
-	depends on I2C
-	help
-	This enables support for SiS 9200 family over I2C based touchscreens.
-config FW_SUPPORT_POWERMODE
-	default y
-	bool "SiS FW support power mode"
-	depends on TOUCHSCREEN_SIS_I2C
-	help
-	This enables support power mode provided by SiS firmwave
-
-config ATMEL_MXT_PAD_TS
-	tristate "Atmel maXTouch based touchscreens for Padstation"
-	depends on I2C
-	default n
-	help
-		Say Y here if you have an Atmel Maxtouch based touchscreen for Padstation.
-
-		If unsure, say N.
-
-		To compile this driver as a module, choose M here: the
-		module will be called maXTouchPad.
-#ASUS_BSP Desmond--
-
+#ASUS_BSP +++ Jessy: Novatek A80 touch
 config TOUCHSCREEN_NOVATEK_NT11003
        tristate "Novatek based touchscreens"
        depends on I2C
@@ -983,5 +958,82 @@ config TOUCHSCREEN_NOVATEK_NT11003
 
          To compile this driver as a module, choose M here: the
          module will be called NT11003.
+#ASUS_BSP --- Jessy: Novatek A80 touch
+
+#ASUS_BSP +++ Jessy: add for pad touch
+config TOUCHSCREEN_SIS_I2C
+	tristate "SiS 9200 family I2C touchscreen driver"
+	depends on I2C
+	help
+	This enables support for SiS 9200 family over I2C based touchscreens.
+config FW_SUPPORT_POWERMODE
+	default y
+	bool "SiS FW support power mode"
+	depends on TOUCHSCREEN_SIS_I2C
+	help
+	This enables support power mode provided by SiS firmwave
+#ASUS_BSP --- Jessy: add for pad touch
+
+config TOUCHSCREEN_LGE_COMMON
+	bool "LGE Touch common driver"
+	depends on I2C
+	help
+	  Enable LGE Touch Common Driver which runs with lower driver.
+
+config TOUCHSCREEN_LGE_SYNAPTICS
+	bool "Synaptics RMI4 driver for LG Touch Common Driver"
+	depends on I2C
+	select TOUCHSCREEN_LGE_COMMON
+	help
+	  Enables Synaptics RMI4 protocol I2C Touch Screens
+
+config TOUCH_REG_MAP_TM2000
+	tristate "synaptics TM2000 touchscreen"
+	depends on TOUCHSCREEN_LGE_SYNAPTICS
+	default y
+	help
+	  Synaptics Register map TM2000.
+
+config TOUCHSCREEN_SYNAPTICS_I2C_RMI4
+	tristate "Synaptics DSX I2C touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have a Synaptics DSX I2C touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_i2c_rmi4.
+
+config TOUCHSCREEN_SYNAPTICS_DSX_RMI4_DEV
+	tristate "Synaptics I2C touchscreen rmi device"
+	depends on TOUCHSCREEN_SYNAPTICS_I2C_RMI4
+	help
+	  This enables support for character device channel for Synaptics
+	  RMI4 touchscreens.
+
+	  Say Y here if you have a Synaptics DSX I2C touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_dsx_rmi4_dev.
+
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
+	tristate "Synaptics I2C touchscreen firmware update"
+	depends on TOUCHSCREEN_SYNAPTICS_I2C_RMI4
+	help
+	  This enables support for firmware update for Synaptics RMI4
+	  touchscreens.
+
+	  Say Y here if you have a Synaptics DSX I2C touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_dsx_fw_update.
 
 endif

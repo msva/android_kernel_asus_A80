@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,13 @@
 #include <linux/regulator/consumer.h>
 #include <linux/i2c.h>
 #include <sound/soc.h>
+
+// wendy4_wang@asus.com ken_cheng@asus.com +++
+#include <linux/proc_fs.h>
+#include <linux/syscalls.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+// wendy4_wang@asus.com ken_cheng@asus.com ---
 
 #define WCD9XXX_REGISTER_START_OFFSET 0x800
 #define WCD9XXX_SLIM_RW_MAX_TRIES 3
@@ -82,7 +89,6 @@ int wcd9xxx_reg_read(struct wcd9xxx *wcd9xxx, unsigned short reg)
 }
 EXPORT_SYMBOL_GPL(wcd9xxx_reg_read);
 
-static int b_ear_hp = 0; 
 static int wcd9xxx_write(struct wcd9xxx *wcd9xxx, unsigned short reg,
 			int bytes, void *src, bool interface_reg)
 {
@@ -92,36 +98,6 @@ static int wcd9xxx_write(struct wcd9xxx *wcd9xxx, unsigned short reg,
 		pr_err("%s: Error, invalid write length\n", __func__);
 		return -EINVAL;
 	}
-
-    //Bruno++
-    if (reg == 0x380) {
-        if (*buf != 0 ) b_ear_hp = 1;
-        else            b_ear_hp = 0;
-    }
-    
-    if (b_ear_hp == 1) {
-        if ((reg == 0x1a2) && (*buf & 0x80)) {
-            dev_dbg(wcd9xxx->dev, "%s: Delay, avoid POP\n", __func__);
-            return 0;
-        }
-    
-        if ((reg == 0x1bc) && (*buf & 0x10)) {
-            u8 tmp = 0x80;
-            dev_dbg(wcd9xxx->dev, "%s: Delay, avoid POP2\n", __func__);
-            wcd9xxx->write_dev(wcd9xxx, 0x1bc, 1, src, false);
-            wcd9xxx->write_dev(wcd9xxx, 0x1a2, 1, &tmp, false);
-            return 0;
-        }
-
-        if ((reg == 0x1ab) && (*buf & 0x30)) {
-            u8 tmp = 0x80;
-            dev_dbg(wcd9xxx->dev, "%s: Delay, avoid POP3\n", __func__);
-            wcd9xxx->write_dev(wcd9xxx, 0x1ab, 1, src, false);
-            wcd9xxx->write_dev(wcd9xxx, 0x1a2, 1, &tmp, false);
-            return 0;
-        }
-    }
-    //Bruno++
 
 	dev_dbg(wcd9xxx->dev, "Write %02x to 0x%x\n",
 		 *buf, reg);
@@ -390,6 +366,31 @@ exit:
 	return ret;
 }
 
+// wendy4_wang@asus.com ken_cheng@asus.com +++
+#define AUDIO_CODEC_PROC_FILE  "driver/audio_codec"
+static struct proc_dir_entry *audio_codec_proc_file;
+int codec_status=0;
+EXPORT_SYMBOL(codec_status);
+
+static ssize_t audio_codec_proc_read(char *page, char **start, off_t off, int count,
+		int *eof, void *data)
+{
+	return sprintf(page, "%d\n",codec_status);
+}
+
+static void create_audio_codec_proc_file(void)
+{
+	pr_err("[Audio] create_audio_codec_proc_file\n");
+	audio_codec_proc_file = create_proc_entry(AUDIO_CODEC_PROC_FILE, 0644, NULL);
+	if (audio_codec_proc_file) {
+		audio_codec_proc_file->read_proc = audio_codec_proc_read;
+		pr_err("[Audio] create_audio_codec_proc_file sucess!\n");
+	} else {
+		pr_err("[Audio] create_audio_codec_proc_file failed!\n");
+	}
+}
+// wendy4_wang@asus.com ken_cheng@asus.com ---
+
 static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx, int irq)
 {
 	int ret;
@@ -428,6 +429,11 @@ static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx, int irq)
 		dev_err(wcd9xxx->dev, "Failed to add children: %d\n", ret);
 		goto err_irq;
 	}
+
+// wendy4_wang@asus.com ken_cheng@asus.com +++
+	create_audio_codec_proc_file();
+// wendy4_wang@asus.com ken_cheng@asus.com ---
+
 	return ret;
 err_irq:
 	wcd9xxx_irq_exit(wcd9xxx);
@@ -1245,6 +1251,12 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 	}
 #endif
 
+// wendy4_wang@asus.com ken_cheng@asus.com +++
+	if (codec_status){
+		codec_status=1;
+	}
+// wendy4_wang@asus.com ken_cheng@asus.com ---
+
 	return ret;
 
 err_slim_add:
@@ -1256,6 +1268,11 @@ err_supplies:
 err_codec:
 	kfree(wcd9xxx);
 err:
+
+// wendy4_wang@asus.com ken_cheng@asus.com +++
+	codec_status=0;
+// wendy4_wang@asus.com ken_cheng@asus.com ---
+
 	return ret;
 }
 static int wcd9xxx_slim_remove(struct slim_device *pdev)

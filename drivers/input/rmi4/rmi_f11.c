@@ -34,13 +34,13 @@ static struct pwm_device *pwmb;
 
 struct workqueue_struct *keypad_bl_workqueue;
 struct delayed_work keypad_off_work;
-#define F11_LED_MAX_LEVEL 20		//2mA per level
+#define F11_LED_MAX_LEVEL 100		//2mA per level
 #define F11_LED_MAX_TIME 60000		//(ms)
 #define F11_DEFAULT_LED_TIME 2000	//default 2000ms
 #define F11_3LEVEL_LED 0
 #define F11_DEFAULT_LED_HI 10	//default 20mA,  => samsung S3, 6.7mA/LED, 6.7*3=20mA
 #define F11_DEFAULT_LED_BASIC 0
-#define F11_DEFAULT_LED_HI_W 1	//wTP-default 2mA
+#define F11_DEFAULT_LED_HI_W 100	//wTP-default ASUS_BPS Cliff +++ increase limit to 100
 #if F11_3LEVEL_LED
 #define F11_DEFAULT_LED_LOW 5
 #define F11_DEFAULT_LED_DIFF 5	//F11_DEFAULT_LED_HI - F11_DEFAULT_LED_LOW
@@ -792,12 +792,13 @@ void rmi_led_trigger_event(struct led_trigger *trigger, enum led_brightness even
 		event = 0;
 	}
 
-//ASUS_BSP HANS: add for PWM +++
-    duty_time = (event*PERIOD)/F11_LED_MAX_LEVEL;
-    pwm_config(pwmb,duty_time,PERIOD);
-//ASUS_BSP HANS: add for PWM ---
-
 	rmi_debug(DEBUG_VERBOSE, "[touch_synaptics] rmi_f11 trigger LED (%d)\n", event);
+
+	//ASUS_BSP HANS: add for PWM +++
+	duty_time = (event*PERIOD)/20;
+	pwm_config(pwmb,duty_time,PERIOD);
+	//ASUS_BSP HANS: add for PWM ---
+
 	led_trigger_event(trigger, event);
 	led_level_now = event;
 }
@@ -845,7 +846,8 @@ static void rmi_late_resume(struct early_suspend *handler)
 			rmi_f11_resume(g_fc);
 		#endif /* RESUME_REZERO */
 		//ASUS_BSP simpson: add for wTP control +++
-		if (user_level_shift == 0) {
+		//ASUS_BSP Cliff +++ for wTP LED (user_level_shift >= 0)
+		if (user_level_shift >= 0) {
 			rmi_led_trigger_event(keypad_led_trigger, finger_moving_led_level);
 		}
 		//ASUS_BSP simpson: add for wTP control ---
@@ -1462,10 +1464,10 @@ static void f11_set_abs_params(struct rmi_function_container *fc, int index)
 static ssize_t wTP_virtual_keys_register(struct kobject *kobj,
 		     struct kobj_attribute *attr, char *buf)
 {
-	char *virtual_keys = 	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":100:1340:150:115" "\n" \
-				__stringify(EV_KEY) ":" __stringify(KEY_HOME) ":360:1340:225:115" "\n" \
-				__stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":620:1340:150:115" "\n" ;
-
+	char *virtual_keys = 	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":100:1380:150:115" "\n" \
+				__stringify(EV_KEY) ":" __stringify(KEY_HOME) ":360:1380:225:115" "\n" \
+				__stringify(EV_KEY) ":" __stringify(KEY_MENU)   ":620:1380:150:115" "\n" ;
+	//ASUS_BSP Cliff +++ fix the touch key range from 1340 to 1380
 	return snprintf(buf, strnlen(virtual_keys, MAX_LEN) + 1 , "%s",	virtual_keys);
 }
 
@@ -1724,7 +1726,7 @@ static int rmi_f11_register_devices(struct rmi_function_container *fc)
 #endif
 //ASUS_BSP simpson: add for wTP control +++
 if (user_level_shift > 0) {
-	key_pressed_led_level = F11_DEFAULT_LED_BASIC;	//wTP default mode: always off
+	//key_pressed_led_level = F11_DEFAULT_LED_BASIC;	//wTP default mode: always off ASUS_BSP Cliff +++ for wTP LED
 	finger_moving_led_level = key_pressed_led_level;
 	basic_led_level = finger_moving_led_level;
 }

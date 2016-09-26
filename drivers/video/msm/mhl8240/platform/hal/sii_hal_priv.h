@@ -80,9 +80,7 @@ extern "C" {
 #define W_P03_PLUG_IN_GPIO			36		
 #define MHL_USB_ID_DETECT 			77		/* for carkit detect */
 //#define MHL_USB_ID_DETECT 			56		/* for carkit detect */
-#define MHL_3V3_EN_GPIO				13		/* transmitter interrupt */
-/***** public type definitions **********************extern unsigned g_GPIO_MHL_RST_N;
-extern unsigned g_GPIO_MHL_IRQ_N;*************************/
+/***** public type definitions ***********************************************/
 
 /** Type used internally within the HAL to encapsulate the state of the
  * MHL TX device. */
@@ -104,8 +102,7 @@ extern struct i2c_device_id gMhlI2cIdTable[2];
 /** @brief Maintain state info of the MHL TX device */
 extern mhlDeviceContext_t gMhlDevice;
 
-extern unsigned g_GPIO_MHL_RST_N;
-extern unsigned g_GPIO_MHL_IRQ_N;
+
 
 /***** public function prototypes ********************************************/
 

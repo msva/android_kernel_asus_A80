@@ -47,6 +47,12 @@ extern int g_pad_tv_mode;
 extern bool_t MHL_Resume;
 #endif
 
+//ASUS_BSP +++ Jason Chang "[A68][MHL]fix battery no show when system in charger mode with pad"
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+extern int g_CHG_mode;
+#endif
+//ASUS_BSP --- Jason Chang "[A68][MHL]fix battery no show when system in charger mode with pad"
+
 void HDCP_On (void);
 void HDCP_Restart (void);
 
@@ -134,6 +140,17 @@ void SiiDrvHdmiTxLiteHandleHdcpEvents (uint8_t HdcpIntStatus,uint8_t queryData)
     #ifdef ENABLE_HDCP_DEBUG_PRINT //(
         PLACE_IN_CODE_SEG char szFormatString[]="HDCP (%2X) -> Link = (%2X) %s";
     #endif //)
+
+//ASUS_BSP +++ Jason Chang "[A68][MHL]fix battery no show when system in charger mode with pad"
+//This is workaround about battery baby no show in charger mode with pad.
+#if defined(ASUS_CN_CHARGER_BUILD) && !defined(ASUS_FACTORY_BUILD)
+           if(g_CHG_mode && (g_pad_tv_mode == MHL_PAD_MODE_H || g_pad_tv_mode == MHL_PAD_MODE_L)){
+	         printk("Skip handle HDCP_SECURITY_CHANGE_EVENT in charger mode with pad!\n");
+	         return;
+           }
+#endif
+//ASUS_BSP --- Jason Chang "[A68][MHL]fix battery no show when system in charger mode with pad"
+           
             HDCP_DEBUG_PRINT(("HDCP: \n"));
 
             LinkStatus = queryData;

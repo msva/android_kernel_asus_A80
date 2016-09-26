@@ -37,34 +37,37 @@
 
 #include <media/v4l2-common.h>
 
-//ASUS_BSP +++ Joy "for usb camera"
+//ASUS_BSP +++ Shunmin "for usb camera"
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #include <linux/microp_api.h>
-//ASUS_BSP --- Joy "for usb camera"
+#include <linux/switch.h>
+//ASUS_BSP --- Shunmin "for usb camera"
 #include "uvcvideo.h"
-//ASUS_BSP +++ Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+//ASUS_BSP +++ Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
 #include <linux/proc_fs.h>
-//ASUS_BSP --- Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+//ASUS_BSP --- Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
 
 #define DRIVER_AUTHOR		"Laurent Pinchart " \
 				"<laurent.pinchart@ideasonboard.com>"
 #define DRIVER_DESC		"USB Video Class driver"
-//ASUS_BSP +++ Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+//ASUS_BSP +++ Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
 #define USBCam_FIRMWARE_VERSION	0x1016
 #define P05_USBCam_FIRMWARE_VERSION	0x0219
 #define NEED_UPDATE		0x0
 #define UPDATE_UNNECESSARY	0x1
 #define UNKNOW_VERSION         0x2
-#define NEED_REPULG 0x03
+#define NEED_REPLUG 0x03
 extern u16 ASUS_USB_Cam_Version;
-//ASUS_BSP --- Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+//ASUS_BSP --- Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+int usb_cam_fw_got;
 
 unsigned int uvc_clock_param = CLOCK_MONOTONIC;
 unsigned int uvc_no_drop_param;
 static unsigned int uvc_quirks_param = -1;
 unsigned int uvc_trace_param;
 unsigned int uvc_timeout_param = UVC_CTRL_STREAMING_TIMEOUT;
+
+struct switch_dev usb_cam_dev;
 
 /* ------------------------------------------------------------------------
  * Video formats
@@ -1708,7 +1711,7 @@ static int uvc_register_video(struct uvc_device *dev,
 {
 	struct video_device *vdev;
 	int ret;
-	printk("uvc_register_video\n");
+	printk("uvc_register_video +++\n");
 
 	/* Initialize the streaming interface with default streaming
 	 * parameters.
@@ -1746,10 +1749,8 @@ static int uvc_register_video(struct uvc_device *dev,
 	video_set_drvdata(vdev, stream);
 
 	printk("uvc_register_video video4\n");
-	// Jay Fix the USB Camera node is /dev/video4 +++
-	//ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
     ret = video_register_device(vdev, VFL_TYPE_GRABBER, 4);
-    // Jay Fix the USB Camera node is /dev/video4 ---
+
 	if (ret < 0) {
 		uvc_printk(KERN_ERR, "Failed to register video device (%d).\n",
 			   ret);
@@ -1759,6 +1760,7 @@ static int uvc_register_video(struct uvc_device *dev,
 	}
 
 	atomic_inc(&dev->nstreams);
+	printk("uvc_register_video ---\n");
 	return 0;
 }
 
@@ -1816,6 +1818,12 @@ static int uvc_register_chains(struct uvc_device *dev)
 	return 0;
 }
 
+static ssize_t usb_cam_name(struct switch_dev *sdev, char *buf)
+{
+       
+	return sprintf(buf, "0x0219\n");
+}
+
 /* ------------------------------------------------------------------------
  * USB probe, disconnect, suspend and resume
  */
@@ -1826,7 +1834,7 @@ static int uvc_probe(struct usb_interface *intf,
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct uvc_device *dev;
 	int ret;
-	printk("uvc_probe enter\n");
+	printk("uvc_probe +++\n");
 
 	if (id->idVendor && id->idProduct)
 		uvc_trace(UVC_TRACE_PROBE, "Probing known UVC device %s "
@@ -1899,6 +1907,15 @@ static int uvc_probe(struct usb_interface *intf,
 	if (v4l2_device_register(&intf->dev, &dev->vdev) < 0)
 		goto error;
 
+	if (usb_cam_fw_got == 0) {
+		usb_cam_dev.name = "pfs_camera";	
+		usb_cam_dev.print_name = usb_cam_name;
+		if (switch_dev_register(&usb_cam_dev) < 0){
+			pr_err("%s: Unable to register switch dev! \n", __FUNCTION__);
+		}
+		usb_cam_fw_got = 1;
+	}
+
 	/* Initialize controls. */
 	if (uvc_ctrl_init_device(dev) < 0)
 		goto error;
@@ -1923,6 +1940,7 @@ static int uvc_probe(struct usb_interface *intf,
 
 	uvc_trace(UVC_TRACE_PROBE, "UVC device initialized.\n");
 	usb_enable_autosuspend(udev);
+	printk("uvc_probe ---\n");
 	return 0;
 
 error:
@@ -2438,28 +2456,30 @@ struct uvc_driver uvc_driver = {
 		.supports_autosuspend = 1,
 	},
 };
-//ASUS_BSP joy+++ "USB camera register microp"
+//ASUS_BSP +++ Shunmin"USB camera register microp"
 static int usb_camera_microp_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
 	switch(event){
 		case P01_REMOVE:
 		{
-			printk("joy:P01_REMOVE\n");
+			printk("P05_REMOVED\n");
 			ASUS_USB_Cam_Version = 0xffff;
-			return NOTIFY_DONE;
+			break;
 		}
 		default:
-			return NOTIFY_DONE;
+			break;
 	}
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 
 struct notifier_block usb_camera_microp_notifier = {
 	.notifier_call = usb_camera_microp_event,
 	.priority = CAMERA_MP_NOTIFY,
 };
-//ASUS_BSP joy--- "USB camera register microp"
-//ASUS_BSP +++ Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
-// create proc file
+//ASUS_BSP --- Shunmin"USB camera register microp"
+//ASUS_BSP +++ Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
 #ifdef	CONFIG_PROC_FS
 #define	USB_Cam_version_PROC_FILE	"driver/USB_Cam_version"
 #define USB_CAM_VIDEO_FILE_PATH    "/dev/video4"
@@ -2476,47 +2496,28 @@ static ssize_t USB_Cam_version_proc_read(char *page, char **start, off_t off, in
 			if (IS_ERR(fd)){
 				printk("USB_Cam_version_proc_read: NO video4\n");
 				ASUS_USB_Cam_Version=0xaaaa;
-				len = sprintf(page, "%x No Cam\n \n", NEED_REPULG);
+				len = sprintf(page, "%x No Cam\n \n", NEED_REPLUG);
 			} else {
 				printk("USB_Cam_version_proc_read: detect video4\n");
 				filp_close(fd, NULL);
 
-				if (g_A68_hwID < A80_EVB) {
-					switch (ASUS_USB_Cam_Version) {
-					case 0x0718:
-					case 0x0822:
-					case 0x0823:
-					case 0x1016:
-						if(ASUS_USB_Cam_Version == USBCam_FIRMWARE_VERSION) {
-							len = sprintf(page, "%x %x\n%x\n", UPDATE_UNNECESSARY, ASUS_USB_Cam_Version, USBCam_FIRMWARE_VERSION);
-						} else {
-							len = sprintf(page, "%x %x\n%x\n", NEED_UPDATE, ASUS_USB_Cam_Version, USBCam_FIRMWARE_VERSION);
-						}
-						break;
-					default:
-						ASUS_USB_Cam_Version = 0xffff;
-						len = sprintf(page, "%x %x\n%x\n", UNKNOW_VERSION, ASUS_USB_Cam_Version, USBCam_FIRMWARE_VERSION);
-						break;
+				switch (ASUS_USB_Cam_Version) {
+				case 0x1107:
+				case 0x1122:
+				case 0x1214:
+				case 0x0201:
+				case 0x0205:
+				case 0x0219:
+					if(ASUS_USB_Cam_Version == P05_USBCam_FIRMWARE_VERSION) {
+						len = sprintf(page, "%x %x\n%x\n", UPDATE_UNNECESSARY, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
+					} else {
+						len = sprintf(page, "%x %x\n%x\n", NEED_UPDATE, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
 					}
-				} else {
-					switch (ASUS_USB_Cam_Version) {
-					case 0x1107:
-					case 0x1122:
-					case 0x1214:
-					case 0x0201:
-					case 0x0205:
-					case 0x0219:
-						if(ASUS_USB_Cam_Version == P05_USBCam_FIRMWARE_VERSION) {
-							len = sprintf(page, "%x %x\n%x\n", UPDATE_UNNECESSARY, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
-						} else {
-							len = sprintf(page, "%x %x\n%x\n", NEED_UPDATE, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
-						}
-						break;
-					default:
-						ASUS_USB_Cam_Version = 0xffff;
-						len = sprintf(page, "%x %x\n%x\n", UNKNOW_VERSION, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
-						break;
-					}
+					break;
+				default:
+					ASUS_USB_Cam_Version = 0xffff;
+					len = sprintf(page, "%x %x\n%x\n", UNKNOW_VERSION, ASUS_USB_Cam_Version, P05_USBCam_FIRMWARE_VERSION);
+					break;
 				}
 			}
 		} else {
@@ -2544,7 +2545,7 @@ void remove_USB_Cam_version_proc_file(void)
     remove_proc_entry(USB_Cam_version_PROC_FILE, &proc_root);
 }
 #endif // end of CONFIG_PROC_FS
-//ASUS_BSP --- Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+//ASUS_BSP --- Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
 
 static int __init uvc_init(void)
 {
@@ -2552,32 +2553,27 @@ static int __init uvc_init(void)
 
 	uvc_debugfs_init();
 
-	printk("uvc_init\n");
 	ret = usb_register(&uvc_driver.driver);
 	if (ret < 0) {
 		uvc_debugfs_cleanup();
 		return ret;
 	}
 
-	 create_USB_Cam_version_proc_file(); //ASUS_BSP +++ Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
-	//ASUS_BSP +++ Joy "USB camera register microp"
+	create_USB_Cam_version_proc_file(); //ASUS_BSP +++ Shunmin "[A80][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
+	//ASUS_BSP +++ Shunmin "USB camera register microp"
 	ret = register_microp_notifier(&usb_camera_microp_notifier);
-	notify_register_microp_notifier(&usb_camera_microp_notifier, "uvc_driver"); //ASUS_BSP Lenter+
-	//ASUS_BSP ---Joy "USB camera register microp"
+	//ASUS_BSP ---Shunmin "USB camera register microp"
+	usb_cam_fw_got = 0;
 	printk(KERN_INFO DRIVER_DESC " (" DRIVER_VERSION ")\n");
 	return ret;
 }
 
 static void __exit uvc_cleanup(void)
 {
-	int result;
 	usb_deregister(&uvc_driver.driver);
 	uvc_debugfs_cleanup();
-	remove_USB_Cam_version_proc_file(); //ASUS_BSP +++ Jay "[A66][USB_Cam][NA][Others]add proc file for query USB Camera FW version"
-	//ASUS_BSP joy++ "USB camera register microp"
-	result = unregister_microp_notifier(&usb_camera_microp_notifier);
-	notify_unregister_microp_notifier(&usb_camera_microp_notifier, "uvc_driver"); //ASUS_BSP Lenter+
-	//ASUS_BSP joy-- "USB camera register microp"
+	remove_USB_Cam_version_proc_file(); 
+	unregister_microp_notifier(&usb_camera_microp_notifier);
 }
 
 module_init(uvc_init);

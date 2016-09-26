@@ -182,10 +182,4 @@ source "drivers/usb/gadget/Kconfig"
 
 source "drivers/usb/otg/Kconfig"
 
-# ASUS_BSP+++ BennyCheng "add phone mode usb OTG support"
-config ASUS_USB_OTG
-	bool "ASUS USB OTG support"
-	default n
-# ASUS_BSP--- BennyCheng "add phone mode usb OTG support"
-
 endif # USB_SUPPORT

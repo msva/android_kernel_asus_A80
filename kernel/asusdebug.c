@@ -26,8 +26,11 @@ extern int g_user_dbg_mode;
 #include <linux/rtc.h>
 #include "rtmutex_common.h"
 
+#include <linux/delay.h>
+
 int entering_suspend = 0;
 unsigned int PRINTK_BUFFER;
+unsigned int RTB_BUFFER;
 extern struct timezone sys_tz;
 #define RT_MUTEX_HAS_WAITERS	1UL
 #define RT_MUTEX_OWNER_MASKALL	1UL
@@ -43,7 +46,7 @@ int asus_rtc_read_time(struct rtc_time *tm)
     getnstimeofday(&ts);
     ts.tv_sec -= sys_tz.tz_minuteswest * 60;
     rtc_time_to_tm(ts.tv_sec, tm);
-    printk("now %04d%02d%02d-%02d%02d%02d, tz=%d\r\n", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, sys_tz.tz_minuteswest);
+    printk("[asusdbg] now %04d%02d%02d-%02d%02d%02d, tz=%d\r\n", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, sys_tz.tz_minuteswest);
     return 0; 
 }
 EXPORT_SYMBOL(asus_rtc_read_time);
@@ -195,7 +198,7 @@ void show_stack1(struct task_struct *p1, void *p2)
     entries = kmalloc(MAX_STACK_TRACE_DEPTH * sizeof(*entries), GFP_KERNEL);
     if (!entries)
     {
-        printk("entries malloc failure\n");
+        printk("[asusdbg] entries malloc failure\n");
         return;
     }
     trace.nr_entries    = 0;
@@ -262,7 +265,8 @@ void print_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->name == NULL\r\n");
-				
+
+//ASUS_BSP ++				
 			if (pti->pWaitingMutex->mutex_owner_asusdebug)
 			{
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
@@ -278,6 +282,7 @@ void print_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+//ASUS_BSP --
 		}
 
 		if(pti->pWaitingCompletion != &fake_completion && pti->pWaitingCompletion!=NULL)
@@ -339,7 +344,8 @@ void print_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->name == NULL\r\n");
-				
+
+//ASUS_BSP ++
 			if (pti->pWaitingMutex->mutex_owner_asusdebug)
 			{
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
@@ -355,6 +361,7 @@ void print_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+//ASUS_BSP --
 		}
 
 		if(pti->pWaitingCompletion != &fake_completion && pti->pWaitingCompletion!=NULL)
@@ -459,7 +466,8 @@ int find_thread_info(struct task_struct *pts, int force)
 			}
 			else
 				printk("pti->pWaitingMutex->name == NULL\r\n");
-				
+
+//ASUS_BSP ++				
 			if (pti->pWaitingMutex->mutex_owner_asusdebug)
 			{
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
@@ -475,6 +483,7 @@ int find_thread_info(struct task_struct *pts, int force)
 			}
 			else
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+//ASUS_BSP --
 		}
 
             if(pti->pWaitingCompletion != &fake_completion && pti->pWaitingCompletion!=NULL)
@@ -533,6 +542,7 @@ void save_all_thread_info(void)
 #endif
     
     struct rtc_time tm;
+
     asus_rtc_read_time(&tm);    
     #if 1
     g_phonehang_log = (char*)PHONE_HANG_LOG_BUFFER;//phys_to_virt(PHONE_HANG_LOG_BUFFER);
@@ -563,7 +573,7 @@ void save_all_thread_info(void)
         ptis_ptr = ptis_head = kmalloc(sizeof( struct thread_info_save), GFP_KERNEL);
         if(!ptis_head)
         {
-            printk("kmalloc ptis_head failure\n"); 
+            printk("[asusdbg] kmalloc ptis_head failure\n"); 
             return;
         }
         memset(ptis_head, 0, sizeof( struct thread_info_save));
@@ -576,7 +586,7 @@ void save_all_thread_info(void)
         ptis = kmalloc(sizeof( struct thread_info_save), GFP_KERNEL);
         if(!ptis)
         {
-            printk("kmalloc ptis failure\n"); 
+            printk("[asusdbg] kmalloc ptis failure\n"); 
             return;        
         }
         memset(ptis, 0, sizeof( struct thread_info_save)); 
@@ -610,7 +620,8 @@ void save_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->name == NULL\r\n");
-				
+
+//ASUS_BSP ++				
 			if (pti->pWaitingMutex->mutex_owner_asusdebug)
 			{
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
@@ -626,6 +637,7 @@ void save_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+//ASUS_BSP --
 		}
 	if(pti->pWaitingCompletion != &fake_completion && pti->pWaitingCompletion!=NULL)
 	{
@@ -691,7 +703,7 @@ void save_all_thread_info(void)
                 ptis = kmalloc(sizeof( struct thread_info_save), GFP_KERNEL);
                 if(!ptis)
                 {
-                    printk("kmalloc ptis 2 failure\n"); 
+                    printk("[asusdbg] kmalloc ptis 2 failure\n"); 
                     return;        
                 }
                 memset(ptis, 0, sizeof( struct thread_info_save)); 
@@ -735,6 +747,7 @@ void save_all_thread_info(void)
 			else
 				printk("pti->pWaitingMutex->name == NULL\r\n");
 				
+//ASUS_BSP ++
 			if (pti->pWaitingMutex->mutex_owner_asusdebug)
 			{
 				save_log(" Owned by pID(%d)", pti->pWaitingMutex->mutex_owner_asusdebug->pid);
@@ -750,6 +763,7 @@ void save_all_thread_info(void)
 			}
 			else
 				printk("pti->pWaitingMutex->mutex_owner_asusdebug->comm == NULL\r\n");
+//ASUS_BSP --
 		}
 
 		if(pti->pWaitingCompletion != &fake_completion && pti->pWaitingCompletion!=NULL)
@@ -792,7 +806,9 @@ void delta_all_thread_info(void)
 {
     struct task_struct *pts;
     int ret = 0, ret2 = 0;
-    
+
+    pr_info("%s()++\n", __func__);
+
     save_log("\r\nDELTA INFO----------------------------------------------------------------------------------------------\r\n");
     save_log(" pID----ppID----NAME----------------SumTime---vruntime--SPri-NPri-State----------PmpCnt----Waiting\r\n");
     for_each_process(pts)
@@ -815,6 +831,8 @@ void delta_all_thread_info(void)
             save_log("-----------------------------------------------------\r\n\r\n-----------------------------------------------------\r\n");
     }
     save_log("\r\n\r\n\r\n\r\n");
+
+    pr_info("%s()--\n", __func__);
 }
 EXPORT_SYMBOL(delta_all_thread_info);
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -873,19 +891,22 @@ void save_phone_hang_log(void)
 {
     int file_handle;
     int ret;
+
+    pr_info("%s()++\n", __func__);
+
     //---------------saving phone hang log if any -------------------------------
     g_phonehang_log = (char*)PHONE_HANG_LOG_BUFFER;// phys_to_virt(PHONE_HANG_LOG_BUFFER);
-    printk("save_phone_hang_log PRINTK_BUFFER=%x, PRINTK_BUFFER=PHONE_HANG_LOG_BUFFE=%x \n", PRINTK_BUFFER, PHONE_HANG_LOG_BUFFER);
+    printk("[asusdbg] save_phone_hang_log PRINTK_BUFFER=%x, PRINTK_BUFFER=PHONE_HANG_LOG_BUFFE=%x \n", PRINTK_BUFFER, PHONE_HANG_LOG_BUFFER);
     //printk("save_phone_hang_log %c%c%c%c%c%c%c%c%c, strncmp(g_phonehang_log, ASUSSlowg, 9)=%d\n",g_phonehang_log[0],g_phonehang_log[1],g_phonehang_log[2],g_phonehang_log[3],g_phonehang_log[4],g_phonehang_log[5],g_phonehang_log[6],g_phonehang_log[7],g_phonehang_log[8], strncmp(g_phonehang_log, "ASUSSlowg", 9));
     if(g_phonehang_log && ((strncmp(g_phonehang_log, "PhoneHang", 9) == 0) || (strncmp(g_phonehang_log, "ASUSSlowg", 9) == 0)) )
     {
-        printk("save_phone_hang_log-1\n");
+        printk("[asusdbg] save_phone_hang_log-1\n");
         initKernelEnv();
         memset(messages, 0, sizeof(messages));
-        strcpy(messages, "/data/log/");
+        strcpy(messages, "/asdf/");
         strncat(messages, g_phonehang_log, 29);
         file_handle = sys_open(messages, O_CREAT|O_WRONLY|O_SYNC, 0);
-        printk("save_phone_hang_log-2 file_handle %d, name=%s\n", file_handle, messages);
+        printk("[asusdbg] save_phone_hang_log-2 file_handle %d, name=%s\n", file_handle, messages);
         if(!IS_ERR((const void *)file_handle))
         {
             ret = sys_write(file_handle, (unsigned char*)g_phonehang_log, strlen(g_phonehang_log));
@@ -899,20 +920,29 @@ void save_phone_hang_log(void)
         g_phonehang_log[0] = 0;   
         //iounmap(g_phonehang_log);
     }
+
+    pr_info("%s()--\n", __func__);
 }
 EXPORT_SYMBOL(save_phone_hang_log);
 void save_last_shutdown_log(char* filename)
 {
     char *last_shutdown_log;
     unsigned int *last_shutdown_log_addr;
-    struct rtc_time tm;
+//ASUS_BSP ++
+    //~ struct rtc_time tm;
     int file_handle;
+    unsigned long long t;
+    unsigned long nanosec_rem;
+
+    pr_info("%s()++\n", __func__);
     
-    
-    asus_rtc_read_time(&tm);    
+    //~ asus_rtc_read_time(&tm);
+    t = cpu_clock(0);
+    nanosec_rem = do_div(t, 1000000000);
     last_shutdown_log = (char*)PRINTK_BUFFER;//phys_to_virt(PRINTK_BUFFER);
     last_shutdown_log_addr = (unsigned int *)((unsigned int)last_shutdown_log + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
-    sprintf(messages, "/data/log/%s_%04d%02d%02d-%02d%02d%02d.txt", filename, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    sprintf(messages, "/asdf/LastShutdown_%lu.%06lu.txt", (unsigned long) t, nanosec_rem / 1000);
+//ASUS_BSP --
 
     initKernelEnv();
     file_handle = sys_open(messages, O_CREAT|O_RDWR|O_SYNC, 0);
@@ -920,10 +950,56 @@ void save_last_shutdown_log(char* filename)
     {
         sys_write(file_handle, (unsigned char*)last_shutdown_log, PRINTK_BUFFER_SLOT_SIZE);
         sys_close(file_handle);
+    } else {
+		printk("[ASDF] save_last_shutdown_error: [%d]\n", file_handle);
     }
+
     deinitKernelEnv();          
 
+    pr_info("%s()++\n", __func__);
+
 }
+
+//ASUS_BSP ++
+#if defined(CONFIG_MSM_RTB)
+extern struct msm_rtb_state msm_rtb;
+
+int g_saving_rtb_log = 1;
+	
+void save_rtb_log(void)
+{
+    char *rtb_log;
+    char rtb_log_path[256] = {0};
+    //~ struct rtc_time tm;
+    int file_handle;
+    unsigned long long t;
+    unsigned long nanosec_rem;
+
+    pr_info("%s()++\n", __func__);
+
+    //~ asus_rtc_read_time(&tm);    
+    rtb_log = (char*)msm_rtb.rtb;
+    t = cpu_clock(0);
+    nanosec_rem = do_div(t, 1000000000);
+    snprintf(rtb_log_path, sizeof(rtb_log_path)-1, "/asdf/rtb_%lu.%06lu.bin",
+        (unsigned long) t,      
+        nanosec_rem / 1000);
+
+    initKernelEnv();
+    file_handle = sys_open(rtb_log_path, O_CREAT|O_RDWR|O_SYNC, 0);
+    if(!IS_ERR((const void *)file_handle))
+    {
+        sys_write(file_handle, (unsigned char*)rtb_log, msm_rtb.size);
+        sys_close(file_handle);
+    } else {
+		printk("[ASDF] save_rtb_log_error: [%d]\n", file_handle);
+    }
+    deinitKernelEnv();
+
+    pr_info("%s()++\n", __func__);
+}
+#endif
+//ASUS_BSP ++
 
 typedef struct tzbsp_dump_cpu_ctx_s
 {
@@ -984,7 +1060,7 @@ void save_last_watchdog_reg(void)
     last_watchdog_reg = (tzbsp_dump_buf_t*)PHONE_HANG_LOG_BUFFER - PRINTK_BUFFER_SLOT_SIZE / 2;//phys_to_virt((PHONE_HANG_LOG_BUFFER - PRINTK_BUFFER_SLOT_SIZE / 2));
     if(*((int*)last_watchdog_reg) != PRINTK_BUFFER_MAGIC)
     {
-        sprintf(messages, "/data/log/%s_%04d%02d%02d-%02d%02d%02d.txt", "WatchdogReg", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+        sprintf(messages, "/asdf/%s_%04d%02d%02d-%02d%02d%02d.txt", "WatchdogReg", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     
         initKernelEnv();
         file_handle = sys_open(messages, O_CREAT|O_RDWR|O_SYNC, 0);
@@ -1006,17 +1082,23 @@ void get_last_shutdown_log(void)
     
     last_shutdown_log = (char*)PRINTK_BUFFER;//(phys_to_virt(PRINTK_BUFFER);
     last_shutdown_log_addr = (unsigned int *)((unsigned int)last_shutdown_log + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
+    printk("[asusdbg] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);  //ASUS_BSP ++
     if(*last_shutdown_log_addr == (unsigned int)PRINTK_BUFFER_MAGIC)
     {
         save_last_shutdown_log("LastShutdown");
             //save_last_watchdog_reg();
     }
     printk_buffer_rebase();
-    *last_shutdown_log_addr = PRINTK_BUFFER_MAGIC;
+    //~ *last_shutdown_log_addr = PRINTK_BUFFER_MAGIC;  //ASUS_BSP ++
 
 }
 EXPORT_SYMBOL(get_last_shutdown_log);
 int first = 0;
+int watchdog_test = 0;
+int asus_asdf_set = 0;
+
+extern int save_tz_log(void);  //adbg++
+
 static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
     
@@ -1043,30 +1125,63 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             sys_close(file_handle);
         }
         else
-            printk("!!! no filter found !!!\n");
+            printk("[asusdbg] !!! no filter found !!!\n");
         deinitKernelEnv();
         first = 1;
         return count;
         
     }
+//ASUS_BSP ++
     else if(strncmp(messages, "dbg", 3) == 0)
+    {
+        g_user_dbg_mode = 1;
+        printk("[asusdbg] Kernel dbg mode = %d\n", g_user_dbg_mode);
+    }
+    else if(strncmp(messages, "ndbg", 4) == 0)
+    {
+        g_user_dbg_mode = 0;
+        printk("[asusdbg] Kernel dbg mode = %d\n", g_user_dbg_mode);
+    }
+    else if(strncmp(messages, "panic", 5) == 0)
+    {
+        panic("panic test");
+    }
+//ASUS_BSP --
+	else if(strncmp(messages, "get_asdf_log", strlen("get_asdf_log")) == 0)
 	{
-		g_user_dbg_mode = 1;
-		printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
-	}
-	else if(strncmp(messages, "ndbg", 4) == 0)
-	{
-		g_user_dbg_mode = 0;
-		printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+#ifdef CONFIG_MSM_RTB
+			extern int g_saving_rtb_log;
+#endif
+			unsigned int *last_shutdown_log_addr;
+
+            last_shutdown_log_addr = (unsigned int *)((unsigned int)PRINTK_BUFFER + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
+            printk("[ASDF] last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
+
+            if(!asus_asdf_set)
+            {
+                asus_asdf_set = 1;
+				save_phone_hang_log();
+                get_last_shutdown_log();
+                printk("[ASDF] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
+#ifdef CONFIG_MSM_RTB
+                if ( (*last_shutdown_log_addr)==(unsigned int)PRINTK_BUFFER_MAGIC )
+					save_rtb_log();
+#endif
+
+				(*last_shutdown_log_addr)=(unsigned int)PRINTK_BUFFER_MAGIC;
+            }
+#ifdef CONFIG_MSM_RTB
+            g_saving_rtb_log = 0;
+#endif
 	}
     else if(strncmp(messages, "slowlog", 7) == 0)
     {
-		printk("start to gi chk\n");
+		printk("[asusdbg] start to gi chk, line:%d\n", __LINE__);
 		save_all_thread_info();
 		
 		msleep(5 * 1000);
 		
-		printk("start to gi delta\n");
+		printk("[asusdbg] start to gi delta, line:%d\n", __LINE__);
 		delta_all_thread_info();
 		save_phone_hang_log();
         return count;
@@ -1094,7 +1209,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             sys_close(file_handle);
         }
         else
-            printk("!!! no filter found !!!\n");
+            printk("[asusdbg] !!! no filter found !!!\n");
         deinitKernelEnv();
         first = 1;
         return count;
@@ -1103,25 +1218,35 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
     else if(strncmp(messages, "dbg", 3) == 0)
     {
 		g_user_dbg_mode = 1;
-		printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+		printk("[asusdbg] Kernel dbg mode = %d\n", g_user_dbg_mode);
 	}
 	else if(strncmp(messages, "ndbg", 4) == 0)
     {
 		g_user_dbg_mode = 0;
-		printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+		printk("[asusdbg] Kernel dbg mode = %d\n", g_user_dbg_mode);
 	}
     else if(strncmp(messages, "slowlog", 7) == 0)
     {
-		printk("start to gi chk\n");
+		printk("[asusdbg] start to gi chk, line:%d\n", __LINE__);
 		save_all_thread_info();
 		
 		msleep(5 * 1000);
 		
-		printk("start to gi delta\n");
+		printk("[asusdbg] start to gi delta, line:%d\n", __LINE__);
 		delta_all_thread_info();
 		save_phone_hang_log();
         return count;
-    }		
+    }
+    else if(strncmp(messages, "watchdog_test", 13) == 0)
+    {
+		printk("[asusdbg] start watchdog test...\r\n");
+		watchdog_test = 1;
+	}    
+	else if(strncmp(messages, "tzlog", 5) == 0)
+    {
+        save_tz_log();  //adbg++
+        return count;
+    }
 	else if(strncmp(messages, "gichk", 5) == 0)
     {
         save_all_thread_info();
@@ -1142,6 +1267,33 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 	else if(strncmp(messages, "get_lastshutdown_log", 20) == 0)
 	{
         save_phone_hang_log();
+	}
+	else if(strncmp(messages, "get_asdf_log", strlen("get_asdf_log")) == 0)
+	{
+#ifdef CONFIG_MSM_RTB
+			extern int g_saving_rtb_log;
+#endif
+			unsigned int *last_shutdown_log_addr;
+
+            last_shutdown_log_addr = (unsigned int *)((unsigned int)PRINTK_BUFFER + (unsigned int)PRINTK_BUFFER_SLOT_SIZE);
+            printk("[ASDF] last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
+
+            if(!asus_asdf_set)
+            {
+                asus_asdf_set = 1;
+				save_phone_hang_log();
+                get_last_shutdown_log();
+                printk("[ASDF] get_last_shutdown_log: last_shutdown_log_addr=0x%08x, value=0x%08x\n", (unsigned int)last_shutdown_log_addr, *last_shutdown_log_addr);
+#ifdef CONFIG_MSM_RTB
+                if ( (*last_shutdown_log_addr)==(unsigned int)PRINTK_BUFFER_MAGIC )
+					save_rtb_log();
+#endif
+
+				(*last_shutdown_log_addr)=(unsigned int)PRINTK_BUFFER_MAGIC;
+            }
+#ifdef CONFIG_MSM_RTB
+            g_saving_rtb_log = 0;
+#endif
 	}
 	else if(strncmp(messages, "get_phonehang_log", 17) == 0)
 	{
@@ -1209,7 +1361,7 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
             sys_close(file_handle);
         }
         else
-            printk("ERROR! cannot create filter file");
+            printk("[asusdbg] ERROR! cannot create filter file");
         
         deinitKernelEnv();
         return count;
@@ -1252,7 +1404,7 @@ static void do_write_event_worker(struct work_struct *work)
     
     while(first == 0 || suspend_in_progress)
     {
-        printk("waiting first\n");
+        printk("[asusdbg] waiting first\n");
         msleep(1000);
     }   
     
@@ -1270,7 +1422,10 @@ static void do_write_event_worker(struct work_struct *work)
             sys_close(g_hfileEvtlog);
 #endif            
             
-            g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0);
+            g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0666);
+            if (g_hfileEvtlog < 0)
+                printk("[asusdbg] 1. open %s failed, err:%d\n", ASUS_EVTLOG_PATH".txt", g_hfileEvtlog);
+
             sys_chown(ASUS_EVTLOG_PATH".txt", AID_SDCARD_RW, AID_SDCARD_RW);
             
             size = sys_lseek(g_hfileEvtlog, 0, SEEK_END);
@@ -1279,10 +1434,13 @@ static void do_write_event_worker(struct work_struct *work)
                 sys_close(g_hfileEvtlog); 
                 sys_rmdir(ASUS_EVTLOG_PATH"_old.txt");
                 sys_rename(ASUS_EVTLOG_PATH".txt", ASUS_EVTLOG_PATH"_old.txt");
-                g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0);
+                g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0666);
+                if (g_hfileEvtlog < 0)
+                    printk("[asusdbg] 1. open %s failed during renaming old one, err:%d\n", ASUS_EVTLOG_PATH".txt", g_hfileEvtlog);
             }    
             sprintf(buffer, "\n\n---------------System Boot----%s---------\n", ASUS_SW_VER);
-            
+            printk("\n[asusdbg]------------System Boot----%s---------\n", ASUS_SW_VER);
+
             sys_write(g_hfileEvtlog, buffer, strlen(buffer));
             sys_close(g_hfileEvtlog);
         }
@@ -1293,7 +1451,9 @@ static void do_write_event_worker(struct work_struct *work)
         char* pchar;
         long size;
 
-        g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0);
+        g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0666);
+        if (g_hfileEvtlog < 0)
+            printk("[asusdbg] 2. open %s failed, err:%d\n", ASUS_EVTLOG_PATH".txt", g_hfileEvtlog);
         sys_chown(ASUS_EVTLOG_PATH".txt", AID_SDCARD_RW, AID_SDCARD_RW);
 
         size = sys_lseek(g_hfileEvtlog, 0, SEEK_END);
@@ -1302,7 +1462,9 @@ static void do_write_event_worker(struct work_struct *work)
             sys_close(g_hfileEvtlog); 
             sys_rmdir(ASUS_EVTLOG_PATH"_old.txt");
             sys_rename(ASUS_EVTLOG_PATH".txt", ASUS_EVTLOG_PATH"_old.txt");
-            g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0);
+            g_hfileEvtlog = sys_open(ASUS_EVTLOG_PATH".txt", O_CREAT|O_RDWR|O_SYNC, 0666);
+            if (g_hfileEvtlog < 0)
+                printk("[asusdbg] 2. open %s failed during renaming old one, err:%d\n", ASUS_EVTLOG_PATH".txt", g_hfileEvtlog);
         }
 
         while(g_Asus_Eventlog_read != g_Asus_Eventlog_write)
@@ -1323,7 +1485,7 @@ static void do_write_event_worker(struct work_struct *work)
             }
             while(suspend_in_progress)
             {
-                printk("waiting for resume\n");
+                printk("[asusdbg] waiting for resume\n");
                 msleep(1000);
             }    
             sys_write(g_hfileEvtlog, pchar, strlen(pchar));
@@ -1353,7 +1515,7 @@ void ASUSEvtlog(const char *fmt, ...)
     
     if(g_bEventlogEnable == 0)
         return;
-    //printk("-------------------------------g_Asus_Eventlog_write/data/log/ASUSEvtlog = %d\n", g_Asus_Eventlog_write);
+    //printk("-------------------------------g_Asus_Eventlog_write/asdf/ASUSEvtlog = %d\n", g_Asus_Eventlog_write);
     //mutex_lock(&mA);
     if (!in_interrupt() && !in_atomic() && !irqs_disabled())
         mutex_lock(&mA);//spin_lock(&spinlock_eventlog);
@@ -1376,10 +1538,11 @@ void ASUSEvtlog(const char *fmt, ...)
         getnstimeofday(&ts);
         ts.tv_sec -= sys_tz.tz_minuteswest * 60; // to get correct timezone information
         rtc_time_to_tm(ts.tv_sec, &tm);
-        sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d :", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+        getrawmonotonic(&ts);
+        sprintf(buffer, "(%ld)%04d-%02d-%02d %02d:%02d:%02d :",ts.tv_sec,tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     
         va_start(args, fmt);
-        vscnprintf(buffer + strlen(buffer), ASUS_EVTLOG_STR_MAXLEN, fmt, args);
+        vscnprintf(buffer + strlen(buffer), ASUS_EVTLOG_STR_MAXLEN - strlen(buffer), fmt, args);
         va_end(args);
         //printk(buffer);
         queue_work(ASUSEvtlog_workQueue, &eventLog_Work);
@@ -1388,7 +1551,7 @@ void ASUSEvtlog(const char *fmt, ...)
         
     }
     else
-        printk("ASUSEvtlog buffer cannot be allocated");
+        printk("[asusdbg] ASUSEvtlog buffer cannot be allocated");
 
 
 }
@@ -1397,14 +1560,14 @@ static ssize_t evtlogswitch_write(struct file *file, const char __user *buf, siz
 {
     if(strncmp(buf, "0", 1) == 0) {
         ASUSEvtlog("ASUSEvtlog disable !!");
-        printk("ASUSEvtlog disable !!");
+        printk("[asusdbg] ASUSEvtlog disable !!");
         flush_work_sync(&eventLog_Work);
         g_bEventlogEnable = 0;
     }
     if(strncmp(buf, "1", 1) == 0) {
         g_bEventlogEnable = 1;
         ASUSEvtlog("ASUSEvtlog enable !!");
-        printk("ASUSEvtlog enable !!");
+        printk("[asusdbg] ASUSEvtlog enable !!");
     }
 
     return count;
@@ -1460,7 +1623,7 @@ static const struct file_operations proc_asusdebug_operations = {
     .open       = asusdebug_open,
     .release    = asusdebug_release,
 };
-
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void asusdebug_early_suspend(struct early_suspend *h)
 {
     entering_suspend = 1;
@@ -1471,13 +1634,59 @@ static void asusdebug_early_resume(struct early_suspend *h)
 {
     entering_suspend = 0;
 }
+#endif
 EXPORT_SYMBOL(entering_suspend);
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
 struct early_suspend asusdebug_early_suspend_handler = {
     .level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
     .suspend = asusdebug_early_suspend,
     .resume = asusdebug_early_resume,
 };
+#endif
+//--
+
+unsigned int asusdebug_enable = 0;
+unsigned int readflag = 0;
+static ssize_t turnon_asusdebug_proc_read(struct file *filp, char __user *buff, size_t len, loff_t *off)
+{
+    char print_buf[32];
+    unsigned int ret = 0,iret = 0;
+    sprintf(print_buf, "asusdebug: %s\n", asusdebug_enable? "off":"on");
+    ret = strlen(print_buf);
+    iret = copy_to_user(buff, print_buf, ret);
+    if (!readflag){
+               readflag = 1;
+               return ret;
+       }
+       else{
+               readflag = 0;
+               return 0;
+       }
+}
+static ssize_t turnon_asusdebug_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *off)
+{
+       char messages[256];
+    memset(messages, 0, sizeof(messages));
+       if (len > 256)
+               len = 256;
+       if (copy_from_user(messages, buff, len))
+               return -EFAULT;
+    if(strncmp(messages, "off", 3) == 0)
+    {
+               asusdebug_enable = 0x11223344;
+       }
+       else if(strncmp(messages, "on", 2) == 0)
+       {
+               asusdebug_enable = 0;
+       }
+       return len;
+}
+static struct file_operations turnon_asusdebug_proc_ops = {
+    .read = turnon_asusdebug_proc_read,
+    .write = turnon_asusdebug_proc_write,
+};
+
 
 static int __init proc_asusdebug_init(void)
 {
@@ -1485,21 +1694,25 @@ static int __init proc_asusdebug_init(void)
     proc_create("asusdebug", S_IALLUGO, NULL, &proc_asusdebug_operations);
     proc_create("asusevtlog", S_IRWXUGO, NULL, &proc_asusevtlog_operations);
     proc_create("asusevtlog-switch", S_IRWXUGO, NULL, &proc_evtlogswitch_operations);
+    proc_create("asusdebug-switch", S_IRWXUGO, NULL, &turnon_asusdebug_proc_ops);
     PRINTK_BUFFER = (unsigned int)ioremap(PRINTK_BUFFER, PRINTK_BUFFER_SIZE);
     mutex_init(&mA);
     fake_mutex.owner = current;
-	fake_mutex.name = " fake_mutex";
+    fake_mutex.mutex_owner_asusdebug = current;
+    fake_mutex.name = " fake_mutex";
 	
-	strcpy(fake_completion.name," fake_completion");
+    strcpy(fake_completion.name," fake_completion");
 	
-	fake_rtmutex.owner = current;
+    fake_rtmutex.owner = current;
     //spin_lock_init(&spinlock_eventlog);
     ASUSEvtlog_workQueue  = create_singlethread_workqueue("ASUSEVTLOG_WORKQUEUE");
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
     register_early_suspend(&asusdebug_early_suspend_handler);
-    
+#endif
+
     return 0;
 }
 module_init(proc_asusdebug_init);
 
-
+EXPORT_COMPAT("qcom,asusdebug");

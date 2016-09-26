@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,13 +10,14 @@
  * GNU General Public License for more details.
  *
  */
+#define DEBUG
 
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/gpio.h>
 #include <linux/platform_device.h>
 #include <linux/bootmem.h>
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 #include <asm/mach-types.h>
 #include <mach/msm_memtypes.h>
 #include <mach/board.h>
@@ -28,23 +29,17 @@
 #include "devices.h"
 #include "board-8064.h"
 // +++ ASUS_BSP : Miniporting
-//Mickey+++, change for DDS architecture
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 /* prim = 1366 x 768 x 3(bpp) x 3(pages) */
-//#define MSM_FB_PRIM_BUF_SIZE roundup(1920 * 1080 * 4 * 3, 0x10000)
-#define MSM_FB_PRIM_BUF_SIZE roundup( ALIGN(1280,32) * 1280 * 4 * 3, 0x10000) //Mickey, add for DDS transformation
-#define MSM_FB_PRIM_BUF_SIZE_A80 roundup( ALIGN(1920,32) * 1920 * 4 * 3, 0x10000) //Mickey, add for a80 DDS transformation
+#define MSM_FB_PRIM_BUF_SIZE roundup(1920 * 1080 * 4 * 3, 0x10000)
 #else
 /* prim = 1366 x 768 x 3(bpp) x 2(pages) */
-//#define MSM_FB_PRIM_BUF_SIZE roundup(1920 * 1080 * 4 * 2, 0x10000)
-#define MSM_FB_PRIM_BUF_SIZE roundup( ALIGN(1280,32) * 1280 * 4 * 2, 0x10000) //Mickey, add for DDS transformation
-#define MSM_FB_PRIM_BUF_SIZE_A80 roundup( ALIGN(1920,32) * 1920 * 4 * 2, 0x10000) //Mickey, add for a80 DDS transformation
+#define MSM_FB_PRIM_BUF_SIZE roundup(1920 * 1080 * 4 * 2, 0x10000)
 #endif
-//Mickey---
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 #define MSM_FB_EXT_BUF_SIZE \
-		(roundup(( ALIGN(1920,32) * 1280 * 2), 4096) * 1) /* 2 bpp x 1 page */ //Mickey modified for 1920x1200 support
+		(roundup((1920 * 1088 * 2), 4096) * 1) /* 2 bpp x 1 page */
 #elif defined(CONFIG_FB_MSM_TVOUT)
 #define MSM_FB_EXT_BUF_SIZE \
 		(roundup((720 * 576 * 2), 4096) * 2) /* 2 bpp x 2 pages */
@@ -62,12 +57,6 @@
 #define MSM_FB_SIZE \
 	roundup(MSM_FB_PRIM_BUF_SIZE + \
 		MSM_FB_EXT_BUF_SIZE + MSM_FB_WFD_BUF_SIZE, 4096)
-
-//Mickey+++, add for A80 support
-#define MSM_FB_SIZE_A80 \
-    roundup(MSM_FB_PRIM_BUF_SIZE_A80 + \
-        MSM_FB_EXT_BUF_SIZE + MSM_FB_WFD_BUF_SIZE, 4096)
-//Mickey---
 // --- ASUS_BSP : Miniporting
 
 #ifdef CONFIG_FB_MSM_OVERLAY0_WRITEBACK
@@ -123,7 +112,6 @@ static void set_mdp_clocks_for_wuxga(void);
 static int msm_fb_detect_panel(const char *name)
 {
 	u32 version;
-
 	if (machine_is_apq8064_liquid()) {
 		version = socinfo_get_platform_version();
 		if ((SOCINFO_VERSION_MAJOR(version) == 1) &&
@@ -186,12 +174,7 @@ void __init apq8064_allocate_fb_region(void)
 	void *addr;
 	unsigned long size;
 
-    //Mickey+++, add for A80 support
-    if (g_A68_hwID >= A80_EVB)
-        size = MSM_FB_SIZE_A80;
-    else
-        size = MSM_FB_SIZE;
-    //Mickey---
+	size = MSM_FB_SIZE;
 	addr = alloc_bootmem_align(size, 0x1000);
 	msm_fb_resources[0].start = __pa(addr);
 	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
@@ -285,6 +268,9 @@ static struct msm_bus_scale_pdata mdp_bus_scale_pdata = {
 static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = MDP_VSYNC_GPIO,
 	.mdp_max_clk = 266667000,
+	.mdp_max_bw = 2000000000,
+	.mdp_bw_ab_factor = 115,
+	.mdp_bw_ib_factor = 150,
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 	.mdp_rev = MDP_REV_44,
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
@@ -304,6 +290,9 @@ void __init apq8064_mdp_writeback(struct memtype_reserve* reserve_table)
 		mdp_pdata.ov0_wb_size;
 	reserve_table[mdp_pdata.mem_hid].size +=
 		mdp_pdata.ov1_wb_size;
+
+	pr_info("mem_map: mdp reserved with size 0x%lx in pool\n",
+			mdp_pdata.ov0_wb_size + mdp_pdata.ov1_wb_size);
 #endif
 }
 
@@ -386,196 +375,9 @@ static struct platform_device wfd_device = {
 #define HDMI_DDC_DATA_GPIO	71
 #define HDMI_HPD_GPIO		72
 
-#if 0 // +++ ASUS_BSP : A68 miniporting
-static bool dsi_power_on;
-static int mipi_dsi_panel_power(int on)
-{
-	static struct regulator *reg_lvs7, *reg_l2, *reg_l11, *reg_ext_3p3v;
-	static int gpio36, gpio25, gpio26, mpp3;
-	int rc;
-
-	pr_debug("%s: on=%d\n", __func__, on);
-
-	if (!dsi_power_on) {
-		reg_lvs7 = regulator_get(&msm_mipi_dsi1_device.dev,
-				"dsi1_vddio");
-		if (IS_ERR_OR_NULL(reg_lvs7)) {
-			pr_err("could not get 8921_lvs7, rc = %ld\n",
-				PTR_ERR(reg_lvs7));
-			return -ENODEV;
-		}
-
-		reg_l2 = regulator_get(&msm_mipi_dsi1_device.dev,
-				"dsi1_pll_vdda");
-		if (IS_ERR_OR_NULL(reg_l2)) {
-			pr_err("could not get 8921_l2, rc = %ld\n",
-				PTR_ERR(reg_l2));
-			return -ENODEV;
-		}
-
-		rc = regulator_set_voltage(reg_l2, 1200000, 1200000);
-		if (rc) {
-			pr_err("set_voltage l2 failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-		reg_l11 = regulator_get(&msm_mipi_dsi1_device.dev,
-						"dsi1_avdd");
-		if (IS_ERR(reg_l11)) {
-				pr_err("could not get 8921_l11, rc = %ld\n",
-						PTR_ERR(reg_l11));
-				return -ENODEV;
-		}
-		rc = regulator_set_voltage(reg_l11, 3000000, 3000000);
-		if (rc) {
-				pr_err("set_voltage l11 failed, rc=%d\n", rc);
-				return -EINVAL;
-		}
-
-		if (machine_is_apq8064_liquid()) {
-			reg_ext_3p3v = regulator_get(&msm_mipi_dsi1_device.dev,
-				"dsi1_vccs_3p3v");
-			if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
-				pr_err("could not get reg_ext_3p3v, rc = %ld\n",
-					PTR_ERR(reg_ext_3p3v));
-				reg_ext_3p3v = NULL;
-				return -ENODEV;
-			}
-			mpp3 = PM8921_MPP_PM_TO_SYS(3);
-			rc = gpio_request(mpp3, "backlight_en");
-			if (rc) {
-				pr_err("request mpp3 failed, rc=%d\n", rc);
-				return -ENODEV;
-			}
-		}
-
-		gpio25 = PM8921_GPIO_PM_TO_SYS(25);
-		rc = gpio_request(gpio25, "disp_rst_n");
-		if (rc) {
-			pr_err("request gpio 25 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		gpio26 = PM8921_GPIO_PM_TO_SYS(26);
-		rc = gpio_request(gpio26, "pwm_backlight_ctrl");
-		if (rc) {
-			pr_err("request gpio 26 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		gpio36 = PM8921_GPIO_PM_TO_SYS(36); /* lcd1_pwr_en_n */
-		rc = gpio_request(gpio36, "lcd1_pwr_en_n");
-		if (rc) {
-			pr_err("request gpio 36 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		dsi_power_on = true;
-	}
-
-	if (on) {
-		rc = regulator_enable(reg_lvs7);
-		if (rc) {
-			pr_err("enable lvs7 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_set_optimum_mode(reg_l11, 110000);
-		if (rc < 0) {
-			pr_err("set_optimum_mode l11 failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-		rc = regulator_enable(reg_l11);
-		if (rc) {
-			pr_err("enable l11 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_set_optimum_mode(reg_l2, 100000);
-		if (rc < 0) {
-			pr_err("set_optimum_mode l2 failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-		rc = regulator_enable(reg_l2);
-		if (rc) {
-			pr_err("enable l2 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		if (machine_is_apq8064_liquid()) {
-			rc = regulator_enable(reg_ext_3p3v);
-			if (rc) {
-				pr_err("enable reg_ext_3p3v failed, rc=%d\n",
-					rc);
-				return -ENODEV;
-			}
-			gpio_set_value_cansleep(mpp3, 1);
-		}
-
-		gpio_set_value_cansleep(gpio36, 0);
-		gpio_set_value_cansleep(gpio25, 1);
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 1);
-	} else {
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 0);
-		gpio_set_value_cansleep(gpio25, 0);
-		gpio_set_value_cansleep(gpio36, 1);
-
-		if (machine_is_apq8064_liquid()) {
-			gpio_set_value_cansleep(mpp3, 0);
-
-			rc = regulator_disable(reg_ext_3p3v);
-			if (rc) {
-				pr_err("disable reg_ext_3p3v failed, rc=%d\n",
-					rc);
-				return -ENODEV;
-			}
-		}
-
-		rc = regulator_disable(reg_l11);
-		if (rc) {
-			pr_err("disable reg_l1 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_disable(reg_lvs7);
-		if (rc) {
-			pr_err("disable reg_lvs7 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_disable(reg_l2);
-		if (rc) {
-			pr_err("disable reg_l2 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-	}
-
-	return 0;
-}
-#endif // --- ASUS_BSP : A68 miniporting
-
-// +++ ASUS_BSP : A68 & A80 miniporting
-int backlight_gpio_control(int bOn)
-{
-    int ret = 0, gpio2 = 2;
-    if (bOn) {
-        ret = gpio_request(gpio2, "BL_EN_1st");
-        if (ret) {
-            pr_err("request gpio 2 failed, rc=%d\n", ret);
-            return -ENODEV;
-        }
-
-        gpio_set_value_cansleep(gpio2, 0);
-    }
-    else {
-        gpio_free(gpio2);
-    }
-
-    return ret;
-}
-
+//ASUS_BSP +++ Jason Chang "display miniporting"
 static bool dsi_power_on = false;
+#ifdef ASUS_A68_PROJECT
 static int a68_mipi_dsi_sharp_panel_power(int on)
 {
     static struct regulator *reg_l11, *reg_l2;
@@ -690,25 +492,55 @@ static int a68_mipi_dsi_sharp_panel_power(int on)
             return -ENODEV;
         }
 
+#if 0
+        rc = regulator_disable(reg_l11);
+        if (rc) {
+            printk("disable reg_l8 failed, rc=%d\n", rc);
+            return -ENODEV;
+        }
+
+        rc = regulator_disable(reg_lvs5);
+        if (rc) {
+            pr_err("disable reg_lvs5 failed, rc=%d\n", rc);
+            return -ENODEV;
+        }
+
+        rc = regulator_set_optimum_mode(reg_l11, 100);
+        if (rc < 0) {
+            printk("set_optimum_mode l11 failed, rc=%d\n", rc);
+            return -EINVAL;
+        }
+#endif
+
         rc = regulator_set_optimum_mode(reg_l2, 100);
         if (rc < 0) {
             printk("set_optimum_mode l2 failed, rc=%d\n", rc);
             return -EINVAL;
         }
 
+#ifdef CONFIG_FB_MSM_MIPI_NOVATEK_VIDEO_MODE
+        gpio_set_value_cansleep(gpio51, 0);
+#endif
     }
 
     return 0;
 }
-
+#endif
+#ifdef ASUS_A80_PROJECT
 static int a80_mipi_dsi_sharp_panel_power(int on)
 {
-    static struct regulator *reg_l2;
+    static struct regulator *reg_l11, *reg_l2;
     static struct regulator *reg_lvs5; // should be 1.8V
     int rc;
-    static int gpio51 = 51, gpio37 = 37, gpio56 = 56;
+    static int gpio51 = 51, gpio2 = 2, gpio37 = 37, gpio56 = 56;
 
     if (!dsi_power_on) {
+
+        reg_l11 = regulator_get(&msm_mipi_dsi1_device.dev,"dsi_vdc");
+        if (IS_ERR(reg_l11)) {
+            pr_err("could not get 8921_l11, rc = %ld\n",PTR_ERR(reg_l11));
+            return -ENODEV;
+        }
 
         reg_lvs5 = regulator_get(&msm_mipi_dsi1_device.dev,
                 "dsi_vddio");
@@ -724,12 +556,25 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
                 PTR_ERR(reg_l2));
             return -ENODEV;
         }
+        rc = regulator_set_voltage(reg_l11, 3100000, 3100000);
+        if (rc) {
+            pr_err("set_voltage l11 failed, rc=%d\n", rc);
+            return -EINVAL;
+        }
 
         rc = regulator_set_voltage(reg_l2, 1200000, 1200000);
         if (rc) {
             pr_err("set_voltage l2 failed, rc=%d\n", rc);
             return -EINVAL;
         }
+
+        rc = gpio_request(gpio2, "bl_en");
+        if (rc) {
+            pr_err("request gpio 2 failed, rc=%d\n", rc);
+            return -ENODEV;
+        }
+
+        gpio_direction_output(gpio2,1);
 
         rc = gpio_request(gpio51, "disp_rst_n");
         if (rc) {
@@ -749,11 +594,17 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
             return -ENODEV;
         }
 
-        backlight_gpio_control(1);  //set low to avoid flicker when splash screen change
     }
+
+
 
     if (on) {
 
+        rc = regulator_set_optimum_mode(reg_l11, 100000);
+        if (rc < 0) {
+            pr_err("set_optimum_mode l11 failed, rc=%d\n", rc); 
+            return -EINVAL;
+        }
 
         rc = regulator_set_optimum_mode(reg_l2, 100000);
         if (rc < 0) {
@@ -761,6 +612,11 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
             return -EINVAL;
         }
 
+        rc = regulator_enable(reg_l11);
+        if (rc) {
+            pr_err("enable l11 failed, rc=%d\n", rc);
+            return -ENODEV;
+        }
         udelay(5);
 
         rc = regulator_enable(reg_lvs5);
@@ -769,7 +625,10 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
             return -ENODEV;
         }
 
-        msleep(200);
+        msleep(15);
+        gpio_set_value(gpio2, 1);
+
+        msleep(180);
         gpio_set_value_cansleep(gpio56, 1);     //AVDD +5V
         msleep(15);
         gpio_set_value_cansleep(gpio37, 1);     //AVDD -5V
@@ -781,12 +640,11 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
         }
 
         gpio_set_value_cansleep(gpio51, 0);
-        msleep(10);
+        msleep(50);
         gpio_set_value_cansleep(gpio51, 1);
-        msleep(10);
+        msleep(20);
 
         dsi_power_on = true;
-
     }
 
     else {
@@ -795,9 +653,14 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
             pr_err("disable reg_l2 failed, rc=%d\n", rc);
             return -ENODEV;
         }
-
         gpio_set_value_cansleep(gpio51, 0);
         msleep(5);
+
+        rc = regulator_disable(reg_l11);
+        if (rc) {
+            printk("disable reg_l8 failed, rc=%d\n", rc);
+            return -ENODEV;
+        }
 
         if (g_A68_hwID < A80_SR3) {
             gpio_set_value_cansleep(gpio37, 0);     //AVDD -5V
@@ -817,33 +680,46 @@ static int a80_mipi_dsi_sharp_panel_power(int on)
             return -ENODEV;
         }
 
+        rc = regulator_set_optimum_mode(reg_l11, 100);
+        if (rc < 0) {
+            printk("set_optimum_mode l11 failed, rc=%d\n", rc);
+            return -EINVAL;
+        }
+
         rc = regulator_set_optimum_mode(reg_l2, 100);
         if (rc < 0) {
             printk("set_optimum_mode l2 failed, rc=%d\n", rc);
             return -EINVAL;
         }
 
+
+        gpio_set_value_cansleep(gpio2, 0);
+        gpio_set_value_cansleep(gpio51, 0);
+        msleep(70);
+ 
+ 		gpio_set_value_cansleep(gpio37, 0);     //AVDD -5V
+
+
      }
 
     return 0;
 }
-
+#endif
 static int mipi_dsi_panel_power(int on)
 {
     //pr_info("%s: on=%d\n", __func__, on);
-    if (g_A68_hwID < A80_EVB) {
-        pr_info("++. A68 mipi_dsi_panel_power on=%d\n", on);
-        a68_mipi_dsi_sharp_panel_power(on);
-        pr_info("--. A68 mipi_dsi_panel_power on=%d\n", on);
-    }
-    else {
+
+#ifdef ASUS_A80_PROJECT
         pr_info("++. A80 mipi_dsi_panel_power on=%d\n", on);
         a80_mipi_dsi_sharp_panel_power(on);
         pr_info("--. A80 mipi_dsi_panel_power on=%d\n", on);
-    }
+#else
+        printk("++. A68 mipi_dsi_panel_power on=%d\n", on);
+        a68_mipi_dsi_sharp_panel_power(on);
+        printk("--. A68 mipi_dsi_panel_power on=%d\n", on);
+#endif
     return 0;
 }
-
 void a80_mipi_dsi_panel_power_off(void)
 {
     if (dsi_power_on) {
@@ -852,279 +728,82 @@ void a80_mipi_dsi_panel_power_off(void)
         printk("%s: A80 panel power off --", __func__);
     }
 }
-// --- ASUS_BSP : A68 & A80 miniporting
+//ASUS_BSP --- Jason Chang "display miniporting"
 
-static char mipi_dsi_splash_is_enabled(void);   //Louis: porting for A80
+static char mipi_dsi_splash_is_enabled(void);   //ASUS_BSP +++ Jason Chang "display miniporting"
 static struct mipi_dsi_platform_data mipi_dsi_pdata = {
 	.dsi_power_save = mipi_dsi_panel_power,
-    .splash_is_enabled = mipi_dsi_splash_is_enabled, //Louis: porting for A80
+    .splash_is_enabled = mipi_dsi_splash_is_enabled, //ASUS_BSP +++ Jason Chang "display miniporting"
 };
 
-#if 0 // +++ ASUS_miniporting :Louis
-static bool lvds_power_on;
-static int lvds_panel_power(int on)
+//ASUS_BSP +++ Jason Chang "display miniporting"
+
+
+
+#ifdef CONFIG_FB_MSM_MIPI_DSI
+#ifdef ASUS_A80_PROJECT
+static int mipi_renesas_set_bl(int level)
 {
-	static struct regulator *reg_lvs7, *reg_l2, *reg_ext_3p3v;
-	static int gpio36, gpio26, mpp3;
-	int rc;
+#if 0
+	int ret;
 
-	pr_debug("%s: on=%d\n", __func__, on);
+	ret = pmapp_disp_backlight_set_brightness(level);
 
-	if (!lvds_power_on) {
-		reg_lvs7 = regulator_get(&msm_lvds_device.dev,
-				"lvds_vdda");
-		if (IS_ERR_OR_NULL(reg_lvs7)) {
-			pr_err("could not get 8921_lvs7, rc = %ld\n",
-				PTR_ERR(reg_lvs7));
-			return -ENODEV;
-		}
+	if (ret)
+		pr_err("%s: can't set lcd backlight!\n", __func__);
 
-		reg_l2 = regulator_get(&msm_lvds_device.dev,
-				"lvds_pll_vdda");
-		if (IS_ERR_OR_NULL(reg_l2)) {
-			pr_err("could not get 8921_l2, rc = %ld\n",
-				PTR_ERR(reg_l2));
-			return -ENODEV;
-		}
-
-		rc = regulator_set_voltage(reg_l2, 1200000, 1200000);
-		if (rc) {
-			pr_err("set_voltage l2 failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-
-		reg_ext_3p3v = regulator_get(&msm_lvds_device.dev,
-			"lvds_vccs_3p3v");
-		if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
-			pr_err("could not get reg_ext_3p3v, rc = %ld\n",
-			       PTR_ERR(reg_ext_3p3v));
-		    return -ENODEV;
-		}
-
-		gpio26 = PM8921_GPIO_PM_TO_SYS(26);
-		rc = gpio_request(gpio26, "pwm_backlight_ctrl");
-		if (rc) {
-			pr_err("request gpio 26 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		gpio36 = PM8921_GPIO_PM_TO_SYS(36); /* lcd1_pwr_en_n */
-		rc = gpio_request(gpio36, "lcd1_pwr_en_n");
-		if (rc) {
-			pr_err("request gpio 36 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		mpp3 = PM8921_MPP_PM_TO_SYS(3);
-		rc = gpio_request(mpp3, "backlight_en");
-		if (rc) {
-			pr_err("request mpp3 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		lvds_power_on = true;
-	}
-
-	if (on) {
-		rc = regulator_enable(reg_lvs7);
-		if (rc) {
-			pr_err("enable lvs7 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_set_optimum_mode(reg_l2, 100000);
-		if (rc < 0) {
-			pr_err("set_optimum_mode l2 failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-		rc = regulator_enable(reg_l2);
-		if (rc) {
-			pr_err("enable l2 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		rc = regulator_enable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("enable reg_ext_3p3v failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-
-		gpio_set_value_cansleep(gpio36, 0);
-		gpio_set_value_cansleep(mpp3, 1);
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 1);
-	} else {
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 0);
-		gpio_set_value_cansleep(mpp3, 0);
-		gpio_set_value_cansleep(gpio36, 1);
-
-		rc = regulator_disable(reg_lvs7);
-		if (rc) {
-			pr_err("disable reg_lvs7 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-		rc = regulator_disable(reg_l2);
-		if (rc) {
-			pr_err("disable reg_l2 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-		rc = regulator_disable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("disable reg_ext_3p3v failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
-	}
-
+	return ret;
+#else
 	return 0;
+#endif
 }
 
-static int lvds_pixel_remap(void)
-{
-	//u32 ver = socinfo_get_version();//+++ ASUS_BSP
-
-	if (machine_is_apq8064_cdp() ||
-	    machine_is_apq8064_liquid()) {
-		u32 ver = socinfo_get_platform_version(); //+++ ASUS_BSP : miniporting
-		if ((SOCINFO_VERSION_MAJOR(ver) == 1) &&
-		    (SOCINFO_VERSION_MINOR(ver) == 0))
-			return LVDS_PIXEL_MAP_PATTERN_1;
-	} else if (machine_is_mpq8064_dtv()) {
-		if ((SOCINFO_VERSION_MAJOR(ver) == 1) &&
-		    (SOCINFO_VERSION_MINOR(ver) == 0))
-			return LVDS_PIXEL_MAP_PATTERN_2;
-	}
-	return 0;
-}
-
-static struct lcdc_platform_data lvds_pdata = {
-	.lcdc_power_save = lvds_panel_power,
-	.lvds_pixel_remap = lvds_pixel_remap
+static struct msm_panel_common_pdata mipi_renesas_pdata = {
+	.pmic_backlight = mipi_renesas_set_bl,
 };
 
-#define LPM_CHANNEL 2
-static int lvds_chimei_gpio[] = {LPM_CHANNEL};
-
-static struct lvds_panel_platform_data lvds_chimei_pdata = {
-	.gpio = lvds_chimei_gpio,
-};
-
-static struct platform_device lvds_chimei_panel_device = {
-	.name = "lvds_chimei_wxga",
-	.id = 0,
-	.dev = {
-		.platform_data = &lvds_chimei_pdata,
-	}
-};
-
-#define FRC_GPIO_UPDATE	(SX150X_EXP4_GPIO_BASE + 8)
-#define FRC_GPIO_RESET	(SX150X_EXP4_GPIO_BASE + 9)
-#define FRC_GPIO_PWR	(SX150X_EXP4_GPIO_BASE + 10)
-
-static int lvds_frc_gpio[] = {FRC_GPIO_UPDATE, FRC_GPIO_RESET, FRC_GPIO_PWR};
-static struct lvds_panel_platform_data lvds_frc_pdata = {
-	.gpio = lvds_frc_gpio,
-};
-
-static struct platform_device lvds_frc_panel_device = {
-	.name = "lvds_frc_fhd",
-	.id = 0,
-	.dev = {
-		.platform_data = &lvds_frc_pdata,
-	}
-};
-
-static int dsi2lvds_gpio[2] = {
-	LPM_CHANNEL,/* Backlight PWM-ID=0 for PMIC-GPIO#24 */
-	0x1F08 /* DSI2LVDS Bridge GPIO Output, mask=0x1f, out=0x08 */
-};
-static struct msm_panel_common_pdata mipi_dsi2lvds_pdata = {
-	.gpio_num = dsi2lvds_gpio,
-};
-
-static struct platform_device mipi_dsi2lvds_bridge_device = {
-	.name = "mipi_tc358764",
-	.id = 0,
-	.dev.platform_data = &mipi_dsi2lvds_pdata,
-};
-
-static int toshiba_gpio[] = {LPM_CHANNEL};
-static struct mipi_dsi_panel_platform_data toshiba_pdata = {
-	.gpio = toshiba_gpio,
-};
-
-static struct platform_device mipi_dsi_toshiba_panel_device = {
-	.name = "mipi_toshiba",
-	.id = 0,
-	.dev = {
-			.platform_data = &toshiba_pdata,
-	}
-};
-#endif  // --- ASUS_miniporting: Louis
-
-//+++ ASUS_BSP: miniporting
-static struct mipi_dsi_phy_ctrl dsi_novatek_cmd_mode_phy_db = {
-    /* regulator */
-    {0x03, 0x0a, 0x04, 0x00, 0x20},
-    /* timing */
-    {0xC2, 0x26, 0x25, 0x00, 0x55, 0x99, 0x27,
-    0x92, 0x29, 0x03, 0x04, 0xa0},
-    /* phy ctrl */
-    {0x5f, 0x00, 0x00, 0x10},
-    /* strength */
-    {0xff, 0x00, 0x06, 0x00},
-    /* pll control */
-    {0x0, 
-    0xf9, 0xb0, 0xda, 
-    0x00, 0x50, 0x48, 0x63,
-    0x30, 0x07, 0x00,
-    0x00, 0x14, 0x03, 0x00, 0x02, 
-    0x00, 0x20, 0x00, 0x01 },
-};
-
-static struct mipi_dsi_panel_platform_data novatek_pdata = {
-    .phy_ctrl_settings = &dsi_novatek_cmd_mode_phy_db,
-};
-
-static struct platform_device mipi_dsi_novatek_panel_device = {
-    .name = "mipi_novatek",
-    .id = 0,
-    .dev = {
-        .platform_data = &novatek_pdata,
-    }
-};
-//--- ASUS_BSP: miniporting 
-
-//+++ ASUS_BSP: A80 miniporting 
-static struct mipi_dsi_phy_ctrl dsi_renesas_video_mode_phy_db = {
-    /* 1920*1080, RGB888, 4 Lane 60 fps video mode */
-    /* regulator */
-    {0x03, 0x0a, 0x04, 0x00, 0x20},
-    /* timing */
-    {0xE8, 0x9B, 0x3B, 0x00, 0x78, 0xA6, 0x3D, 0x9C,
-    0x42, 0x03, 0x04, 0xa0},
-    /* phy ctrl */
-    {0x5f, 0x00, 0x00, 0x10},
-    /* strength */
-    {0xff, 0x00, 0x06, 0x00},
-    /* pll control */
-    {0x0, 0xB3, 0x1, 0x19, 0x00, 0x50, 0x48, 0x63,
-    0x41, 0x0f, 0x01,
-    0x00, 0x14, 0x03, 0x00, 0x02, 0x00, 0x20, 0x00, 0x01 },
-};
-
-static struct mipi_dsi_panel_platform_data renesas_pdata = {
-    .phy_ctrl_settings = &dsi_renesas_video_mode_phy_db,
-};
 
 static struct platform_device mipi_dsi_renesas_panel_device = {
-    .name = "mipi_novatek", //Louis: use novatek panel driver
-    .id = 0,
-    .dev = {
-        .platform_data = &renesas_pdata,
-    }
+	.name = "mipi_renesas",
+	.id = 0,
+	.dev    = {
+		.platform_data = &mipi_renesas_pdata,
+	}
 };
-//--- ASUS_BSP: A80 miniporting 
+#endif
+#ifdef ASUS_A68_PROJECT
+static int mipi_novatek_set_bl(int level)
+{
+#if 0
+	int ret;
+
+	ret = pmapp_disp_backlight_set_brightness(level);
+
+	if (ret)
+		pr_err("%s: can't set lcd backlight!\n", __func__);
+
+	return ret;
+#else
+	return 0;
+#endif
+}
+
+static struct msm_panel_common_pdata mipi_novatek_pdata = {
+	.pmic_backlight = mipi_novatek_set_bl,
+};
+
+
+static struct platform_device mipi_dsi_novatek_panel_device = {
+	.name = "mipi_NT35590",
+	.id = 0,
+	.dev    = {
+		.platform_data = &mipi_novatek_pdata,
+	}
+};
+#endif
+
+#endif
+//ASUS_BSP --- Jason Chang "display miniporting"
 
 static struct msm_bus_vectors dtv_bus_init_vectors[] = {
 	{
@@ -1162,7 +841,7 @@ static struct msm_bus_scale_pdata dtv_bus_scale_pdata = {
 
 static struct lcdc_platform_data dtv_pdata = {
 	.bus_scale_table = &dtv_bus_scale_pdata,
-	.lcdc_power_save = hdmi_panel_power,
+//	.lcdc_power_save = hdmi_panel_power,	//ASUS_BSP: fix for miniporting++
 };
 
 static int hdmi_panel_power(int on)
@@ -1174,6 +853,7 @@ static int hdmi_panel_power(int on)
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
 	if (rc)
 		rc = hdmi_cec_power(on);
+
 #endif
 	pr_debug("%s: HDMI Core: %s Success\n", __func__, (on ? "ON" : "OFF"));
 	return rc;
@@ -1218,6 +898,7 @@ static int hdmi_enable_5v(int on)
 	}
 
 	prev_on = on;
+
 #endif //Mickey---
 	return 0;
 }
@@ -1244,6 +925,7 @@ static int hdmi_core_power(int on, int show)
 			return -ENODEV;
 		}
 	}
+
 #endif
 	if (!reg_8921_lvs7) {
 		reg_8921_lvs7 = regulator_get(&hdmi_msm_device.dev,
@@ -1378,6 +1060,7 @@ static int hdmi_gpio_config(int on)
 		gpio_free(HDMI_DDC_CLK_GPIO);
 		gpio_free(HDMI_DDC_DATA_GPIO);
 		gpio_free(HDMI_HPD_GPIO);
+
 #if 0
 		if (machine_is_apq8064_liquid()) {
 			gpio_set_value_cansleep(pmic_gpio14, 1);
@@ -1400,19 +1083,6 @@ error1:
 	return rc;
 }
 //Mickey---
-
-// +++ Louis
-#include <linux/fb.h> 
-#include "../../../drivers/video/msm/msm_fb.h"
-
-struct fb_info * asus_get_fb_info(int fb_num);
-void asus_update_screen(struct fb_var_screeninfo *var, struct fb_info *info);
-bool update_screen_flag = false;
-extern void asus_mdp_dsi_clk_ctrl(struct fb_info *info, int enable);
-extern struct msm_fb_data_type *g_mfd;
-
-
-// --- Louis
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
 static int hdmi_cec_power(int on)
@@ -1447,17 +1117,17 @@ error:
 void __init apq8064_init_fb(void)
 {
 	platform_device_register(&msm_fb_device);
-//ASUS_BSP: miniporting +++
-    if (g_A68_hwID < A80_EVB) {
-        printk("[Display][A68] mipi_dsi_novatek_panel_device :platform_device_register\n");
-        platform_device_register(&mipi_dsi_novatek_panel_device);
-    }
-    else { 
+//ASUS_BSP +++ Jason Chang "display miniporting"
+#ifdef ASUS_A80_PROJECT
         printk("[Display][A80] mipi_dsi_renesas_panel_device :platform_device_register\n");
         platform_device_register(&mipi_dsi_renesas_panel_device);
-    }
+#endif
+#ifdef ASUS_A68_PROJECT
+        printk("[Display][A68] mipi_dsi_novatek_panel_device :platform_device_register\n");
+        platform_device_register(&mipi_dsi_novatek_panel_device);
+#endif
 //	platform_device_register(&lvds_chimei_panel_device);
-//ASUS_BSP: miniporting ---
+//ASUS_BSP --- Jason Chang "display miniporting"
 #ifdef CONFIG_FB_MSM_WRITEBACK_MSM_PANEL
 	platform_device_register(&wfd_panel_device);
 	platform_device_register(&wfd_device);
@@ -1471,20 +1141,19 @@ void __init apq8064_init_fb(void)
 		platform_device_register(&lvds_frc_panel_device);
 #endif //--- ASUS_BSP: miniporting
 
-    //+++ Louis: A80 miniporting
-    if (g_A68_hwID >= A80_EVB)
-    {
-        printk("[Display] Enable continuous splash\n");
-        mdp_pdata.cont_splash_enabled = 0x1;
-        mdp_pdata.splash_screen_addr = 0x0;
-        mdp_pdata.splash_screen_size = 0x0;
-    }
-    else
-    {
-        printk("[Display] Disable continuous splash\n");
-        mdp_pdata.cont_splash_enabled = 0x0;
-    }
-    //--- Louis: A80 miniporting
+//ASUS_BSP +++ Jason Chang "display miniporting"
+
+	//ASUS_BSP +++ Jason Chang "[A68M][Display]enable splash mode"
+	//enable splash mode need to sync with aboot CONT_SPLASH_SCREEN
+	mdp_pdata.cont_splash_enabled = 0x1;
+	//ASUS_BSP --- Jason Chang "[A68M][Display]enable splash mode"
+	mdp_pdata.splash_screen_addr = 0x0;
+	mdp_pdata.splash_screen_size = 0x0;
+	if(mdp_pdata.cont_splash_enabled)
+		printk("[Display] Enable continuous splash\n");
+	else
+		printk("[Display] Disable continuous splash\n");
+//ASUS_BSP --- Jason Chang "display miniporting"
 
 	msm_fb_register_device("mdp", &mdp_pdata);
 //	msm_fb_register_device("lvds", &lvds_pdata);    //+++ ASUS_BSP miniporting
@@ -1562,9 +1231,9 @@ void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
 	hdmi_msm_data.is_mhl_enabled = mhl_display_enabled;
 }
 
-//+++ Louis: A80 miniporting
+//ASUS_BSP +++ Jason Chang "display miniporting"
 static char mipi_dsi_splash_is_enabled(void)
 {
     return mdp_pdata.cont_splash_enabled;
 }
-//--- Louis: A80 miniporting
+//ASUS_BSP --- Jason Chang "display miniporting"

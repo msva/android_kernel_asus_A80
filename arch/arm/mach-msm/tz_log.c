@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,10 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <asm/uaccess.h>
+//adbg++
+#include <linux/fs.h>  
+#include <linux/syscalls.h>
+//adbg--
 
 #define DEBUG_MAX_RW_BUF 4096
 
@@ -458,6 +462,79 @@ static void tzdbgfs_exit(struct platform_device *pdev)
 	debugfs_remove_recursive(dent_dir);
 }
 
+//adbg++
+void __iomem *tz_virt_iobase;
+
+int save_tz_log(void)
+{
+	uint32_t *tmp_ptr = NULL;
+	struct tzdbg_t *diag_buf;
+	unsigned char *tz_log_ptr;
+	int len = 0;
+	char *disp_buf;
+	char tz_log_path[256] = {0};
+	int file_handle;
+	unsigned long long t;
+	unsigned long nanosec_rem;
+	mm_segment_t oldfs;
+
+	pr_info("%s()++\n", __func__);
+
+	if (tz_virt_iobase == NULL) {
+		pr_err("%s: Null ptr tz_virt_iobase\n", __func__);
+		return -ENXIO;
+	}
+
+	tmp_ptr = kzalloc(DEBUG_MAX_RW_BUF, GFP_KERNEL);
+	if (tmp_ptr == NULL) {
+		pr_err("%s: Can't Allocate memory: ptr\n",
+			__func__);
+		return -ENXIO;
+	}
+	
+	diag_buf = (struct tzdbg_t *)tmp_ptr;
+
+	memcpy_fromio((void *)diag_buf, tz_virt_iobase, DEBUG_MAX_RW_BUF);
+
+	disp_buf = kzalloc(DEBUG_MAX_RW_BUF, GFP_KERNEL);
+	if (disp_buf == NULL) {
+		pr_err("%s: Can't Allocate memory for disp_buf\n", __func__);
+		goto err;
+	}
+
+
+	tz_log_ptr = (unsigned char *)diag_buf + diag_buf->ring_off;
+	len += snprintf(disp_buf, (DEBUG_MAX_RW_BUF - 1) - len, "%s\n", tz_log_ptr);
+
+	t = cpu_clock(0);
+	nanosec_rem = do_div(t, 1000000000);
+	snprintf(tz_log_path, sizeof(tz_log_path) - 1, "/asdf/tz_%lu.%06lu.txt",
+		(unsigned long) t ,      
+		nanosec_rem/1000);
+
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	
+	file_handle = sys_open(tz_log_path, O_CREAT|O_RDWR|O_SYNC, 0);
+	if(!IS_ERR((const void *)file_handle)) {
+		sys_write(file_handle, (unsigned char*)disp_buf, len);
+		sys_close(file_handle);
+	} else {
+		printk("[ASDF] save_tz_log_error: [%d]\n", file_handle);
+	}
+
+	set_fs(oldfs);
+
+
+	return 0;
+
+err:
+	kfree(diag_buf);
+	return -ENXIO;	
+
+}
+//adbg--
+
 /*
  * Driver functions
  */
@@ -508,6 +585,9 @@ static int __devinit tz_log_probe(struct platform_device *pdev)
 			__func__, (void *) tzdiag_phy_iobase, DEBUG_MAX_RW_BUF);
 		return -ENXIO;
 	}
+
+	tz_virt_iobase = tzdbg.virt_iobase;  //adbg++
+
 
 	ptr = kzalloc(DEBUG_MAX_RW_BUF, GFP_KERNEL);
 	if (ptr == NULL) {

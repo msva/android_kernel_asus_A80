@@ -1,6 +1,6 @@
 /* ehci-msm2.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -60,12 +60,6 @@ struct msm_hcd {
 	atomic_t				pm_usage_cnt;
 	struct wake_lock			wlock;
 	struct work_struct			phy_susp_fail_work;
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	#define PHY_PWR_COLLAPSED				BIT(0)
-	unsigned long lpm_flags;
-	unsigned long phy_power;
-	struct mutex ehci_mutex;
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 };
 
 static inline struct msm_hcd *hcd_to_mhcd(struct usb_hcd *hcd)
@@ -89,31 +83,6 @@ static inline struct usb_hcd *mhcd_to_hcd(struct msm_hcd *mhcd)
 #define HSUSB_PHY_VDD_DIG_VOL_MIN	1045000	/* uV */
 #define HSUSB_PHY_VDD_DIG_VOL_MAX	1320000	/* uV */
 #define HSUSB_PHY_VDD_DIG_LOAD		49360	/* uA */
-
-//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-#define PHY_POWER		0
-struct msm_hcd *the_msm_hcd;
-
-void usb_ehci_phy_power_control(bool on)
-{
-	struct msm_hcd *mhcd = the_msm_hcd;
-
-	if (!the_msm_hcd) {
-		printk("[usb_ehci] ehci3 not init\r\n");
-		return;
-	}
-
-	if (on) {
-		printk("[usb_ehci] keep ehci3 phy power\r\n");
-		set_bit(PHY_POWER, &mhcd->phy_power);
-	} else {
-		printk("[usb_ehci] turn off ehci3 phy power\r\n");
-		clear_bit(PHY_POWER, &mhcd->phy_power);
-	}
-
-	pm_runtime_resume(mhcd->dev);
-}
-//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 
 static int msm_ehci_init_vddcx(struct msm_hcd *mhcd, int init)
 {
@@ -600,10 +569,6 @@ static int msm_ehci_suspend(struct msm_hcd *mhcd)
 		return 0;
 	}
 
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	mutex_lock(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
 	disable_irq(hcd->irq);
 
 	/* Set the PHCD bit, only if it is not set by the controller.
@@ -652,13 +617,6 @@ static int msm_ehci_suspend(struct msm_hcd *mhcd)
 		dev_err(mhcd->dev, "%s failed to devote for "
 			"TCXO D0 buffer%d\n", __func__, ret);
 
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	if (!test_bit(PHY_POWER, &mhcd->phy_power)) {
-		msm_ehci_ldo_enable(mhcd, 0);
-		mhcd->lpm_flags |= PHY_PWR_COLLAPSED;
-	}
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
 	msm_ehci_config_vddcx(mhcd, 0);
 
 	atomic_set(&mhcd->in_lpm, 1);
@@ -669,10 +627,6 @@ static int msm_ehci_suspend(struct msm_hcd *mhcd)
 		enable_irq(mhcd->pmic_gpio_dp_irq);
 	}
 	wake_unlock(&mhcd->wlock);
-
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	mutex_unlock(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 
 	dev_info(mhcd->dev, "EHCI USB in low power mode\n");
 
@@ -691,10 +645,6 @@ static int msm_ehci_resume(struct msm_hcd *mhcd)
 		return 0;
 	}
 
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	mutex_lock(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
 	if (mhcd->pmic_gpio_dp_irq_enabled) {
 		disable_irq_wake(mhcd->pmic_gpio_dp_irq);
 		disable_irq_nosync(mhcd->pmic_gpio_dp_irq);
@@ -712,13 +662,6 @@ static int msm_ehci_resume(struct msm_hcd *mhcd)
 	clk_prepare_enable(mhcd->iface_clk);
 
 	msm_ehci_config_vddcx(mhcd, 1);
-
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	if (mhcd->lpm_flags & PHY_PWR_COLLAPSED) {
-		msm_ehci_ldo_enable(mhcd, 1);
-		mhcd->lpm_flags &= ~PHY_PWR_COLLAPSED;
-	}
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 
 	temp = readl_relaxed(USB_USBCMD);
 	temp &= ~ASYNC_INTR_CTRL;
@@ -758,10 +701,6 @@ skip_phy_resume:
 		atomic_set(&mhcd->pm_usage_cnt, 0);
 		pm_runtime_put_noidle(mhcd->dev);
 	}
-
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	mutex_unlock(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 
 	dev_info(mhcd->dev, "EHCI USB exited from low power mode\n");
 
@@ -938,8 +877,10 @@ static int msm_ehci_init_clocks(struct msm_hcd *mhcd, u32 init)
 	return 0;
 
 put_clocks:
-	clk_disable_unprepare(mhcd->iface_clk);
-	clk_disable_unprepare(mhcd->core_clk);
+	if (!atomic_read(&mhcd->in_lpm)) {
+		clk_disable_unprepare(mhcd->iface_clk);
+		clk_disable_unprepare(mhcd->core_clk);
+	}
 	clk_put(mhcd->core_clk);
 put_iface_clk:
 	clk_put(mhcd->iface_clk);
@@ -1092,13 +1033,6 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	the_msm_hcd = mhcd;
-	usb_ehci_phy_power_control(0);
-
-	mutex_init(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
-
 	return 0;
 
 vbus_deinit:
@@ -1134,7 +1068,6 @@ static int __devexit ehci_msm2_remove(struct platform_device *pdev)
 		free_irq(mhcd->pmic_gpio_dp_irq, mhcd);
 	}
 	device_init_wakeup(&pdev->dev, 0);
-	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
 
 	usb_remove_hcd(hcd);
@@ -1148,9 +1081,6 @@ static int __devexit ehci_msm2_remove(struct platform_device *pdev)
 
 	msm_ehci_init_clocks(mhcd, 0);
 	wake_lock_destroy(&mhcd->wlock);
-	//ASUS_BSP+++ BennyCheng "implement ehci3 phy power collapse mode"
-	mutex_destroy(&mhcd->ehci_mutex);
-	//ASUS_BSP--- BennyCheng "implement ehci3 phy power collapse mode"
 	iounmap(hcd->regs);
 	usb_put_hcd(hcd);
 

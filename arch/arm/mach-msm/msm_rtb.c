@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,34 +35,7 @@
 
 #define RTB_COMPAT_STR	"qcom,msm-rtb"
 
-/* Write
- * 1) 3 bytes sentinel
- * 2) 1 bytes of log type
- * 3) 4 bytes of where the caller came from
- * 4) 4 bytes index
- * 4) 4 bytes extra data from the caller
- *
- * Total = 16 bytes.
- */
-struct msm_rtb_layout {
-	unsigned char sentinel[3];
-	unsigned char log_type;
-	void *caller;
-	unsigned long idx;
-	void *data;
-} __attribute__ ((__packed__));
-
-
-struct msm_rtb_state {
-	struct msm_rtb_layout *rtb;
-	unsigned long phys;
-	int nentries;
-	int size;
-	int enabled;
-	int initialized;
-	uint32_t filter;
-	int step_size;
-};
+extern int g_saving_rtb_log;  //ASUS_BSP ++
 
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
@@ -71,7 +44,7 @@ static atomic_t msm_rtb_idx;
 #endif
 
 struct msm_rtb_state msm_rtb = {
-	.filter = 1 << LOGK_LOGBUF,
+	.filter = 1 << LOGK_READL | 1 << LOGK_WRITEL,
 	.enabled = 1,
 };
 
@@ -91,8 +64,8 @@ static struct notifier_block msm_rtb_panic_blk = {
 
 int msm_rtb_event_should_log(enum logk_event_type log_type)
 {
-	return msm_rtb.initialized && msm_rtb.enabled &&
-		((1 << (log_type & ~LOGTYPE_NOPC)) & msm_rtb.filter);
+	return msm_rtb.initialized && msm_rtb.enabled && !g_saving_rtb_log &&
+		((1 << (log_type & ~LOGTYPE_NOPC)) & msm_rtb.filter);  //ASUS_BSP ++
 }
 EXPORT_SYMBOL(msm_rtb_event_should_log);
 
@@ -256,7 +229,7 @@ int msm_rtb_probe(struct platform_device *pdev)
 	 * address of the buffer. This is necessary for cases where
 	 * the only way to access the buffer is a physical address.
 	 */
-	msm_rtb.phys = allocate_contiguous_ebi_nomap(msm_rtb.size, SZ_4K);
+	msm_rtb.phys = RTB_BUFFER;  //ASUS_BSP ++
 
 	if (!msm_rtb.phys)
 		return -ENOMEM;
@@ -273,8 +246,11 @@ int msm_rtb_probe(struct platform_device *pdev)
 	/* Round this down to a power of 2 */
 	msm_rtb.nentries = __rounddown_pow_of_two(msm_rtb.nentries);
 
-	memset(msm_rtb.rtb, 0, msm_rtb.size);
-
+//ASUS_BSP ++
+	// don't set the content to 0
+	// we need the last rtb log before reset
+	//~ memset(msm_rtb.rtb, 0, msm_rtb.size);
+//ASUS_BSP --
 
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 	for_each_possible_cpu(cpu) {

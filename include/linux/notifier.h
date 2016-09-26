@@ -142,12 +142,13 @@ extern int blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 		unsigned long val, void *v);
 extern int __blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 	unsigned long val, void *v, int nr_to_call, int *nr_calls);
-
 // ASUS_BSP +++
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 extern int blocking_notifier_call_chain_timeinfo(struct blocking_notifier_head *nh,
-		unsigned long val, void *v, unsigned short debugPrint);
+	unsigned long val, void *v, unsigned short debugPrint);
 extern int __blocking_notifier_call_chain_timeinfo(struct blocking_notifier_head *nh,
 	unsigned long val, void *v, int nr_to_call, int *nr_calls, unsigned short debugPrint);
+#endif
 // ASUS_BSP --
 extern int raw_notifier_call_chain(struct raw_notifier_head *nh,
 		unsigned long val, void *v);

@@ -34,6 +34,7 @@
 #include <linux/gpio.h>
 #include <asm/uaccess.h>
 #include <linux/irq.h>
+#include <linux/switch.h>
 
 #ifdef _STD_RW_IO
 #include <linux/init.h>
@@ -51,7 +52,7 @@ static struct class *sis_char_class = NULL;
 #include <linux/microp_api.h> 
 #include <linux/microp_pin_def.h>
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
+//#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON
 
 #include <linux/kernel.h>
@@ -98,6 +99,10 @@ static struct work_struct g_mp_detach_work;
 static void attach_padstation_work(struct work_struct *work);
 static void detach_padstation_work(struct work_struct *work);
 #endif //CONFIG_EEPROM_NUVOTON
+
+struct mutex sis_ts_mutex_lock;
+
+struct switch_dev pfs_switch_touch2; //ASUS_BSP Cliff +++
 
 static int debug = DEBUG_POWER;
 //static int debug = DEBUG_VERBOSE;
@@ -229,19 +234,25 @@ int get_fw_id (struct i2c_client *client, uint8_t *fwid){
 	if(debug >= DEBUG_VERBOSE)
 		PrintBuffer(0,14,buf);
 
+	mutex_lock(&sis_ts_mutex_lock);
+
 	ret = sis_command_for_write(client, 14, buf);
 	if (ret < 0) {
 		sis_debug(NO_DEBUG, "[Touch][sis9257] get_fw_id(): write command failed, ret = %d\n", ret);
+		mutex_unlock(&sis_ts_mutex_lock);
 		return ret;
 	}
 
-	msleep(500);
+	msleep(300);
 
 	ret = sis_command_for_read(client, 20, buf);
 	if (ret < 0){
 		sis_debug(NO_DEBUG, "[Touch][sis9257] get_fw_id(): read command failed, ret = %d\n", ret);
+		mutex_unlock(&sis_ts_mutex_lock);
 		return ret;
 	}
+
+	mutex_unlock(&sis_ts_mutex_lock);
 
 	sis_debug(DEBUG_VERBOSE, "[Touch][sis9257] get_fw_id(): read buf:");
 	if(debug >= DEBUG_VERBOSE)
@@ -279,9 +290,12 @@ int get_boot_flag (struct i2c_client *client, uint8_t *bootFlag){
 	if(debug >= DEBUG_VERBOSE)
 		PrintBuffer(0,14,buf);
 
+	mutex_lock(&sis_ts_mutex_lock);
+
 	ret = sis_command_for_write(client, 14, buf);
 	if (ret < 0) {
 		sis_debug(NO_DEBUG, "[Touch][sis9257] get_boot_flag(): write command failed, ret = %d\n", ret);
+		mutex_unlock(&sis_ts_mutex_lock);
 		return ret;
 	}
 
@@ -290,8 +304,11 @@ int get_boot_flag (struct i2c_client *client, uint8_t *bootFlag){
 	ret = sis_command_for_read(client, 12, buf);
 	if (ret < 0){
 		sis_debug(NO_DEBUG, "[Touch][sis9257] get_boot_flag(): read command failed, ret = %d\n", ret);
+		mutex_unlock(&sis_ts_mutex_lock);
 		return ret;
 	}
+
+	mutex_unlock(&sis_ts_mutex_lock);
 
 	sis_debug(DEBUG_VERBOSE, "[Touch][sis9257] get_boot_flag(): read buf:");
 	if(debug >= DEBUG_VERBOSE)
@@ -500,7 +517,13 @@ int sis_ReadPacket(struct i2c_client *client, uint8_t cmd, uint8_t* buf)
 	* 6. y axis high 8 bits
 	* 
 */
+
+	mutex_lock(&sis_ts_mutex_lock);
+
 	ret = sis_command_for_read(client, MAX_BYTE, tmpbuf);
+
+	mutex_unlock(&sis_ts_mutex_lock);
+
 #if 0
 	printk(KERN_INFO "chaoban test: Buf_Data [0~63] \n");
 	PrintBuffer(0, 64, tmpbuf);	
@@ -999,6 +1022,8 @@ static void sis_ts_work_func(struct work_struct *work)
 		//printk(KERN_INFO "no touch!\n");
 		TPInfo->pt[i].bPressure = 0;
 		TPInfo->pt[i].bWidth = 0; 
+//ASUS_BSP Jessy +++ if no touch event , we should not send touch event to system
+/*
 #ifdef _ANDROID_4
 		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, TPInfo->pt[i].bWidth);
 		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, TPInfo->pt[i].bPressure);
@@ -1012,6 +1037,8 @@ static void sis_ts_work_func(struct work_struct *work)
 		//printk(KERN_INFO "ID = %d , pressure = %d , width = %d", TPInfo->pt[i].id, TPInfo->pt[i].bPressure, TPInfo->pt[i].bWidth);
 		input_mt_sync(ts->input_dev);
 		input_sync(ts->input_dev);
+*/
+//ASUS_BSP Jessy --- if no touch event , we should not send touch event to system
 		goto err_free_allocate;
 	}
 /*	
@@ -1021,6 +1048,7 @@ static void sis_ts_work_func(struct work_struct *work)
 	}
 */
 	//g_bIsRealTouchUp = true; //Desmond++
+
 
 	sis_tpinfo_clear(TPInfo, MAX_FINGERS);
 
@@ -1330,6 +1358,10 @@ static irqreturn_t sis_ts_irq_handler(int irq, void *dev_id)
 	}*/
 	//Desmond --
 
+	//Tom_Chu +++  if touch does not init yet, skip handling interrupt
+	if (!g_bIsPadAttach)
+		return IRQ_HANDLED;
+
 	ret = queue_work(sis_wq, &ts->work);
 
 	//Desmond ++ measure time spended in driver
@@ -1343,7 +1375,6 @@ static irqreturn_t sis_ts_irq_handler(int irq, void *dev_id)
 	}
 #endif
 	//Desmond --
-
 	return IRQ_HANDLED;
 }
 
@@ -1658,6 +1689,27 @@ static ssize_t sis_force_release_fingers(struct device *dev, struct device_attri
 	release_fingers();
 	return sprintf(buf, "release fingers\n");
 }
+
+//ASUS_BSP Cliff: add touch panel name ++++++++++++++
+static ssize_t sis_show_tp_name(struct switch_dev *sdev, char *buf)
+{
+    if(g_bIsPadAttach){
+        if(g_fw_id[0]==0x97&&g_fw_id[1]==0x31&&g_fw_id[2]==0x30&&g_fw_id[3]==0x38)
+            return sprintf(buf, "%c%02x%02x%02x%02x", g_fw_id[4], g_fw_id[8], g_fw_id[9], g_fw_id[10], g_fw_id[11]);
+        else
+            return sprintf(buf, "%s\n",  (g_tp_id)?"CANDO":"WINTEK");
+    }
+    return sizeof(buf);
+}
+//ASUS_BSP Cliff: add touch panel name ----------------
+
+//ASUS_BSP Cliff: add sis touch status +++++++
+static ssize_t sis_show_tp_state(struct switch_dev *sdev, char *buf)
+{
+		unsigned int statuss = 1;
+		return sprintf(buf, "sis_touch_status=%u\n",  statuss);
+}
+//ASUS_BSP Cliff: add sis touch status ------
 
 DEVICE_ATTR(fw_id, S_IRUGO, sis_show_fw_id, NULL);
 DEVICE_ATTR(full_fw_id, S_IRUGO, sis_show_full_fw_id, NULL);
@@ -2050,6 +2102,9 @@ static int sis_ts_probe(
 	sis_sent_zero_command(client);	// skip the waiting time of recieve update FW command in bootloader
 #endif
 
+	// init mutex
+	mutex_init(&sis_ts_mutex_lock);
+
 	set_bit(EV_ABS, ts->input_dev->evbit);
 	set_bit(EV_KEY, ts->input_dev->evbit);
 	set_bit(ABS_MT_POSITION_X, ts->input_dev->absbit);
@@ -2162,6 +2217,17 @@ static int sis_ts_probe(
 
 	sis_debug(DEBUG_INFO, "[Touch][sis9257] sis_ts_probe--\n");
 	//Desmond--
+
+//ASUS_BSP Cliff: /sys/class/switch/pfs_touch ++++++
+	pfs_switch_touch2.name="pfs_touch";
+	pfs_switch_touch2.print_name=sis_show_tp_name;
+	pfs_switch_touch2.print_state=sis_show_tp_state;
+	ret=switch_dev_register(&pfs_switch_touch2);
+
+	if (ret < 0){
+		sis_debug(DEBUG_POWER, "[Touch][sis9257] Unable to register switch dev! %d\n", ret);
+	}
+//ASUS_BSP Cliff: /sys/class/switch/pfs_touch ----
 
 	return 0;
 
@@ -2465,7 +2531,7 @@ static int __devinit sis_ts_init(void)
 
 	//Desmond ++ check the machine version
 	switch(g_A68_hwID){
-		case A68_EVB:
+/*		case A68_EVB:
 		case A68_SR1_1:
 		case A68_SR1_2:
 		case A68_SR2:
@@ -2480,7 +2546,7 @@ static int __devinit sis_ts_init(void)
 	        	g_isA80 = 0;
 			sis_debug(DEBUG_POWER, "[Touch][sis9257] A68_%d\n", g_A68_hwID);
 			break;
-
+*/
 		case A80_SR4: //20
 		case A80_SR5: //21
 		case A80_SR6:
@@ -2536,7 +2602,7 @@ static int __devinit sis_ts_init(void)
 	INIT_WORK(&g_mp_detach_work, detach_padstation_work);
 
 	register_microp_notifier(&touch_mp_notifier);
-	notify_register_microp_notifier(&touch_mp_notifier, "sis_i2c"); //ASUS_BSP Lenter+
+//	notify_register_microp_notifier(&touch_mp_notifier, "sis_i2c"); //ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON
 	//Desmond--
 
@@ -2580,7 +2646,7 @@ static void __exit sis_ts_exit(void)
 	destroy_workqueue(g_wq_check_touch);
 #ifdef CONFIG_EEPROM_NUVOTON
 	unregister_microp_notifier(&touch_mp_notifier);
-	notify_unregister_microp_notifier(&touch_mp_notifier, "sis_i2c"); //ASUS_BSP Lenter+
+//	notify_unregister_microp_notifier(&touch_mp_notifier, "sis_i2c"); //ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON
 	//Desmond--
 }
@@ -2592,6 +2658,7 @@ module_exit(sis_ts_exit);
 static void resume_work(struct work_struct *work)
 {
 #ifdef CONFIG_EEPROM_NUVOTON
+	msleep(500);
 	AX_MicroP_setGPIOOutputPin(OUT_uP_TS_RST_R, 1);
 	msleep(20);
 	AX_MicroP_setGPIOOutputPin(OUT_uP_TS_RST_R, 0);
@@ -2658,7 +2725,7 @@ static void attach_padstation_work(struct work_struct *work)
 
 	ASUSEvtlog("[Touch][sis9257] Attach Pad\n");
 
-	msleep(100); //wait for the touch ic reset
+	msleep(500); //wait for the touch ic reset
 
 	if(ts_bak){
 
@@ -2700,9 +2767,11 @@ static void attach_padstation_work(struct work_struct *work)
 		//Check TP ID
 		while (retry != 0){
 
+#ifdef CONFIG_EEPROM_NUVOTON_A80
 			if(g_isA80)
 				g_tp_id = AX_MicroP_getTSID();
 			else
+#endif
 				g_tp_id = AX_MicroP_getGPIOPinLevel(IN_TS_ID);
 
 			if(g_tp_id < 0){
@@ -2711,7 +2780,7 @@ static void attach_padstation_work(struct work_struct *work)
 				if(g_isA80){
 					sis_debug(DEBUG_POWER, "[Touch][sis9257] HW ID: A80_%d\n", g_A68_hwID);
 					sis_debug(DEBUG_POWER, "[Touch][sis9257] TP ID: %d%s\n", g_tp_id, (g_tp_id)?"LAIBAO":"WINTEK");
-				}else {
+				}/*else {
 					if(g_A68_hwID >= A68_ER1){
 						sis_debug(DEBUG_POWER, "[Touch][sis9257] HW ID: A68_%d, >= ER\n", g_A68_hwID);
 						sis_debug(DEBUG_POWER, "[Touch][sis9257] TP ID: %d%s\n", g_tp_id, (g_tp_id)?"CANDO":"WINTEK");
@@ -2719,7 +2788,7 @@ static void attach_padstation_work(struct work_struct *work)
 						sis_debug(DEBUG_POWER, "[Touch][sis9257] HW ID: A68_%d, <= SR\n", g_A68_hwID);
 						sis_debug(DEBUG_POWER, "[Touch][sis9257] TP ID: %d%s\n", g_tp_id, (g_tp_id)?"WINTEK":"CANDO");
 					}
-				}
+				}*/
 				break;
 			}
 			msleep(300);
@@ -2731,6 +2800,8 @@ static void attach_padstation_work(struct work_struct *work)
 			*/
 		}
 		retry = 5;
+
+		msleep(100); //wait a while to prevent touch controller too busy
 
 		//Check Boot Flag
 		while (retry != 0){
@@ -2753,6 +2824,14 @@ static void attach_padstation_work(struct work_struct *work)
 	}else{
 		sis_debug(NO_DEBUG, "[Touch][sis9257] attach_padstation_work: ts_bak not exist\n");
 		//goto err_virtual_remove;
+	}
+
+	//Tom_Chu +++  read packet to clean up touch event
+	{
+	uint8_t buf[PACKET_BUFFER_SIZE] = {0};
+	msleep(100);
+	/* I2C or SMBUS block data read */
+	ret = sis_ReadPacket(ts_bak->client, SIS_CMD_NORMAL, buf);
 	}
 
 	g_bIsPadAttach = true;

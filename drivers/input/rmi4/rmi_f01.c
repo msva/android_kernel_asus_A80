@@ -29,7 +29,7 @@ static struct delayed_work g_mp_resume_chk_work;
 static void rmi_resume_check_work(struct work_struct *work);
 #ifdef CONFIG_EEPROM_NUVOTON
 #include <linux/microp_notify.h>
-#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
+//#include <linux/microp_notifier_controller.h>	//ASUS_BSP Lenter+
 static struct workqueue_struct *g_rmi_wq_attach_detach;
 static struct work_struct g_mp_attach_work;
 //static struct work_struct g_mp_detach_work;
@@ -1396,7 +1396,7 @@ static int rmi_f01_initialize(struct rmi_function_container *fc)
 	INIT_DELAYED_WORK(&g_mp_detach_work, detach_padstation_work);
 
 	register_microp_notifier(&touch_mp_notifier);
-	notify_register_microp_notifier(&touch_mp_notifier, "rmi_f01"); //ASUS_BSP Lenter+
+//	notify_register_microp_notifier(&touch_mp_notifier, "rmi_f01"); //ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON
 //ASUS_BSP simpson: add for On/Off touch in P03 ---
 
@@ -1785,7 +1785,7 @@ static void __exit rmi_f01_module_exit(void)
 #ifdef CONFIG_EEPROM_NUVOTON
 	destroy_workqueue(g_rmi_wq_attach_detach);
 	unregister_microp_notifier(&touch_mp_notifier);
-	notify_unregister_microp_notifier(&touch_mp_notifier, "rmi_f01"); //ASUS_BSP Lenter+
+//	notify_unregister_microp_notifier(&touch_mp_notifier, "rmi_f01"); //ASUS_BSP Lenter+
 #endif //CONFIG_EEPROM_NUVOTON
 //ASUS_BSP simpson: add for suspend/resume +++
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -1886,7 +1886,7 @@ EXPORT_SYMBOL(touch_detach_padstation);
 
 static int touch_mp_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-
+	printk("%s ++, event=%d\r\n", __FUNCTION__, (int)event);
         switch (event) {
 
         case P01_ADD:
@@ -1899,8 +1899,7 @@ static int touch_mp_event(struct notifier_block *this, unsigned long event, void
 
                 rmi_debug(DEBUG_INFO, "[touch_synaptics][MicroP] P01_ADD--\n");
 
-                return NOTIFY_DONE;
-
+                break;
         case P01_REMOVE:
                 rmi_debug(DEBUG_INFO, "[touch_synaptics][MicroP] P01_REMOVE++\n");
 		//ASUS_BSP simpson: add for ASUSEvtlog +++
@@ -1911,14 +1910,14 @@ static int touch_mp_event(struct notifier_block *this, unsigned long event, void
 
                 rmi_debug(DEBUG_INFO, "[touch_synaptics][MicroP] P01_REMOVE--\n");
 
-                return NOTIFY_DONE;
-
+               break; 
         default:
 
-                return NOTIFY_DONE;
-
+                
+			break;
         }
-
+	printk("%s --, event=%d\r\n", __FUNCTION__, (int)event);
+	return NOTIFY_DONE;
 }
 #endif //CONFIG_EEPROM_NUVOTON
 //ASUS_BSP simpson: add for On/Off touch in P03 ---

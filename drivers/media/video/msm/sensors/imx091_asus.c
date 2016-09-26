@@ -305,6 +305,15 @@ static struct msm_sensor_output_info_t imx091_dimensions[] = {
 		.op_pixel_clk = 320000000,	
 		.binning_factor = 1,
 	},
+	{	//mode_11    	
+		.x_output = 2080,
+		.y_output = 1560,
+		.line_length_pclk = 0x85c,
+		.frame_length_lines = 0x460,
+		.vt_pixel_clk = 216000000,	
+		.op_pixel_clk = 320000000,	
+		.binning_factor = 1,
+	},
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"
 };
 
@@ -868,6 +877,17 @@ static int imx091_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *a
 			s_ctrl->func_tbl->
 			sensor_set_isp_effect_mode(cdata.cfg.effect);						
 			break;
+		
+		case CFG_SET_ISP_ultrapixel_MODE:
+			if (s_ctrl->func_tbl->
+			sensor_set_isp_ultrapixel == NULL) {
+				rc = -EFAULT;
+				break;
+			}
+			pr_info("ASUS_CAM_INFT_PARM_ULTRAPIXEL mode(%d)\n",cdata.cfg.ultrapixel);
+			s_ctrl->func_tbl->
+			sensor_set_isp_ultrapixel(cdata.cfg.ultrapixel);						
+			break;
 
  		case CFG_SET_ISP_AURA_VALUE:
 			if (s_ctrl->func_tbl->
@@ -993,7 +1013,8 @@ int imx091_power_down(const struct msm_camera_sensor_info *data, bool ISPbootup)
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
-    case A68_MP:
+		case A68_PR2:			
+	      case A68_MP:
 		default:
 		//mutex_lock(imx091_s_ctrl.msm_sensor_mutex);    //ASUS_BSP Stimber "Fix the issue which fail to re-open camera"
 		// Switch CLK to 8M
@@ -1051,8 +1072,7 @@ static int imx091_gpio_request(void)
 	int32_t rc = 0;
     
     pr_info("%s +++\n",__func__);
-
-	switch (g_A68_hwID)
+ 	switch (g_A68_hwID)
 	{
 		case A68_EVB:
 	        // Power on ISP module:
@@ -1095,7 +1115,8 @@ static int imx091_gpio_request(void)
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
-            //case A68_MP:
+		case A68_PR2:			
+             case A68_MP:
 		default:
 			// Power on ISP module:
 	        rc = gpio_request(PM8921_GPIO_PM_TO_SYS(imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en), "imx091");
@@ -1206,7 +1227,8 @@ int imx091_power_up(const struct msm_camera_sensor_info *data, bool ISPbootup)
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
-    case A68_MP:
+		case A68_PR2:			
+	      case A68_MP:
 		default:
 		// ISP power on +++
 
@@ -1320,7 +1342,7 @@ int imx091_power_up(const struct msm_camera_sensor_info *data, bool ISPbootup)
 int32_t imx091_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 {
     int32_t rc =0;
-    
+    printk("imx091_sensor_power_up\n");
     // Condif imx091 GPIO
     rc = imx091_power_up(s_ctrl->sensordata, false);
     if(rc < 0){
@@ -1433,6 +1455,11 @@ int32_t imx091_sensor_get_custom_ioctl_reg(register_setting_A68 *reg)
 }
 //ASUS_BSP --- Stimber "Implement the interface for calibration"
 
+//ASUS_BSP +++ Jason fix charger mode remove AC flash light
+#if defined ASUS_CN_CHARGER_BUILD
+extern char g_CHG_mode;
+#endif
+//ASUS_BSP --- Jason fix charger mode remove AC flash light
 int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
@@ -1441,6 +1468,14 @@ int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
        //u16 val2 = 0xab;
 	struct msm_sensor_ctrl_t *s_ctrl;
 	pr_info("%s +++ \n",__func__);
+//ASUS_BSP +++ Jason fix charger mode remove AC flash light	
+#if defined ASUS_CN_CHARGER_BUILD
+			if(g_CHG_mode){
+				printk("%s Charger mode ",__func__);
+				return -1;
+			}
+#endif	
+//ASUS_BSP --- Jason fix charger mode remove AC flash light
 	CDBG("%s_i2c_probe called\n", client->name);
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("i2c_check_functionality failed\n");
@@ -1463,9 +1498,8 @@ int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
 
 	s_ctrl->sensordata = client->dev.platform_data;
        imx091_s_ctrl.sensordata = client->dev.platform_data;
-	   
-       pr_info("%s, g_A68_hwID=%d\n", __func__,g_A68_hwID);
-	switch (g_A68_hwID)
+	pr_info("%s, g_A68_hwID=%d\n", __func__,g_A68_hwID);   
+ 	switch (g_A68_hwID)
 	{
 		case A68_EVB:
 			imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en = 87;
@@ -1483,6 +1517,7 @@ int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
 		case A68_ER2:
 		case A68_ER3:
 		case A68_PR:
+		case A68_PR2:			
               case A68_MP:
 			imx091_s_ctrl.sensordata->sensor_platform_info->vga_mclk_en = 87;
 			imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p2_en = 10; 	  //PM(10)
@@ -1501,7 +1536,8 @@ int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
 			imx091_s_ctrl.sensordata->sensor_platform_info->isp_1p8_en = 11;      //PM(11)
 			imx091_s_ctrl.sensordata->sensor_platform_info->isp_suspend= 54;
 			imx091_s_ctrl.sensordata->sensor_platform_info->isp_int = 31;
-			imx091_s_ctrl.sensordata->sensor_platform_info->fled_driver_ent = 55;            
+			imx091_s_ctrl.sensordata->sensor_platform_info->fled_driver_ent = 55;        
+			break;
                 case A80_SR3:
                 case A80_SR4:
                 case A80_SR5:                    
@@ -1517,9 +1553,7 @@ int32_t imx091_sensor_i2c_probe(struct i2c_client *client,
 			imx091_s_ctrl.sensordata->sensor_platform_info->fled_driver_ent = 53;
 			break;
 	}		
-			
-
-	rc = s_ctrl->func_tbl->sensor_power_up(&imx091_s_ctrl);
+ 	rc = s_ctrl->func_tbl->sensor_power_up(&imx091_s_ctrl);
 	if (rc < 0)
 		goto probe_fail;
 
@@ -1551,7 +1585,8 @@ power_down:
 }
 
 static int32_t imx091_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
-		uint16_t gain, uint32_t line)
+			uint16_t gain, uint32_t line, int32_t luma_avg, uint16_t fgain)		
+
 {
 	uint32_t fl_lines, offset;
 	uint8_t int_time[3];
@@ -1600,9 +1635,11 @@ void create_imx091_proc_file(void);	//ASUS_BSP Stimber "Add ATD proc interface" 
 
 static int __init imx091_sensor_init_module(void)
 {
+   printk(" jason imx091_sensor_init_module\n");
 //ASUS_BSP +++ LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"
 	create_imx091_proc_file();	//ASUS_BSP Stimber "Add ATD proc interface"
 	create_iCatch_proc_file();  //ASUS_BSP LiJen "[A68][ISP][NA][Others]add proc file for AP ISP update"
+       create_iCatch_switch_file();	
 //ASUS_BSP --- LiJen "[A68][13M][NA][Others]Mini porting for 13M camera with ISP"	
 	return i2c_add_driver(&imx091_i2c_driver);
 }
@@ -1653,6 +1690,7 @@ static struct msm_sensor_fn_t imx091_func_tbl = {
 	.sensor_set_isp_caf_mode =  iCatch_set_caf_mode, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement CAF mode"	
 	.sensor_set_isp_scene_mode =  iCatch_set_scene_mode, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement SCENE mode"	
 	.sensor_set_isp_effect_mode = iCatch_set_effect_mode, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement EFFECT mode"	
+	.sensor_set_isp_ultrapixel = iCatch_set_ultrapixel,
 	.sensor_set_isp_aura_value = iCatch_set_aura_value, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement AURA mode"
 	.sensor_set_isp_general_cmd = iCatch_set_general_cmd, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement general command"
 	.sensor_get_isp_general_cmd = iCatch_get_general_cmd, //ASUS_BSP LiJen "[A68][13M][NA][Others]implement get general command"
@@ -1780,6 +1818,7 @@ static ssize_t imx091_proc_write_camera_fled(struct file *filp, const char __use
 						case A68_ER2:
 						case A68_ER3:
 						case A68_PR:
+						case A68_PR2:							
 				             //case A68_MP:
 						default:
 							gpio_set_value(imx091_s_ctrl.sensordata->sensor_platform_info->fled_driver_ent, 0);
@@ -1823,6 +1862,7 @@ static ssize_t imx091_proc_write_camera_fled(struct file *filp, const char __use
 						case A68_ER2:
 						case A68_ER3:
 						case A68_PR:
+						case A68_PR2:							
 				             //case A68_MP:
 						default:
 							rc = gpio_request(imx091_s_ctrl.sensordata->sensor_platform_info->fled_driver_ent, "imx091");

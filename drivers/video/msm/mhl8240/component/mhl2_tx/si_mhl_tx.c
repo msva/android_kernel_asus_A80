@@ -51,12 +51,7 @@ GNU General Public License for more details.
 //SII8240_VER81	+++
 
 extern int g_pad_tv_mode;
-//ASUS BSP Wei_Lai	+++
-extern void mhl_switch_cableDetect(bool_t enable);
 
-extern enum DEVICE_HWID g_A68_hwID;
-
-//ASUS BSP Wei_Lai	---
 //Force_PP_Mode  //hammer modify for ASUS P03_demo
 /*
 #ifdef Force_PP_Mode
@@ -230,21 +225,13 @@ extern void MHL_Assert_Check_QcomTmdsHVTotal(void);
 // for HDMI driver reference API
 bool_t Sii8240_support_HDCP(void)
 {
-	//ASUS BSP Wei_Lai +++
-	if(g_A68_hwID>=A80_SR3)
-		return false;
-	//ASUS BSP Wei_Lai ---
 	return PlatformGPIOGet(pinDoHdcp);
 }
 
 bool_t Sii8240_support_pp_mode(void)
 {
-
 	int ppavailable = 0;
-	//ASUS BSP Wei_Lai +++
-	if(g_A68_hwID>=A80_SR3)
-		return false;
-	//ASUS BSP Wei_Lai ---
+
  	ppavailable = (PackedPixelAvailable | ((MHL_DEV_VID_LINK_SUPP_PPIXEL & mhlTxConfig.devCapCache.aucDevCapCache[DEVCAP_OFFSET_VID_LINK_MODE]) && (MHL_DEV_VID_LINK_SUPP_PPIXEL & DEVCAP_VAL_VID_LINK_MODE) ) );
 
 	printk("## Sii8240_support_pp_mode = %d\n", ppavailable);
@@ -267,10 +254,7 @@ bool_t Sii8240_support_pp_mode(void)
 bool_t Sii8240_AVI_By_Pass(void)
 {
 	int ppavailable = 0;
-	//ASUS BSP Wei_Lai +++
-	if(g_A68_hwID>=A80_SR3)
-		return false;
-	//ASUS BSP Wei_Lai ---
+
  	ppavailable = (PackedPixelAvailable |  ((MHL_DEV_VID_LINK_SUPP_PPIXEL & mhlTxConfig.devCapCache.aucDevCapCache[DEVCAP_OFFSET_VID_LINK_MODE]) && (MHL_DEV_VID_LINK_SUPP_PPIXEL & DEVCAP_VAL_VID_LINK_MODE) ) );
 
 	printk("## Sii8240_AVI_By_Pass = %d\n", ppavailable);
@@ -647,28 +631,18 @@ void MhlTxProcessEvents(void)
 		// If connection has been lost, reset all state flags.
 		if(MHL_TX_EVENT_DISCONNECTION == mhlTxConfig.mhlConnected)
 		{
-			
-//ASUS BSP Wei_Lai	+++
-			if (g_pad_tv_mode == MHL_TV_MODE)
-				mhl_switch_cableDetect(false);
-//ASUS BSP Wei_Lai	---
 			MhlTxResetStates( );
 		}
-        	else if (MHL_TX_EVENT_CONNECTION == mhlTxConfig.mhlConnected)
-	        {
+        else if (MHL_TX_EVENT_CONNECTION == mhlTxConfig.mhlConnected)
+        {
 //SII8240_VER75 +++
 //	 #ifndef remove_some_cbus_behavior//hammer20120703
-			 if (g_pad_tv_mode == MHL_TV_MODE)
-			 {
-			
-//ASUS BSP Wei_Lai	+++
-		    		mhl_switch_cableDetect(true);
-//ASUS BSP Wei_Lai	---
-	           		SiiMhlTxSetDCapRdy();
-		 	}
+		 if (g_pad_tv_mode == MHL_TV_MODE)
+		 {
+	           SiiMhlTxSetDCapRdy();
+		 }
 //SII8240_VER75 ---
-	 	}
-	 
+	 }
 	}
 	else if( mhlTxConfig.mscMsgArrived )
 	{

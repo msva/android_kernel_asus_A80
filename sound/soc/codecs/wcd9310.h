@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,8 +12,7 @@
 #include <sound/soc.h>
 #include <sound/jack.h>
 #include <linux/mfd/wcd9xxx/wcd9xxx-slimslave.h>
-#include <linux/switch.h> //ASUS BSP Austin+
-
+#include <linux/switch.h> //AllenCH_Lin@asus.com +++
 #define TABLA_NUM_REGISTERS 0x400
 #define TABLA_MAX_REGISTER (TABLA_NUM_REGISTERS-1)
 #define TABLA_CACHE_SIZE TABLA_NUM_REGISTERS
@@ -40,7 +39,7 @@ extern const u32 tabla_1_reg_readable[TABLA_1_X_ONLY_REGISTERS];
 extern const u32 tabla_2_reg_readable[TABLA_2_HIGHER_ONLY_REGISTERS];
 extern const u8 tabla_reg_defaults[TABLA_CACHE_SIZE];
 
-//ASUS BSP Austin++
+//AllenCH_Lin@asus.com +++
 struct gpio_switch_data {
 	struct switch_dev sdev;
 	unsigned gpio;
@@ -51,7 +50,7 @@ struct gpio_switch_data {
 	int irq;
 	struct work_struct work;
 };
-//ASUS BSP Austin--
+//AllenCH_Lin@asus.com ---
 
 enum tabla_micbias_num {
 	TABLA_MICBIAS1 = 0,
@@ -206,12 +205,12 @@ struct anc_header {
 extern int tabla_mclk_enable(struct snd_soc_codec *codec, int mclk_enable,
 			     bool dapm);
 
-extern void ApplyA68SPKGain(void);  //Bruno++
-
-// extern void *tabla_mbhc_cal_btn_det_mp(const struct tabla_mbhc_btn_detect_cfg
-// 				       *btn_det,
-// 				       const enum tabla_mbhc_btn_det_mem mem);
-
+extern void apply_wcd9310_spk_gain(void);  //ken_cheng@asus.com +++
+//AllenCH_Lin@asus.com +++
+//extern void *tabla_mbhc_cal_btn_det_mp(const struct tabla_mbhc_btn_detect_cfg
+				       //*btn_det,
+				      // const enum tabla_mbhc_btn_det_mem mem);
+//AllenCH_Lin@asus.com ---
 #define TABLA_MBHC_CAL_SIZE(buttons, rload) ( \
 	sizeof(enum tabla_micbias_num) + \
 	sizeof(struct tabla_mbhc_general_cfg) + \
